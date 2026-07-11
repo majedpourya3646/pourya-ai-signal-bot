@@ -44,4 +44,4 @@ open_trade(
 
 
 if __name__ == "__main__":
-    run_bot()
+    # run_bot()
