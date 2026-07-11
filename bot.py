@@ -1,5 +1,5 @@
 from market import get_market_data
-from signal_engine import analyze_market
+from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
 
 
