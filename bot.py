@@ -22,18 +22,17 @@ def run_bot():
 
             if result["signal"] != "WAIT":
 
-    message = (
-        f"🚨 Crypto Signal\n\n"
-        f"🪙 {symbol}\n"
-        f"📈 Action: {result['signal']}\n\n"
-        f"💰 Entry: {result['entry']}\n"
-        f"🎯 TP: {result['tp']}\n"
-        f"🛑 SL: {result['sl']}\n\n"
-        f"⭐ Confidence: {result['confidence']}%"
-    )
+                message = (
+                    f"🚨 Crypto Signal\n\n"
+                    f"🪙 {symbol}\n"
+                    f"📈 Action: {result['signal']}\n\n"
+                    f"💰 Entry: {result['entry']}\n"
+                    f"🎯 TP: {result['tp']}\n"
+                    f"🛑 SL: {result['sl']}\n\n"
+                    f"⭐ Confidence: {result['confidence']}%"
+                )
 
-    send_message(message)
-
+                send_message(message)
     open_trade(
         symbol,
         result["entry"],
