@@ -68,8 +68,8 @@ def analyze_market(df):
         return {
             "signal": "STRONG BUY",
             "entry": round(last_price, 6),
-            "tp": round(last_price * 1.04, 6),
-            "sl": round(last_price * 0.98, 6),
+            "tp": round(last_price * 1.015, 6),
+            "sl": round(last_price * 0.01, 6),
             "confidence": score
         }
 
@@ -79,8 +79,8 @@ def analyze_market(df):
         return {
             "signal": "BUY",
             "entry": round(last_price, 6),
-            "tp": round(last_price * 1.03, 6),
-            "sl": round(last_price * 0.985, 6),
+            "tp": round(last_price * 1.015, 6),
+            "sl": round(last_price * 0.01, 6),
             "confidence": score
         }
 
