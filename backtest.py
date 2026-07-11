@@ -23,12 +23,11 @@ def run_backtest(symbol="BTCUSDT"):
             last_trade = result["entry"]
 
             trades += 1
-
             entry = result["entry"]
             tp = result["tp"]
             sl = result["sl"]
 
-             future = df.iloc[i+1:i+33]
+            future = df.iloc[i+1:i+33]
 
             trade_result = None
 
