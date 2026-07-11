@@ -20,7 +20,7 @@ def run_bot():
         try:
             result = analyze_symbol(symbol)
 
-            if result["signal"] != "WAIT":
+            if result["signal"] in ["BUY", "STRONG BUY", "SELL", "STRONG SELL"]:
 
                 message = (
                     f"🚨 Crypto Signal\n\n"
