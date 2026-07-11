@@ -22,15 +22,23 @@ def run_bot():
 
             if result["signal"] in ["BUY", "STRONG BUY", "SELL", "STRONG SELL"]:
 
-                message = (
-                    f"🚨 Crypto Signal\n\n"
-                    f"🪙 {symbol}\n"
-                    f"📈 Action: {result['signal']}\n\n"
-                    f"💰 Entry: {result['entry']}\n"
-                    f"🎯 TP: {result['tp']}\n"
-                    f"🛑 SL: {result['sl']}\n\n"
-                    f"⭐ Confidence: {result['confidence']}%"
-                )
+                signal_text = {
+    "BUY": "🟢 خرید",
+    "STRONG BUY": "🚀 خرید قوی",
+    "SELL": "🔴 فروش",
+    "STRONG SELL": "⚠️ فروش قوی"
+}
+
+message = (
+    f"🚨 سیگنال ارز دیجیتال\n\n"
+    f"🪙 ارز: {symbol}\n"
+    f"📈 وضعیت: {signal_text.get(result['signal'], result['signal'])}\n\n"
+    f"💰 قیمت ورود: {result['entry']}\n"
+    f"🎯 هدف فروش: {result['tp']}\n"
+    f"🛑 حد ضرر: {result['sl']}\n\n"
+    f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
+    f"🤖 Pourya Trader AI"
+)
 
                 send_message(message)
     
