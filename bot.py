@@ -20,25 +20,26 @@ def run_bot():
         try:
             result = analyze_symbol(symbol)
 
-            if result["signal"] != "HOLD" and can_buy(symbol):
+            if result["signal"] != "WAIT":
 
-                message = (
-                    f"🚨 Crypto Signal\n\n"
-                    f"🪙 {symbol}\n"
-                    f"📈 Action: {result['result']}\n\n"
-                    f"💰 Entry: {result["entry"]}\n"
-                    f"🎯 TP: {result['tp']}\n"
-                    f"🛑 SL: {result['sl']}\n\n"
-                    f"⭐ Confidence: {result['confidence']}%"
-                )
+    message = (
+        f"🚨 Crypto Signal\n\n"
+        f"🪙 {symbol}\n"
+        f"📈 Action: {result['signal']}\n\n"
+        f"💰 Entry: {result['entry']}\n"
+        f"🎯 TP: {result['tp']}\n"
+        f"🛑 SL: {result['sl']}\n\n"
+        f"⭐ Confidence: {result['confidence']}%"
+    )
 
-                send_message(message)
-open_trade(
-    symbol,
-    result["entry"],
-    result["tp"],
-    result["sl"]
-)
+    send_message(message)
+
+    open_trade(
+        symbol,
+        result["entry"],
+        result["tp"],
+        result["sl"]
+    )
         except Exception as e:
             print(symbol, e)
 
