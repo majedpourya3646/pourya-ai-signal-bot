@@ -13,7 +13,7 @@ SYMBOLS = [
 
 
 def run_bot():
-send_
+    send_message("✅ Test message from Pourya Trader Bot")
     for symbol in SYMBOLS:
 
         try:
