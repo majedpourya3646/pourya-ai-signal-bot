@@ -1,18 +1,23 @@
 import requests
 import pandas as pd
 
+BASE_URL = "https://api.binance.com/api/v3/klines"
 
-def get_market_data(symbol="BTCUSDT", interval="15m", limit=100):
 
-    url = "https://api.binance.com/api/v3/klines"
+def get_market_data(symbol, interval="15m", limit=200):
 
-    params = {
-        "symbol": symbol,
-        "interval": interval,
-        "limit": limit
-    }
+    response = requests.get(
+        BASE_URL,
+        params={
+            "symbol": symbol,
+            "interval": interval,
+            "limit": limit,
+        },
+        timeout=15,
+    )
 
-    response = requests.get(url, params=params)
+    response.raise_for_status()
+
     data = response.json()
 
     df = pd.DataFrame(
@@ -29,14 +34,20 @@ def get_market_data(symbol="BTCUSDT", interval="15m", limit=100):
             "trades",
             "taker_buy_base",
             "taker_buy_quote",
-            "ignore"
-        ]
+            "ignore",
+        ],
     )
 
-    df["open"] = df["open"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
+    numeric_columns = [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    ]
+
+    df[numeric_columns] = df[numeric_columns].astype(float)
+
+    df["time"] = pd.to_datetime(df["time"], unit="ms")
 
     return df
