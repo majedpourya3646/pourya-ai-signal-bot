@@ -33,12 +33,7 @@ def run_bot():
                 )
 
                 send_message(message)
-    open_trade(
-        symbol,
-        result["entry"],
-        result["tp"],
-        result["sl"]
-    )
+    
         except Exception as e:
             print(symbol, e)
 
