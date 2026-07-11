@@ -1,101 +1,95 @@
-from ta.trend import ADXIndicator
-from ta.volatility import AverageTrueRange
 import ta
 
 
 def analyze_market(df):
+
+    if len(df) < 200:
+        return {
+            "signal": "WAIT",
+            "entry": None,
+            "tp": None,
+            "sl": None,
+            "confidence": 0
+        }
 
     close = df["close"]
     volume = df["volume"]
 
     score = 0
 
-    # RSI
-    rsi = ta.momentum.RSIIndicator(close=close, window=14).rsi()
+    rsi = ta.momentum.RSIIndicator(
+        close=close,
+        window=14
+    ).rsi()
 
-    # EMA
-    ema20 = ta.trend.EMAIndicator(close=close, window=20).ema_indicator()
-    ema50 = ta.trend.EMAIndicator(close=close, window=50).ema_indicator()
-adx = ADXIndicator(
-    high=df["high"],
-    low=df["low"],
-    close=df["close"],
-    window=14
-).adx()
+    ema20 = ta.trend.EMAIndicator(
+        close=close,
+        window=20
+    ).ema_indicator()
 
-ema200 = ta.trend.EMAIndicator(
-    close=close,
-    window=200
-).ema_indicator()
+    ema50 = ta.trend.EMAIndicator(
+        close=close,
+        window=50
+    ).ema_indicator()
 
-last_adx = float(adx.iloc[-1])
-    # MACD
+    ema200 = ta.trend.EMAIndicator(
+        close=close,
+        window=200
+    ).ema_indicator()
+
     macd = ta.trend.MACD(close=close)
 
     macd_line = macd.macd()
     macd_signal = macd.macd_signal()
-    atr = AverageTrueRange(
-    high=df["high"],
-    low=df["low"],
-    close=df["close"],
-    window=14
-).average_true_range()
-
-last_atr = float(atr.iloc[-1])  
-    # Volume
-    avg_volume = volume.tail(20).mean()
 
     last_price = float(close.iloc[-1])
     last_rsi = float(rsi.iloc[-1])
 
-    # RSI
+    avg_volume = volume.tail(20).mean()
+
     if last_rsi < 35:
         score += 20
-    elif last_rsi > 70:
-        score -= 20
 
-    # EMA Trend
     if ema20.iloc[-1] > ema50.iloc[-1]:
         score += 20
-if last_price > ema200.iloc[-1]:
-    score += 20
-    # MACD
+
+    if ema20.iloc[-1] > ema200.iloc[-1]:
+        score += 20
+
     if macd_line.iloc[-1] > macd_signal.iloc[-1]:
         score += 20
-if last_adx > 25:
-    score += 20
-    # Volume
-    if volume.iloc[-1] > avg_volume * 1.2:
-    score += 20
 
-    # Price Trend
-    if last_price > ema20.iloc[-1]:
+    if volume.iloc[-1] > avg_volume * 1.2:
         score += 20
 
-    if score >= 90:
+
+    if score >= 80:
 
         return {
-    "signal": "STRONG BUY",
-    "entry": round(last_price, 4),
-    "tp": round(last_price + (last_atr * 2), 4),
-    "sl": round(last_price - last_atr, 4),
-    "confidence": score
-}
-    elif score >= 75:
+            "signal": "STRONG BUY",
+            "entry": round(last_price, 6),
+            "tp": round(last_price * 1.04, 6),
+            "sl": round(last_price * 0.98, 6),
+            "confidence": score
+        }
+
+
+    elif score >= 60:
 
         return {
-    "signal": "BUY",
-    "entry": round(last_price, 4),
-    "tp": round(last_price + (last_atr * 1.5), 4),
-    "sl": round(last_price - last_atr, 4),
-    "confidence": score
-}
+            "signal": "BUY",
+            "entry": round(last_price, 6),
+            "tp": round(last_price * 1.03, 6),
+            "sl": round(last_price * 0.985, 6),
+            "confidence": score
+        }
+
 
     else:
 
         return {
             "signal": "WAIT",
-            "price": round(last_price, 4),
+            "entry": round(last_price, 6),
             "tp": None,
             "sl": None,
             "confidence": score
