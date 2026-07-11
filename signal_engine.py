@@ -1,3 +1,4 @@
+from ta.volatility import AverageTrueRange
 import ta
 
 
@@ -20,7 +21,14 @@ def analyze_market(df):
 
     macd_line = macd.macd()
     macd_signal = macd.macd_signal()
+    atr = AverageTrueRange(
+    high=df["high"],
+    low=df["low"],
+    close=df["close"],
+    window=14
+).average_true_range()
 
+last_atr = float(atr.iloc[-1])  
     # Volume
     avg_volume = volume.tail(20).mean()
 
@@ -52,22 +60,21 @@ def analyze_market(df):
     if score >= 90:
 
         return {
-            "signal": "STRONG BUY",
-            "price": round(last_price, 4),
-            "tp": round(last_price * 1.05, 4),
-            "sl": round(last_price * 0.98, 4),
-            "confidence": score
-        }
-
+    "signal": "STRONG BUY",
+    "entry": round(last_price, 4),
+    "tp": round(last_price + (last_atr * 2), 4),
+    "sl": round(last_price - last_atr, 4),
+    "confidence": score
+}
     elif score >= 75:
 
         return {
-            "signal": "BUY",
-            "price": round(last_price, 4),
-            "tp": round(last_price * 1.04, 4),
-            "sl": round(last_price * 0.98, 4),
-            "confidence": score
-        }
+    "signal": "BUY",
+    "entry": round(last_price, 4),
+    "tp": round(last_price + (last_atr * 1.5), 4),
+    "sl": round(last_price - last_atr, 4),
+    "confidence": score
+}
 
     else:
 
