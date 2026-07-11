@@ -1,3 +1,4 @@
+from trade_manager import can_buy, open_trade
 from market import get_market_data
 from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
@@ -19,7 +20,7 @@ def run_bot():
         try:
             result = analyze_symbol(symbol)
 
-            if result["signal"] != "HOLD":
+            if result["signal"] != "HOLD" and can_buy(symbol):
 
                 message = (
                     f"🚨 Crypto Signal\n\n"
@@ -32,7 +33,12 @@ def run_bot():
                 )
 
                 send_message(message)
-
+open_trade(
+    symbol,
+    result["entry"],
+    result["tp"],
+    result["sl"]
+)
         except Exception as e:
             print(symbol, e)
 
