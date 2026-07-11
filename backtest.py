@@ -9,15 +9,20 @@ def run_backtest(symbol="BTCUSDT"):
     trades = 0
     wins = 0
     losses = 0
+    last_trade = None
 
     for i in range(200, len(df) - 20):
 
         result = analyze_market(df.iloc[:i+1])
 
-        if result["signal"] != "WAIT":
+if result["signal"] in ["STRONG BUY"]:
 
             print(symbol, result)
+    if last_trade == result["entry"]:
+    continue
 
+last_trade = result["entry"]
+    
             trades += 1
 
             entry = result["entry"]
