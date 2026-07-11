@@ -2,7 +2,14 @@ import ta
 
 
 def analyze_market(df):
-
+    if len(df) < 200:
+        return {
+            "signal": "HOLD",
+            "entry": None,
+            "tp": None,
+            "sl": None,
+            "confidence": 0
+        }
     close = df["close"]
     volume = df["volume"]
 
@@ -58,7 +65,14 @@ def analyze_market(df):
             "sl": round(last_price * 0.98, 4),
             "confidence": score
         }
-
+    if rsi.isna().iloc[-1] or ema200.isna().iloc[-1] or adx.isna().iloc[-1]:
+        return {
+            "signal": "HOLD",
+            "entry": None,
+            "tp": None,
+            "sl": None,
+            "confidence": 0
+        }
     elif score >= 60:
 
         return {
