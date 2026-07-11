@@ -49,23 +49,23 @@ def analyze_market(df):
     if last_price > ema20.iloc[-1]:
         score += 20
 
-    if score >= 80:
+    if score >= 90:
 
         return {
             "signal": "STRONG BUY",
             "price": round(last_price, 4),
-            "tp": round(last_price * 1.04, 4),
+            "tp": round(last_price * 1.05, 4),
             "sl": round(last_price * 0.98, 4),
             "confidence": score
         }
 
-    elif score >= 60:
+    elif score >= 75:
 
         return {
             "signal": "BUY",
             "price": round(last_price, 4),
-            "tp": round(last_price * 1.03, 4),
-            "sl": round(last_price * 0.985, 4),
+            "tp": round(last_price * 1.04, 4),
+            "sl": round(last_price * 0.98, 4),
             "confidence": score
         }
 
