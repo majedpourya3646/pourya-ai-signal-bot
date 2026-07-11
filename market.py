@@ -36,5 +36,7 @@ def get_market_data(symbol="BTCUSDT", interval="15m", limit=100):
 
     df["close"] = df["close"].astype(float)
     df["volume"] = df["volume"].astype(float)
-
+    df["open"] = df["open"].astype(float)
+df["high"] = df["high"].astype(float)
+df["low"] = df["low"].astype(float)
     return df
