@@ -1,7 +1,8 @@
 from market import get_market_data
 from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
-
+import json
+import os
 
 SYMBOLS = [
     "BTCUSDT",
@@ -10,12 +11,24 @@ SYMBOLS = [
     "XRPUSDT",
     "DOGEUSDT"
 ]
+SIGNAL_FILE = "signals.json"
 
+
+def load_signals():
+    if os.path.exists(SIGNAL_FILE):
+        with open(SIGNAL_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_signals(data):
+    with open(SIGNAL_FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
 def run_bot():
 
     send_message("✅ ربات تریدر پوریا فعال شد")
-
+sent_signals = load_signals()
     for symbol in SYMBOLS:
 
         try:
@@ -45,7 +58,13 @@ def run_bot():
                     f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
                     f"🤖 Pourya Trader AI"
                 )
+signal_key = f"{symbol}_{result['signal']}"
 
+if signal_key in sent_signals:
+    continue
+
+sent_signals[signal_key] = result['entry']
+save_signals(sent_signals)
                 send_message(message)
 
         except Exception as e:
