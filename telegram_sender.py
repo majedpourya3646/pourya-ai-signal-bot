@@ -24,5 +24,5 @@ def send_message(text):
     requests.post(
         url,
         data=data,
-        timeout=10
+        timeout=30
     )
