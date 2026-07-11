@@ -17,11 +17,9 @@ def run_bot():
     for symbol in SYMBOLS:
 
         try:
-            df = get_market_data(symbol)
+            result = analyze_symbol(symbol)
 
-            result = analyze_market(df)
-
-            if result["signal"] != "WAIT":
+            if result["signal"] != "HOLD":
 
                 message = (
                     f"🚨 Crypto Signal\n\n"
