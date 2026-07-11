@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 
 
-def get_market_data(symbol="BTCUSDT", interval="15m", limit=100):
+def get_market_data(symbol, interval="15m", limit=200):
 
     url = "https://api.binance.com/api/v3/klines"
 
