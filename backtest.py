@@ -4,18 +4,19 @@ from signal_engine import analyze_market
 
 def run_backtest(symbol="BTCUSDT"):
 
-    df = get_market_data(symbol, "15m", 1000)
+    df = get_market_data(symbol, "15min", 1000)
 
     trades = 0
     wins = 0
     losses = 0
 
-    for i in range(200, len(df)-20):
+    for i in range(200, len(df) - 20):
 
         result = analyze_market(df.iloc[:i+1])
 
-       if result["signal"] != "WAIT": 
-           print(symbol, result)
+        if result["signal"] != "WAIT":
+
+            print(symbol, result)
 
             trades += 1
 
@@ -25,28 +26,28 @@ def run_backtest(symbol="BTCUSDT"):
 
             future = df.iloc[i+1:i+21]
 
-            result_trade = None
+            trade_result = None
 
             for _, candle in future.iterrows():
 
                 if candle["high"] >= tp:
-                    result_trade = "WIN"
+                    trade_result = "WIN"
                     break
 
                 if candle["low"] <= sl:
-                    result_trade = "LOSS"
+                    trade_result = "LOSS"
                     break
 
-            if result_trade == "WIN":
+            if trade_result == "WIN":
                 wins += 1
 
-            elif result_trade == "LOSS":
+            elif trade_result == "LOSS":
                 losses += 1
 
 
     win_rate = 0
 
-    if trades:
+    if trades > 0:
         win_rate = (wins / trades) * 100
 
 
