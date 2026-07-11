@@ -1,3 +1,4 @@
+from ta.trend import ADXIndicator
 from ta.volatility import AverageTrueRange
 import ta
 
@@ -15,7 +16,19 @@ def analyze_market(df):
     # EMA
     ema20 = ta.trend.EMAIndicator(close=close, window=20).ema_indicator()
     ema50 = ta.trend.EMAIndicator(close=close, window=50).ema_indicator()
+adx = ADXIndicator(
+    high=df["high"],
+    low=df["low"],
+    close=df["close"],
+    window=14
+).adx()
 
+ema200 = ta.trend.EMAIndicator(
+    close=close,
+    window=200
+).ema_indicator()
+
+last_adx = float(adx.iloc[-1])
     # MACD
     macd = ta.trend.MACD(close=close)
 
@@ -44,14 +57,16 @@ last_atr = float(atr.iloc[-1])
     # EMA Trend
     if ema20.iloc[-1] > ema50.iloc[-1]:
         score += 20
-
+if last_price > ema200.iloc[-1]:
+    score += 20
     # MACD
     if macd_line.iloc[-1] > macd_signal.iloc[-1]:
         score += 20
-
+if last_adx > 25:
+    score += 20
     # Volume
-    if volume.iloc[-1] > avg_volume:
-        score += 20
+    if volume.iloc[-1] > avg_volume * 1.2:
+    score += 20
 
     # Price Trend
     if last_price > ema20.iloc[-1]:
