@@ -1,53 +1,39 @@
 import requests
 import pandas as pd
 
-BASE_URL = "https://api.binance.com/api/v3/klines"
 
+def get_market_data(symbol="BTCUSDT", interval="15min", limit=100):
 
-def get_market_data(symbol, interval="15m", limit=200):
+    url = "https://api.coinex.com/v2/spot/kline"
 
-    response = requests.get(
-        BASE_URL,
-        params={
-            "symbol": symbol,
-            "interval": interval,
-            "limit": limit,
-        },
-        timeout=15,
-    )
+    params = {
+        "market": symbol,
+        "period": interval,
+        "limit": limit
+    }
 
+    response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
 
-    data = response.json()
+    data = response.json()["data"]
 
     df = pd.DataFrame(
         data,
         columns=[
             "time",
             "open",
+            "close",
             "high",
             "low",
-            "close",
             "volume",
-            "close_time",
-            "quote_volume",
-            "trades",
-            "taker_buy_base",
-            "taker_buy_quote",
-            "ignore",
-        ],
+            "amount"
+        ]
     )
 
-    numeric_columns = [
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-    ]
-
-    df[numeric_columns] = df[numeric_columns].astype(float)
-
-    df["time"] = pd.to_datetime(df["time"], unit="ms")
+    df["open"] = df["open"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
+    df["close"] = df["close"].astype(float)
+    df["volume"] = df["volume"].astype(float)
 
     return df
