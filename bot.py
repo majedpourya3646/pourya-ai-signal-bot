@@ -24,8 +24,8 @@ def run_bot():
                 message = (
                     f"🚨 Crypto Signal\n\n"
                     f"🪙 {symbol}\n"
-                    f"📈 Action: {result['signal']}\n\n"
-                    f"💰 Entry: {result['price']}\n"
+                    f"📈 Action: {result['result']}\n\n"
+                    f"💰 Entry: {result['entry']}\n"
                     f"🎯 TP: {result['tp']}\n"
                     f"🛑 SL: {result['sl']}\n\n"
                     f"⭐ Confidence: {result['confidence']}%"
