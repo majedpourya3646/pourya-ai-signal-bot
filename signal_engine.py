@@ -63,7 +63,7 @@ def analyze_market(df):
         score += 20
 
 
-    if score >= 80:
+    if score >= 60:
 
         return {
             "signal": "STRONG BUY",
@@ -74,7 +74,7 @@ def analyze_market(df):
         }
 
 
-    elif score >= 60:
+    elif score >= 40:
 
         return {
             "signal": "BUY",
