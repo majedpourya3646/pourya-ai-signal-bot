@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 
 
-BASE_URL = "https://api.binance.com/api/v3/klines"
+BASE_URL = "https://api.coinex.com/v2/spot/kline"
 
 
 
@@ -11,21 +11,21 @@ def get_market_data(symbol, interval="15"):
     try:
 
         interval_map = {
-            "15": "15m",
-            "60": "1h",
-            "240": "4h"
+            "15": "15min",
+            "60": "1hour",
+            "240": "4hour"
         }
 
 
-        binance_interval = interval_map.get(
+        coinex_interval = interval_map.get(
             interval,
-            interval
+            "15min"
         )
 
 
         params = {
-            "symbol": symbol,
-            "interval": binance_interval,
+            "market": symbol,
+            "period": coinex_interval,
             "limit": 300
         }
 
@@ -37,48 +37,38 @@ def get_market_data(symbol, interval="15"):
         )
 
 
-        data = response.json()
+        result = response.json()
 
 
-
-        if "code" in data:
+        if result.get("code") != 0:
 
             raise Exception(
-                data.get("msg")
+                result
             )
+
+
+        data = result["data"]
 
 
 
         df = pd.DataFrame(
-            data,
-            columns=[
-                "time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "close_time",
-                "quote_volume",
-                "trades",
-                "taker_buy_base",
-                "taker_buy_quote",
-                "ignore"
-            ]
+            data
         )
 
 
 
-        df = df[
-            [
-                "time",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume"
-            ]
-        ]
+        # هماهنگ سازی نام ستون‌ها
+
+        df = df.rename(
+            columns={
+                "created_at": "time",
+                "open": "open",
+                "high": "high",
+                "low": "low",
+                "close": "close",
+                "volume": "volume"
+            }
+        )
 
 
 
@@ -103,6 +93,12 @@ def get_market_data(symbol, interval="15"):
 
 
 
+        df = df.sort_values(
+            "time"
+        )
+
+
+
         return df
 
 
@@ -110,7 +106,7 @@ def get_market_data(symbol, interval="15"):
     except Exception as e:
 
         print(
-            "BINANCE MARKET ERROR:",
+            "COINEX MARKET ERROR:",
             symbol,
             interval,
             e
