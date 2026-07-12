@@ -6,92 +6,77 @@ def analyze_symbol(symbol):
 
     try:
 
-        df_15m = get_market_data(
-            symbol,
-            interval="15"
-        )
-
-        df_1h = get_market_data(
-            symbol,
-            interval="60"
-        )
-
-        df_4h = get_market_data(
-            symbol,
-            interval="240"
-        )
+        df_15m = get_market_data(symbol, interval="15")
+        df_1h = get_market_data(symbol, interval="60")
+        df_4h = get_market_data(symbol, interval="240")
 
 
-        signal_15m = analyze_market(df_15m)
-        signal_1h = analyze_market(df_1h)
-        signal_4h = analyze_market(df_4h)
+        result_15m = analyze_market(df_15m)
+        result_1h = analyze_market(df_1h)
+        result_4h = analyze_market(df_4h)
 
 
         scores = [
-            signal_15m["confidence"],
-            signal_1h["confidence"],
-            signal_4h["confidence"]
+            result_15m["confidence"],
+            result_1h["confidence"],
+            result_4h["confidence"]
         ]
 
 
         average_score = round(
-            sum(scores) / len(scores)
+            sum(scores) / 3
         )
 
 
-        # تایید چند تایم فریم
-
         if (
-            signal_15m["signal"] in ["BUY", "STRONG BUY"]
+            result_15m["signal"] in ["BUY", "STRONG BUY"]
             and
-            signal_1h["signal"] in ["BUY", "STRONG BUY"]
+            result_1h["signal"] in ["BUY", "STRONG BUY"]
             and
-            signal_4h["signal"] in ["BUY", "STRONG BUY"]
+            result_4h["signal"] in ["BUY", "STRONG BUY"]
         ):
 
             final_signal = "STRONG BUY"
 
-
         elif average_score >= 60:
 
             final_signal = "BUY"
-
 
         else:
 
             final_signal = "WAIT"
 
 
-
         return {
 
             "signal": final_signal,
 
-            "entry": signal_15m["entry"],
+            "entry": result_15m["entry"],
 
-            "tp": signal_15m["tp"],
+            "tp": result_15m["tp"],
 
-            "sl": signal_15m["sl"],
+            "sl": result_15m["sl"],
 
-            "confidence": average_score
+            "confidence": average_score,
+
+            "detail": {
+                "15m": result_15m,
+                "1h": result_1h,
+                "4h": result_4h
+            }
 
         }
 
 
     except Exception as e:
 
-        print("Analyze error:", symbol, e)
+        print(symbol, e)
 
         return {
-
             "signal": "WAIT",
-
             "entry": None,
-
             "tp": None,
-
             "sl": None,
-
-            "confidence": 0
-
+            "confidence": 0,
+            "detail": {}
         }
