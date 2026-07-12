@@ -1,0 +1,17 @@
+BOT_NAME = "Pourya Trader AI"
+
+TIMEFRAME = "15m"
+
+RISK_REWARD = 2
+
+MAX_OPEN_TRADES = 5
+
+MIN_CONFIDENCE = 60
+
+SYMBOLS = [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT"
+]
