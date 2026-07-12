@@ -6,11 +6,17 @@ from performance import (
 
 from market import get_market_data
 from multi_timeframe import analyze_symbol
+
 from telegram_sender import send_message
 
 from portfolio import (
     calculate_position,
-    INITIAL_BALANCE
+    INITIAL_BALANCE,
+    get_trade_summary
+)
+
+from risk_manager import (
+    validate_trade
 )
 
 from trade_manager import (
@@ -20,7 +26,6 @@ from trade_manager import (
     get_all_trades,
 )
 
-
 SYMBOLS = [
     "BTCUSDT",
     "ETHUSDT",
@@ -29,38 +34,71 @@ SYMBOLS = [
     "DOGEUSDT",
 ]
 
+START_BALANCE = INITIAL_BALANCE
 
+signal_text = {
+
+    "BUY": "🟢 BUY",
+
+    "STRONG BUY": "🚀 STRONG BUY",
+
+    "SELL": "🔴 SELL",
+
+    "STRONG SELL": "⚠️ STRONG SELL",
+
+    "WAIT": "⏳ WAIT"
+
+}
 def check_open_trades():
 
     trades = get_all_trades()
+
+    if not trades:
+        return
 
     for symbol, trade in list(trades.items()):
 
         try:
 
-            df = get_market_data(symbol)
+            df = get_market_data(
+                symbol,
+                interval="15"
+            )
+
+            if df.empty:
+                continue
 
             high = float(df["high"].iloc[-1])
             low = float(df["low"].iloc[-1])
 
+            # ================= TP =================
 
             if high >= trade["tp"]:
 
                 profit = round(
-                    ((trade["tp"] - trade["entry"]) /
-                     trade["entry"]) * 100,
+                    (
+                        (
+                            trade["tp"]
+                            - trade["entry"]
+                        )
+                        / trade["entry"]
+                    ) * 100,
                     2
                 )
 
-
                 send_message(
-                    f"🎉 معامله با سود بسته شد\n\n"
-                    f"🪙 ارز: {symbol}\n"
-                    f"💰 ورود: {trade['entry']}\n"
-                    f"🏁 خروج: {trade['tp']}\n"
-                    f"📈 سود: {profit}%"
-                )
 
+                    f"🎉 <b>TP Hit</b>\n\n"
+
+                    f"🪙 {symbol}\n"
+
+                    f"💰 Entry : {trade['entry']}\n"
+
+                    f"🏁 Exit : {trade['tp']}\n"
+
+                    f"📈 Profit : {profit}%"
+
+                )
 
                 close_trade(symbol)
 
@@ -72,25 +110,34 @@ def check_open_trades():
 
                 continue
 
-
+            # ================= SL =================
 
             if low <= trade["sl"]:
 
                 loss = round(
-                    ((trade["entry"] - trade["sl"]) /
-                     trade["entry"]) * 100,
+                    (
+                        (
+                            trade["entry"]
+                            - trade["sl"]
+                        )
+                        / trade["entry"]
+                    ) * 100,
                     2
                 )
 
-
                 send_message(
-                    f"❌ معامله با ضرر بسته شد\n\n"
-                    f"🪙 ارز: {symbol}\n"
-                    f"💰 ورود: {trade['entry']}\n"
-                    f"🏁 خروج: {trade['sl']}\n"
-                    f"📉 ضرر: {loss}%"
-                )
 
+                    f"❌ <b>SL Hit</b>\n\n"
+
+                    f"🪙 {symbol}\n"
+
+                    f"💰 Entry : {trade['entry']}\n"
+
+                    f"🛑 Exit : {trade['sl']}\n"
+
+                    f"📉 Loss : {loss}%"
+
+                )
 
                 close_trade(symbol)
 
@@ -102,38 +149,22 @@ def check_open_trades():
 
                 continue
 
-
         except Exception as e:
 
-            print(symbol, e)
-
-
-
-def run_bot():
+            print(
+                "CHECK TRADE ERROR:",
+                symbol,
+                e
+            )
+          def run_bot():
 
     check_open_trades()
 
-
-    signal_text = {
-
-        "BUY": "🟢 خرید",
-
-        "STRONG BUY": "🚀 خرید قوی",
-
-        "SELL": "🔴 فروش",
-
-        "STRONG SELL": "⚠️ فروش قوی",
-
-        "WAIT": "⏳ انتظار",
-
-    }
-
-
-    market_report = "📊 گزارش بررسی بازار\n\n"
+    market_report = (
+        "📊 <b>Pourya Trader AI</b>\n\n"
+    )
 
     signal_count = 0
-
-
 
     for symbol in SYMBOLS:
 
@@ -141,63 +172,95 @@ def run_bot():
 
             result = analyze_symbol(symbol)
 
-
             market_report += (
 
-                f"{signal_text.get(result['signal'], result['signal'])}"
-                f" | {symbol}\n"
+                f"🪙 <b>{symbol}</b>\n"
 
-                f"⭐ امتیاز نهایی: "
-                f"{result['confidence']}%\n"
+                f"📌 {signal_text.get(result['signal'], result['signal'])}\n"
+
+                f"⭐ Confidence: {result['confidence']}%\n"
+
+                f"🏅 Grade: {result.get('grade','-')}\n"
+
+                f"📈 Trend: {result.get('trend','-')}\n\n"
 
             )
-
 
             if "detail" in result:
 
                 market_report += (
 
-                    f"⏱ 15M: "
+                    f"15M ➜ "
                     f"{result['detail']['15m']['signal']} "
                     f"({result['detail']['15m']['confidence']}%)\n"
 
-                    f"⏱ 1H: "
+                    f"1H ➜ "
                     f"{result['detail']['1h']['signal']} "
                     f"({result['detail']['1h']['confidence']}%)\n"
 
-                    f"⏱ 4H: "
+                    f"4H ➜ "
                     f"{result['detail']['4h']['signal']} "
                     f"({result['detail']['4h']['confidence']}%)\n\n"
 
                 )
 
-
             if result["signal"] == "WAIT":
 
                 continue
 
-
             signal_count += 1
 
+            if not can_buy(
 
-            if not can_buy(symbol):
+                symbol,
+
+                balance=INITIAL_BALANCE,
+
+                start_balance=START_BALANCE,
+
+                entry=result["entry"],
+
+                tp=result["tp"],
+
+                sl=result["sl"]
+
+            ):
 
                 continue
 
-
-
-            quantity = calculate_position(
+            valid, position = validate_trade(
 
                 INITIAL_BALANCE,
 
+                START_BALANCE,
+
+                get_all_trades(),
+
                 result["entry"],
+
+                result["tp"],
 
                 result["sl"]
 
             )
 
+            if not valid:
 
+                continue
 
+            summary = get_trade_summary(
+
+                INITIAL_BALANCE,
+
+                result["entry"],
+
+                result["tp"],
+
+                result["sl"]
+
+            )
+
+            quantity = summary["quantity"]
             open_trade(
 
                 symbol=symbol,
@@ -208,11 +271,15 @@ def run_bot():
 
                 sl=result["sl"],
 
-                quantity=quantity
+                quantity=quantity,
+
+                signal=result["signal"],
+
+                confidence=result["confidence"],
+
+                grade=result.get("grade", "")
 
             )
-
-
 
             add_trade(
 
@@ -224,60 +291,89 @@ def run_bot():
 
                 tp=result["tp"],
 
-                sl=result["sl"]
+                sl=result["sl"],
+
+                quantity=quantity,
+
+                confidence=result["confidence"],
+
+                grade=result.get("grade", "")
 
             )
 
+            reasons = "\n".join(
 
+                f"• {r}"
+
+                for r in result.get(
+                    "reasons",
+                    []
+                )
+            )
 
             send_message(
 
-                f"🚨 سیگنال جدید\n\n"
+                f"🚨 <b>NEW SIGNAL</b>\n\n"
 
-                f"🪙 ارز: {symbol}\n"
+                f"🪙 <b>{symbol}</b>\n"
 
-                f"📊 نوع: {signal_text[result['signal']]}\n\n"
+                f"📊 Signal : {signal_text[result['signal']]}\n"
 
-                f"💰 ورود: {result['entry']}\n"
+                f"🏅 Grade : {result.get('grade','-')}\n"
 
-                f"🎯 TP: {result['tp']}\n"
+                f"⭐ Confidence : {result['confidence']}%\n\n"
 
-                f"🛑 SL: {result['sl']}\n"
+                f"💰 Entry : {result['entry']}\n"
 
-                f"📦 حجم: {quantity}\n\n"
+                f"🎯 TP : {result['tp']}\n"
 
-                f"⭐ قدرت: {result['confidence']}%\n\n"
+                f"🛑 SL : {result['sl']}\n"
 
-                f"🤖 Pourya Trader AI"
+                f"📦 Size : {quantity}\n"
+
+                f"⚖️ R/R : {summary['risk_reward']}\n"
+
+                f"💵 Risk : {summary['risk_amount']}$\n"
+
+                f"💲 Expected Profit : {summary['expected_profit']}$\n\n"
+
+                f"<b>Reasons</b>\n"
+
+                f"{reasons if reasons else '-'}"
 
             )
 
-
-
         except Exception as e:
 
-            print(symbol, e)
+            print(
 
+                "BOT ERROR:",
 
+                symbol,
+
+                e
+
+            )
 
     market_report += (
 
-        f"\n📈 تعداد سیگنال‌ها: {signal_count}\n"
+        f"\n📈 Signals : {signal_count}\n"
 
         f"🤖 Pourya Trader AI"
 
     )
 
-
-    send_message(market_report)
-
-
-    # گزارش عملکرد
-
     send_message(
-        performance_report()
+
+        market_report
+
     )
 
+    send_message(
+
+        performance_report()
+
+    )
 
 
 if __name__ == "__main__":
