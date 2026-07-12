@@ -22,7 +22,12 @@ def analyze_symbol(symbol):
         )
 
 
-        if df_15m.empty or df_1h.empty or df_4h.empty:
+        if (
+            df_15m.empty
+            or df_1h.empty
+            or df_4h.empty
+        ):
+
             return {
                 "signal": "WAIT",
                 "entry": None,
@@ -43,7 +48,9 @@ def analyze_symbol(symbol):
 
 
         score_15m = result_15m["confidence"]
+
         score_1h = result_1h["confidence"]
+
         score_4h = result_4h["confidence"]
 
 
@@ -90,18 +97,62 @@ def analyze_symbol(symbol):
                 "BUY",
                 "STRONG BUY"
             ]:
+
                 bullish_count += 1
 
 
 
-        if bullish_count == 3 and average_score >= 75:
+        # ================= SMART FILTER =================
+
+
+        higher_timeframe_ok = (
+            result_4h["signal"] in [
+                "BUY",
+                "STRONG BUY"
+            ]
+        )
+
+
+        medium_timeframe_ok = (
+            result_1h["signal"] in [
+                "BUY",
+                "STRONG BUY"
+            ]
+        )
+
+
+        short_timeframe_ok = (
+            result_15m["signal"] in [
+                "BUY",
+                "STRONG BUY"
+            ]
+        )
+
+
+
+        # ================= FINAL SIGNAL =================
+
+
+        if (
+            bullish_count == 3
+            and
+            average_score >= 70
+        ):
 
             final_signal = "STRONG BUY"
 
 
-        elif bullish_count >= 2 and average_score >= 60:
+
+        elif (
+            higher_timeframe_ok
+            and
+            (medium_timeframe_ok or short_timeframe_ok)
+            and
+            average_score >= 45
+        ):
 
             final_signal = "BUY"
+
 
 
         else:
@@ -123,9 +174,13 @@ def analyze_symbol(symbol):
             "confidence": average_score,
 
             "detail": {
+
                 "15m": result_15m,
+
                 "1h": result_1h,
+
                 "4h": result_4h
+
             }
 
         }
@@ -140,13 +195,19 @@ def analyze_symbol(symbol):
             e
         )
 
+
         return {
 
             "signal": "WAIT",
+
             "entry": None,
+
             "tp": None,
+
             "sl": None,
+
             "confidence": 0,
+
             "detail": {}
 
         }
