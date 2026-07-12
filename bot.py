@@ -14,7 +14,7 @@ SYMBOLS = [
     "ETHUSDT",
     "SOLUSDT",
     "XRPUSDT",
-    "DOGEUSDT"
+    "DOGEUSDT",
 ]
 
 
@@ -22,6 +22,7 @@ def check_open_trades():
     trades = get_all_trades()
 
     for symbol, trade in list(trades.items()):
+
         try:
             df = get_market_data(symbol)
 
@@ -37,9 +38,8 @@ def check_open_trades():
                 )
 
                 send_message(
-                    f"🎉 معامله بسته شد\n\n"
-                    f"🪙 ارز: {symbol}\n"
-                    f"✅ حد سود فعال شد\n\n"
+                    f"🎉 معامله با سود بسته شد\n\n"
+                    f"🪙 ارز: {symbol}\n\n"
                     f"💰 ورود: {trade['entry']}\n"
                     f"🏁 خروج: {trade['tp']}\n"
                     f"📈 سود: {profit}%"
@@ -56,9 +56,8 @@ def check_open_trades():
                 )
 
                 send_message(
-                    f"❌ معامله بسته شد\n\n"
-                    f"🪙 ارز: {symbol}\n"
-                    f"🛑 حد ضرر فعال شد\n\n"
+                    f"❌ معامله با ضرر بسته شد\n\n"
+                    f"🪙 ارز: {symbol}\n\n"
                     f"💰 ورود: {trade['entry']}\n"
                     f"🏁 خروج: {trade['sl']}\n"
                     f"📉 ضرر: {loss}%"
@@ -67,7 +66,7 @@ def check_open_trades():
                 close_trade(symbol)
                 continue
 
-            print(f"{symbol} | قیمت فعلی: {close}")
+            print(f"{symbol} : {close}")
 
         except Exception as e:
             print(symbol, e)
@@ -82,50 +81,69 @@ def run_bot():
         "STRONG BUY": "🚀 خرید قوی",
         "SELL": "🔴 فروش",
         "STRONG SELL": "⚠️ فروش قوی",
+        "WAIT": "⏳ انتظار",
     }
+
+    report = "📊 گزارش بررسی بازار\n\n"
+    signal_count = 0
 
     for symbol in SYMBOLS:
 
         try:
 
-            if not can_buy(symbol):
-                continue
-
             df = get_market_data(symbol)
             result = analyze_market(df)
 
-            if result["signal"] in signal_text:
+            report += (
+                f"{signal_text.get(result['signal'], result['signal'])}"
+                f" | {symbol}\n"
+            )
 
-                open_trade(
-                    symbol,
-                    result["entry"],
-                    result["tp"],
-                    result["sl"],
-                )
+            if result["signal"] == "WAIT":
+                continue
 
-                message = (
-                    f"🚨 سیگنال جدید\n\n"
-                    f"🪙 ارز: {symbol}\n"
-                    f"📊 نوع سیگنال: {signal_text[result['signal']]}\n\n"
-                    f"💰 قیمت ورود: {result['entry']}\n"
-                    f"🎯 حد سود: {result['tp']}\n"
-                    f"🛑 حد ضرر: {result['sl']}\n\n"
-                    f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
-                    f"🤖 Pourya Trader AI"
-                )
+            signal_count += 1
 
-                send_message(message)
+            if not can_buy(symbol):
+                continue
 
-                add_trade(
-                    symbol=symbol,
-                    signal=result["signal"],
-                    entry=result["entry"],
-                    tp=result["tp"],
-                    sl=result["sl"],
-                )
+            open_trade(
+                symbol=symbol,
+                entry=result["entry"],
+                tp=result["tp"],
+                sl=result["sl"],
+            )
+
+            add_trade(
+                symbol=symbol,
+                signal=result["signal"],
+                entry=result["entry"],
+                tp=result["tp"],
+                sl=result["sl"],
+            )
+
+            message = (
+                f"🚨 سیگنال جدید\n\n"
+                f"🪙 ارز: {symbol}\n"
+                f"📊 نوع سیگنال: {signal_text[result['signal']]}\n\n"
+                f"💰 قیمت ورود: {result['entry']}\n"
+                f"🎯 حد سود: {result['tp']}\n"
+                f"🛑 حد ضرر: {result['sl']}\n\n"
+                f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
+                f"🤖 Pourya Trader AI"
+            )
+
+            send_message(message)
 
         except Exception as e:
             print(symbol, e)
+
+    report += (
+        f"\n📈 تعداد سیگنال‌ها: {signal_count}\n"
+        f"🤖 Pourya Trader AI"
+    )
+
+    send_message(report)
 
 
 if __name__ == "__main__":
