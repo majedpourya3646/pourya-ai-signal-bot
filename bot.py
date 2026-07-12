@@ -2,6 +2,12 @@ from performance import add_trade
 from market import get_market_data
 from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
+
+from portfolio import (
+    calculate_position,
+    INITIAL_BALANCE
+)
+
 from trade_manager import (
     can_buy,
     open_trade,
@@ -31,14 +37,14 @@ def check_open_trades():
 
             high = float(df["high"].iloc[-1])
             low = float(df["low"].iloc[-1])
-            close = float(df["close"].iloc[-1])
 
 
             if high >= trade["tp"]:
 
                 profit = round(
-                    ((trade["tp"] - trade["entry"]) / trade["entry"]) * 100,
-                    2,
+                    ((trade["tp"] - trade["entry"]) /
+                     trade["entry"]) * 100,
+                    2
                 )
 
                 send_message(
@@ -57,8 +63,9 @@ def check_open_trades():
             if low <= trade["sl"]:
 
                 loss = round(
-                    ((trade["entry"] - trade["sl"]) / trade["entry"]) * 100,
-                    2,
+                    ((trade["entry"] - trade["sl"]) /
+                     trade["entry"]) * 100,
+                    2
                 )
 
                 send_message(
@@ -72,8 +79,6 @@ def check_open_trades():
                 close_trade(symbol)
                 continue
 
-
-            print(f"{symbol} : {close}")
 
 
         except Exception as e:
@@ -111,9 +116,7 @@ def run_bot():
 
     for symbol in SYMBOLS:
 
-
         try:
-
 
             result = analyze_symbol(symbol)
 
@@ -130,22 +133,20 @@ def run_bot():
             )
 
 
-            if "detail" in result:
 
+            if "detail" in result:
 
                 report += (
 
-                    f"   ⏱ 15M: "
+                    f"⏱ 15M: "
                     f"{result['detail']['15m']['signal']} "
                     f"({result['detail']['15m']['confidence']}%)\n"
 
-
-                    f"   ⏱ 1H: "
+                    f"⏱ 1H: "
                     f"{result['detail']['1h']['signal']} "
                     f"({result['detail']['1h']['confidence']}%)\n"
 
-
-                    f"   ⏱ 4H: "
+                    f"⏱ 4H: "
                     f"{result['detail']['4h']['signal']} "
                     f"({result['detail']['4h']['confidence']}%)\n\n"
 
@@ -169,6 +170,18 @@ def run_bot():
 
 
 
+            quantity = calculate_position(
+
+                INITIAL_BALANCE,
+
+                result["entry"],
+
+                result["sl"]
+
+            )
+
+
+
             open_trade(
 
                 symbol=symbol,
@@ -178,6 +191,8 @@ def run_bot():
                 tp=result["tp"],
 
                 sl=result["sl"],
+
+                quantity=quantity
 
             )
 
@@ -193,7 +208,7 @@ def run_bot():
 
                 tp=result["tp"],
 
-                sl=result["sl"],
+                sl=result["sl"]
 
             )
 
@@ -212,7 +227,9 @@ def run_bot():
 
                 f"🎯 حد سود: {result['tp']}\n"
 
-                f"🛑 حد ضرر: {result['sl']}\n\n"
+                f"🛑 حد ضرر: {result['sl']}\n"
+
+                f"📦 حجم ورود: {quantity}\n\n"
 
                 f"⭐ قدرت سیگنال: "
                 f"{result['confidence']}%\n\n"
@@ -234,9 +251,9 @@ def run_bot():
 
     report += (
 
-        f"📈 تعداد سیگنال‌ها: {signal_count}\n"
+        f"\n📈 تعداد سیگنال‌ها: {signal_count}\n"
 
-        f"😎 Pourya Trader AI"
+        f"🤖 Pourya Trader AI"
 
     )
 
