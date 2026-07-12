@@ -115,13 +115,15 @@ def run_bot():
                 )
 
                 send_message(message)
-add_trade(
-    symbol=symbol,
-    signal=result["signal"],
-    entry=result["entry"],
-    tp=result["tp"],
-    sl=result["sl"]
-)
+
+                add_trade(
+                    symbol=symbol,
+                    signal=result["signal"],
+                    entry=result["entry"],
+                    tp=result["tp"],
+                    sl=result["sl"],
+                )
+
         except Exception as e:
             print(symbol, e)
 
