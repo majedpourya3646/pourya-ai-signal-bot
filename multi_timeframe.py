@@ -40,8 +40,6 @@ def analyze_symbol(symbol):
 
 
 
-        # وزن بیشتر برای تایم های بالاتر
-
         average_score = round(
 
             (
@@ -52,6 +50,25 @@ def analyze_symbol(symbol):
                 score_4h * 0.40
             )
 
+        )
+
+
+
+        # DEBUG
+
+        print(
+            symbol,
+            "| 15M:",
+            score_15m,
+            result_15m["signal"],
+            "| 1H:",
+            score_1h,
+            result_1h["signal"],
+            "| 4H:",
+            score_4h,
+            result_4h["signal"],
+            "| AVG:",
+            average_score
         )
 
 
@@ -75,13 +92,12 @@ def analyze_symbol(symbol):
 
 
 
-        # تصمیم نهایی
-
-
         if (
 
             bullish_count == 3
+
             and
+
             average_score >= 75
 
         ):
@@ -93,7 +109,9 @@ def analyze_symbol(symbol):
         elif (
 
             bullish_count >= 2
+
             and
+
             average_score >= 60
 
         ):
