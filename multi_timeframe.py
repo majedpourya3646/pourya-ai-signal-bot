@@ -4,21 +4,41 @@ from signal_engine import analyze_market
 
 def analyze_symbol(symbol):
 
-    tf_4h = get_market_data(symbol, "4h")
-    tf_1h = get_market_data(symbol, "1h")
-    tf_15m = get_market_data(symbol, "15m")
+    df_15m = get_market_data(symbol, "15")
+    df_1h = get_market_data(symbol, "60")
+    df_4h = get_market_data(symbol, "240")
 
-    r4 = analyze_market(tf_4h)
-    r1 = analyze_market(tf_1h)
-    r15 = analyze_market(tf_15m)
+    signal15 = analyze_market(df_15m)
+    signal1h = analyze_market(df_1h)
+    signal4h = analyze_market(df_4h)
 
+    # فقط وقتی هر سه تایم‌فریم هم‌جهت باشند سیگنال بده
     if (
-        r4["signal"] in ["BUY", "STRONG BUY"]
-        and r1["signal"] in ["BUY", "STRONG BUY"]
-        and r15["signal"] in ["BUY", "STRONG BUY"]
+        signal15["signal"] in ["BUY", "STRONG BUY"]
+        and signal1h["signal"] in ["BUY", "STRONG BUY"]
+        and signal4h["signal"] in ["BUY", "STRONG BUY"]
     ):
-        return r15
+
+        confidence = round(
+            (
+                signal15["confidence"]
+                + signal1h["confidence"]
+                + signal4h["confidence"]
+            ) / 3
+        )
+
+        return {
+            "signal": "STRONG BUY",
+            "entry": signal15["entry"],
+            "tp": signal15["tp"],
+            "sl": signal15["sl"],
+            "confidence": confidence,
+        }
 
     return {
-        "signal": "HOLD"
+        "signal": "WAIT",
+        "entry": None,
+        "tp": None,
+        "sl": None,
+        "confidence": 0,
     }
