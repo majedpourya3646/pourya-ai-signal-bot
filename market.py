@@ -1,33 +1,33 @@
-import requests
+from pybit.unified_trading import HTTP
 import pandas as pd
 
+session = HTTP(testnet=False)
 
-def get_market_data(symbol="BTCUSDT", interval="15min", limit=100):
 
-    url = "https://api.coinex.com/v2/spot/kline"
+def get_market_data(symbol, interval="15"):
 
-    params = {
-        "market": symbol,
-        "period": interval,
-        "limit": limit
-    }
+    kline = session.get_kline(
+        category="linear",
+        symbol=symbol,
+        interval=interval,
+        limit=300,
+    )
 
-    response = requests.get(url, params=params, timeout=10)
-    response.raise_for_status()
+    data = kline["result"]["list"]
 
-    data = response.json()["data"]
+    data.reverse()
 
     df = pd.DataFrame(
         data,
         columns=[
             "time",
             "open",
-            "close",
             "high",
             "low",
+            "close",
             "volume",
-            "amount"
-        ]
+            "turnover",
+        ],
     )
 
     df["open"] = df["open"].astype(float)
