@@ -1,44 +1,27 @@
-from market import get_market_data
-from signal_engine import analyze_market
+def check_timeframes(df_15m, df_1h, df_4h):
+    score = 0
+
+    # روند کوتاه مدت
+    if df_15m["close"].iloc[-1] > df_15m["close"].iloc[-10]:
+        score += 1
+
+    # روند میان مدت
+    if df_1h["close"].iloc[-1] > df_1h["close"].iloc[-10]:
+        score += 1
+
+    # روند اصلی
+    if df_4h["close"].iloc[-1] > df_4h["close"].iloc[-10]:
+        score += 1
 
 
-def analyze_symbol(symbol):
+    if score == 3:
+        return "STRONG BUY"
 
-    df_15m = get_market_data(symbol, "15")
-    df_1h = get_market_data(symbol, "60")
-    df_4h = get_market_data(symbol, "240")
+    elif score == 2:
+        return "BUY"
 
-    signal15 = analyze_market(df_15m)
-    signal1h = analyze_market(df_1h)
-    signal4h = analyze_market(df_4h)
+    elif score == 1:
+        return "WAIT"
 
-    # فقط وقتی هر سه تایم‌فریم هم‌جهت باشند سیگنال بده
-    if (
-        signal15["signal"] in ["BUY", "STRONG BUY"]
-        and signal1h["signal"] in ["BUY", "STRONG BUY"]
-        and signal4h["signal"] in ["BUY", "STRONG BUY"]
-    ):
-
-        confidence = round(
-            (
-                signal15["confidence"]
-                + signal1h["confidence"]
-                + signal4h["confidence"]
-            ) / 3
-        )
-
-        return {
-            "signal": "STRONG BUY",
-            "entry": signal15["entry"],
-            "tp": signal15["tp"],
-            "sl": signal15["sl"],
-            "confidence": confidence,
-        }
-
-    return {
-        "signal": "WAIT",
-        "entry": None,
-        "tp": None,
-        "sl": None,
-        "confidence": 0,
-    }
+    else:
+        return "NO TRADE"
