@@ -1,7 +1,7 @@
 import json
 import os
 
-FILE_NAME = "trades.json"
+FILE_NAME = "history.json"
 
 
 def load_trades():
