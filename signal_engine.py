@@ -13,84 +13,94 @@ def analyze_market(df):
         }
 
     close = df["close"]
+    high = df["high"]
+    low = df["low"]
     volume = df["volume"]
 
     score = 0
 
-    rsi = ta.momentum.RSIIndicator(
-        close=close,
-        window=14
-    ).rsi()
+    # RSI
+    rsi = ta.momentum.RSIIndicator(close=close, window=14).rsi()
 
-    ema20 = ta.trend.EMAIndicator(
-        close=close,
-        window=20
-    ).ema_indicator()
+    # EMA
+    ema20 = ta.trend.EMAIndicator(close, window=20).ema_indicator()
+    ema50 = ta.trend.EMAIndicator(close, window=50).ema_indicator()
+    ema200 = ta.trend.EMAIndicator(close, window=200).ema_indicator()
 
-    ema50 = ta.trend.EMAIndicator(
-        close=close,
-        window=50
-    ).ema_indicator()
-
-    ema200 = ta.trend.EMAIndicator(
-        close=close,
-        window=200
-    ).ema_indicator()
-
-    macd = ta.trend.MACD(close=close)
-
+    # MACD
+    macd = ta.trend.MACD(close)
     macd_line = macd.macd()
     macd_signal = macd.macd_signal()
 
+    # ADX
+    adx = ta.trend.ADXIndicator(
+        high=high,
+        low=low,
+        close=close,
+        window=14
+    ).adx()
+
+    # ATR
+    atr = ta.volatility.AverageTrueRange(
+        high=high,
+        low=low,
+        close=close,
+        window=14
+    ).average_true_range()
+
+    # Bollinger
+    bb = ta.volatility.BollingerBands(close)
+
     last_price = float(close.iloc[-1])
     last_rsi = float(rsi.iloc[-1])
+    last_atr = float(atr.iloc[-1])
+    last_adx = float(adx.iloc[-1])
 
     avg_volume = volume.tail(20).mean()
 
+    # RSI
     if last_rsi < 35:
-        score += 20
+        score += 15
 
+    # EMA Trend
     if ema20.iloc[-1] > ema50.iloc[-1]:
         score += 20
 
-    if ema20.iloc[-1] > ema200.iloc[-1]:
+    if ema50.iloc[-1] > ema200.iloc[-1]:
         score += 20
 
+    # MACD
     if macd_line.iloc[-1] > macd_signal.iloc[-1]:
-        score += 20
+        score += 15
 
-    if volume.iloc[-1] > avg_volume * 1.2:
-        score += 20
+    # ADX
+    if last_adx > 25:
+        score += 15
 
+    # Volume
+    if volume.iloc[-1] > avg_volume * 1.3:
+        score += 10
 
-    if score >= 60:
+    # Bollinger
+    if last_price < bb.bollinger_lband().iloc[-1]:
+        score += 5
 
-        return {
-            "signal": "STRONG BUY",
-            "entry": round(last_price, 6),
-            "tp": round(last_price * 1.015, 6),
-            "sl": round(last_price * 0.01, 6),
-            "confidence": score
-        }
+    entry = round(last_price, 6)
 
+    tp = round(entry + (last_atr * 2), 6)
+    sl = round(entry - (last_atr * 1.5), 6)
 
-    elif score >= 40:
-
-        return {
-            "signal": "BUY",
-            "entry": round(last_price, 6),
-            "tp": round(last_price * 1.015, 6),
-            "sl": round(last_price * 0.01, 6),
-            "confidence": score
-        }
-
-
+    if score >= 70:
+        signal = "STRONG BUY"
+    elif score >= 50:
+        signal = "BUY"
     else:
+        signal = "WAIT"
 
-        return {
-            "signal": "WAIT",
-            "entry": round(last_price, 6),
-            "tp": None,
-            "sl": None,
-            "confidence": score
-        }
+    return {
+        "signal": signal,
+        "entry": entry,
+        "tp": tp if signal != "WAIT" else None,
+        "sl": sl if signal != "WAIT" else None,
+        "confidence": score
+    }
