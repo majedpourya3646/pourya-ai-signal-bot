@@ -1,38 +1,86 @@
-import requests
+from pybit.unified_trading import HTTP
 import pandas as pd
+
+
+session = HTTP(
+    testnet=False
+)
 
 
 def get_market_data(symbol, interval="15"):
 
-    url = "https://api.coinex.com/v2/spot/kline"
+    try:
 
-    params = {
-        "market": symbol.lower(),
-        "period": interval,
-        "limit": 300
-    }
+        result = session.get_kline(
+            category="linear",
+            symbol=symbol,
+            interval=interval,
+            limit=300
+        )
 
-    response = requests.get(url, params=params)
 
-    result = response.json()
+        rows = result["result"]["list"]
 
-    data = result["data"]
 
-    df = pd.DataFrame(data)
+        if not rows:
+            print("NO DATA:", symbol, interval)
+            return pd.DataFrame()
 
-    df = df.rename(columns={
-        "created_at": "time",
-        "open": "open",
-        "high": "high",
-        "low": "low",
-        "close": "close",
-        "volume": "volume"
-    })
 
-    df["open"] = df["open"].astype(float)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
-    df["close"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
 
-    return df
+        rows.reverse()
+
+
+
+        df = pd.DataFrame(rows)
+
+
+
+        # نام‌گذاری بر اساس پاسخ بای‌بیت
+        df.columns = [
+            "time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "turnover"
+        ]
+
+
+
+        for col in [
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "turnover"
+        ]:
+
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
+
+
+
+        df.dropna(
+            inplace=True
+        )
+
+
+        return df
+
+
+
+    except Exception as e:
+
+        print(
+            "MARKET ERROR:",
+            symbol,
+            interval,
+            e
+        )
+
+        return pd.DataFrame()
