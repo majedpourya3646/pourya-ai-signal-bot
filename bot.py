@@ -1,7 +1,14 @@
+from trade_manager import (
+    can_buy,
+    open_trade,
+    close_trade,
+    get_all_trades,
+)
+
+from market import get_market_data
 from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
-import json
-import os
+
 
 SYMBOLS = [
     "BTCUSDT",
@@ -11,63 +18,80 @@ SYMBOLS = [
     "DOGEUSDT"
 ]
 
-SIGNAL_FILE = "signals.json"
 
+def check_open_trades():
 
-def load_signals():
-    if os.path.exists(SIGNAL_FILE):
-        with open(SIGNAL_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    trades = get_all_trades()
 
+    for symbol, trade in list(trades.items()):
 
-def save_signals(data):
-    with open(SIGNAL_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+        try:
+            df = get_market_data(symbol)
+            price = float(df["close"].iloc[-1])
+
+            if price >= trade["tp"]:
+
+                send_message(
+                    f"🎉 معامله {symbol} با سود بسته شد.\n\n"
+                    f"💰 قیمت خروج: {price}\n"
+                    f"✅ TP لمس شد."
+                )
+
+                close_trade(symbol)
+
+            elif price <= trade["sl"]:
+
+                send_message(
+                    f"🛑 معامله {symbol} با ضرر بسته شد.\n\n"
+                    f"💰 قیمت خروج: {price}\n"
+                    f"❌ SL لمس شد."
+                )
+
+                close_trade(symbol)
+
+        except Exception as e:
+            print(symbol, e)
 
 
 def run_bot():
 
-    send_message("✅ ربات تریدر پوریا فعال شد")
+    send_message("🤖 ربات پوریا فعال شد")
 
-    sent_signals = load_signals()
+    check_open_trades()
+
+    signal_text = {
+        "BUY": "🟢 خرید",
+        "STRONG BUY": "🚀 خرید قوی",
+        "SELL": "🔴 فروش",
+        "STRONG SELL": "⚠️ فروش قوی"
+    }
 
     for symbol in SYMBOLS:
 
         try:
+
+            if not can_buy(symbol):
+                continue
+
             result = analyze_symbol(symbol)
 
-            if result["signal"] in [
-                "BUY",
-                "STRONG BUY",
-                "SELL",
-                "STRONG SELL"
-            ]:
+            if result["signal"] in signal_text:
 
-                signal_key = f"{symbol}_{result['signal']}"
-
-                if signal_key in sent_signals:
-                    continue
-
-                sent_signals[signal_key] = result["entry"]
-                save_signals(sent_signals)
-
-                signal_text = {
-                    "BUY": "🟢 خرید",
-                    "STRONG BUY": "🚀 خرید قوی",
-                    "SELL": "🔴 فروش",
-                    "STRONG SELL": "⚠️ فروش قوی"
-                }
+                open_trade(
+                    symbol,
+                    result["entry"],
+                    result["tp"],
+                    result["sl"]
+                )
 
                 message = (
-                    f"🚨 سیگنال ارز دیجیتال\n\n"
+                    f"🚨 سیگنال جدید\n\n"
                     f"🪙 ارز: {symbol}\n"
-                    f"📈 وضعیت: {signal_text[result['signal']]}\n\n"
-                    f"💰 قیمت ورود: {result['entry']}\n"
-                    f"🎯 هدف فروش: {result['tp']}\n"
+                    f"📈 نوع معامله: {signal_text[result['signal']]}\n\n"
+                    f"💰 ورود: {result['entry']}\n"
+                    f"🎯 هدف: {result['tp']}\n"
                     f"🛑 حد ضرر: {result['sl']}\n\n"
-                    f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
-                    f"🤖 Pourya Trader AI"
+                    f"⭐ قدرت سیگنال: {result['confidence']}٪"
                 )
 
                 send_message(message)
