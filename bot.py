@@ -1,3 +1,4 @@
+from performance import add_trade
 from market import get_market_data
 from signal_engine import analyze_market
 from telegram_sender import send_message
@@ -114,7 +115,13 @@ def run_bot():
                 )
 
                 send_message(message)
-
+add_trade(
+    symbol=symbol,
+    signal=result["signal"],
+    entry=result["entry"],
+    tp=result["tp"],
+    sl=result["sl"]
+)
         except Exception as e:
             print(symbol, e)
 
