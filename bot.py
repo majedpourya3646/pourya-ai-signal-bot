@@ -1,6 +1,6 @@
 from performance import add_trade
 from market import get_market_data
-from signal_engine import analyze_market
+from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
 from trade_manager import (
     can_buy,
@@ -91,8 +91,7 @@ def run_bot():
 
         try:
 
-            df = get_market_data(symbol)
-            result = analyze_market(df)
+            result = analyze_symbol(symbol)
 
             report += (
                 f"{signal_text.get(result['signal'], result['signal'])}"
