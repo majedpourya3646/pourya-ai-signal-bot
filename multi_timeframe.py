@@ -1,40 +1,97 @@
-def check_timeframes(df_15m, df_1h, df_4h):
-    score = 0
-
-    if df_15m["close"].iloc[-1] > df_15m["close"].iloc[-10]:
-        score += 1
-
-    if df_1h["close"].iloc[-1] > df_1h["close"].iloc[-10]:
-        score += 1
-
-    if df_4h["close"].iloc[-1] > df_4h["close"].iloc[-10]:
-        score += 1
-
-
-    if score == 3:
-        return "STRONG BUY"
-
-    elif score == 2:
-        return "BUY"
-
-    elif score == 1:
-        return "WAIT"
-
-    else:
-        return "NO TRADE"
-
+from market import get_market_data
+from signal_engine import analyze_market
 
 
 def analyze_symbol(symbol):
-    """
-    تحلیل اصلی هر ارز
-    فعلا نسخه تستی
-    """
 
-    result = {
-        "symbol": symbol,
-        "signal": "WAIT",
-        "score": 0
-    }
+    try:
 
-    return result
+        df_15m = get_market_data(
+            symbol,
+            interval="15"
+        )
+
+        df_1h = get_market_data(
+            symbol,
+            interval="60"
+        )
+
+        df_4h = get_market_data(
+            symbol,
+            interval="240"
+        )
+
+
+        signal_15m = analyze_market(df_15m)
+        signal_1h = analyze_market(df_1h)
+        signal_4h = analyze_market(df_4h)
+
+
+        scores = [
+            signal_15m["confidence"],
+            signal_1h["confidence"],
+            signal_4h["confidence"]
+        ]
+
+
+        average_score = round(
+            sum(scores) / len(scores)
+        )
+
+
+        # تایید چند تایم فریم
+
+        if (
+            signal_15m["signal"] in ["BUY", "STRONG BUY"]
+            and
+            signal_1h["signal"] in ["BUY", "STRONG BUY"]
+            and
+            signal_4h["signal"] in ["BUY", "STRONG BUY"]
+        ):
+
+            final_signal = "STRONG BUY"
+
+
+        elif average_score >= 60:
+
+            final_signal = "BUY"
+
+
+        else:
+
+            final_signal = "WAIT"
+
+
+
+        return {
+
+            "signal": final_signal,
+
+            "entry": signal_15m["entry"],
+
+            "tp": signal_15m["tp"],
+
+            "sl": signal_15m["sl"],
+
+            "confidence": average_score
+
+        }
+
+
+    except Exception as e:
+
+        print("Analyze error:", symbol, e)
+
+        return {
+
+            "signal": "WAIT",
+
+            "entry": None,
+
+            "tp": None,
+
+            "sl": None,
+
+            "confidence": 0
+
+        }
