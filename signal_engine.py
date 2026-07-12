@@ -75,7 +75,7 @@ def analyze_market(df):
 
     avg_volume = volume.tail(20).mean()
 
-    # ================= روند =================
+    # ================= Trend =================
 
     trend_up = (
         ema20.iloc[-1] >
@@ -95,13 +95,15 @@ def analyze_market(df):
     if trend_down:
         score -= 35
 
+
     # ================= RSI =================
 
     if 25 <= last_rsi <= 40:
         score += 20
 
-    elif last_rsi > 70:
-        score -= 15
+    elif 60 <= last_rsi <= 75:
+        score -= 10
+
 
     # ================= MACD =================
 
@@ -113,36 +115,37 @@ def analyze_market(df):
     ):
         score += 20
 
+    elif (
+        macd_line.iloc[-1] <
+        macd_signal.iloc[-1]
+        and
+        macd_line.iloc[-1] < 0
+    ):
+        score -= 20
+
+
     # ================= ADX =================
 
     if last_adx > 30:
         score += 15
+
 
     # ================= Volume =================
 
     if volume.iloc[-1] > avg_volume * 1.5:
         score += 10
 
+
     # ================= Bollinger =================
 
     if last_price < bb.bollinger_lband().iloc[-1]:
         score += 5
 
-    # ================= قیمت ها =================
+    elif last_price > bb.bollinger_hband().iloc[-1]:
+        score -= 5
 
-    entry = round(last_price, 6)
 
-    tp = round(
-        entry + (last_atr * 2.5),
-        6
-    )
-
-    sl = round(
-        entry - (last_atr * 1.5),
-        6
-    )
-
-    # ================= تصمیم نهایی =================
+    # ================= Signal =================
 
     if score >= 80:
         signal = "STRONG BUY"
@@ -150,13 +153,54 @@ def analyze_market(df):
     elif score >= 60:
         signal = "BUY"
 
+    elif score <= -60:
+        signal = "STRONG SELL"
+
+    elif score <= -40:
+        signal = "SELL"
+
     else:
         signal = "WAIT"
+
+
+    # ================= Price Levels =================
+
+    entry = round(last_price, 6)
+
+    tp = None
+    sl = None
+
+
+    if signal in ["BUY", "STRONG BUY"]:
+
+        tp = round(
+            entry + (last_atr * 2.5),
+            6
+        )
+
+        sl = round(
+            entry - (last_atr * 1.5),
+            6
+        )
+
+
+    elif signal in ["SELL", "STRONG SELL"]:
+
+        tp = round(
+            entry - (last_atr * 2.5),
+            6
+        )
+
+        sl = round(
+            entry + (last_atr * 1.5),
+            6
+        )
+
 
     return {
         "signal": signal,
         "entry": entry,
-        "tp": tp if signal != "WAIT" else None,
-        "sl": sl if signal != "WAIT" else None,
-        "confidence": score
+        "tp": tp,
+        "sl": sl,
+        "confidence": max(0, min(score, 100))
     }
