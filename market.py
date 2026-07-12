@@ -1,50 +1,83 @@
-from pybit.unified_trading import HTTP
+import requests
 import pandas as pd
 
 
-session = HTTP(
-    testnet=False
-)
+BASE_URL = "https://api.binance.com/api/v3/klines"
+
 
 
 def get_market_data(symbol, interval="15"):
 
     try:
 
-        result = session.get_kline(
-            category="linear",
-            symbol=symbol,
-            interval=interval,
-            limit=300
+        interval_map = {
+            "15": "15m",
+            "60": "1h",
+            "240": "4h"
+        }
+
+
+        binance_interval = interval_map.get(
+            interval,
+            interval
         )
 
 
-        rows = result["result"]["list"]
+        params = {
+            "symbol": symbol,
+            "interval": binance_interval,
+            "limit": 300
+        }
 
 
-        if not rows:
-            print("NO DATA:", symbol, interval)
-            return pd.DataFrame()
+        response = requests.get(
+            BASE_URL,
+            params=params,
+            timeout=30
+        )
+
+
+        data = response.json()
 
 
 
-        rows.reverse()
+        if "code" in data:
+
+            raise Exception(
+                data.get("msg")
+            )
 
 
 
-        df = pd.DataFrame(rows)
+        df = pd.DataFrame(
+            data,
+            columns=[
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "close_time",
+                "quote_volume",
+                "trades",
+                "taker_buy_base",
+                "taker_buy_quote",
+                "ignore"
+            ]
+        )
 
 
 
-        # نام‌گذاری بر اساس پاسخ بای‌بیت
-        df.columns = [
-            "time",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume",
-            "turnover"
+        df = df[
+            [
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume"
+            ]
         ]
 
 
@@ -54,8 +87,7 @@ def get_market_data(symbol, interval="15"):
             "high",
             "low",
             "close",
-            "volume",
-            "turnover"
+            "volume"
         ]:
 
             df[col] = pd.to_numeric(
@@ -70,6 +102,7 @@ def get_market_data(symbol, interval="15"):
         )
 
 
+
         return df
 
 
@@ -77,7 +110,7 @@ def get_market_data(symbol, interval="15"):
     except Exception as e:
 
         print(
-            "MARKET ERROR:",
+            "BINANCE MARKET ERROR:",
             symbol,
             interval,
             e
