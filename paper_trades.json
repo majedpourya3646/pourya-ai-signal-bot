@@ -1,0 +1,8 @@
+{
+    "ETHUSDT": {
+        "entry": 2500,
+        "tp": 2550,
+        "sl": 2470,
+        "status": "OPEN"
+    }
+}
