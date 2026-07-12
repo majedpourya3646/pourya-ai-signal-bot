@@ -1,7 +1,7 @@
 import json
 import os
 
-TRADE_FILE = "trades.json"
+TRADE_FILE = "open_trades.json"
 
 
 def load_trades():
