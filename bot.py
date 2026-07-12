@@ -236,7 +236,7 @@ def run_bot():
 
         f"📈 تعداد سیگنال‌ها: {signal_count}\n"
 
-        f"🤖 Pourya Trader AI"
+        f"😎 Pourya Trader AI"
 
     )
 
