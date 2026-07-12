@@ -1,20 +1,19 @@
 import json
 import os
 
-FILE = "trades.json"
+TRADE_FILE = "trades.json"
 
 
 def load_trades():
-    if not os.path.exists(FILE):
-        return {}
+    if os.path.exists(TRADE_FILE):
+        with open(TRADE_FILE, "r") as f:
+            return json.load(f)
+    return {}
 
-    with open(FILE, "r") as f:
-        return json.load(f)
 
-
-def save_trades(data):
-    with open(FILE, "w") as f:
-        json.dump(data, f, indent=4)
+def save_trades(trades):
+    with open(TRADE_FILE, "w") as f:
+        json.dump(trades, f, indent=4)
 
 
 def can_buy(symbol):
@@ -28,8 +27,7 @@ def open_trade(symbol, entry, tp, sl):
     trades[symbol] = {
         "entry": entry,
         "tp": tp,
-        "sl": sl,
-        "status": "OPEN"
+        "sl": sl
     }
 
     save_trades(trades)
@@ -42,3 +40,12 @@ def close_trade(symbol):
         del trades[symbol]
 
     save_trades(trades)
+
+
+def get_trade(symbol):
+    trades = load_trades()
+    return trades.get(symbol)
+
+
+def get_all_trades():
+    return load_trades()
