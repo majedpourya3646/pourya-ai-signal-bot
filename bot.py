@@ -1,4 +1,8 @@
-from performance import add_trade
+from performance import (
+    add_trade,
+    update_trade
+)
+
 from market import get_market_data
 from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
@@ -25,9 +29,11 @@ SYMBOLS = [
 ]
 
 
+
 def check_open_trades():
 
     trades = get_all_trades()
+
 
     for symbol, trade in list(trades.items()):
 
@@ -39,7 +45,11 @@ def check_open_trades():
             low = float(df["low"].iloc[-1])
 
 
+
+            # ===== TAKE PROFIT =====
+
             if high >= trade["tp"]:
+
 
                 profit = round(
                     ((trade["tp"] - trade["entry"]) /
@@ -47,20 +57,41 @@ def check_open_trades():
                     2
                 )
 
+
                 send_message(
+
                     f"🎉 معامله با سود بسته شد\n\n"
+
                     f"🪙 ارز: {symbol}\n"
+
                     f"💰 ورود: {trade['entry']}\n"
+
                     f"🏁 خروج: {trade['tp']}\n"
+
                     f"📈 سود: {profit}%"
+
                 )
 
+
                 close_trade(symbol)
+
+
+                update_trade(
+                    symbol,
+                    "WIN",
+                    profit
+                )
+
+
                 continue
 
 
 
+
+            # ===== STOP LOSS =====
+
             if low <= trade["sl"]:
+
 
                 loss = round(
                     ((trade["entry"] - trade["sl"]) /
@@ -68,15 +99,32 @@ def check_open_trades():
                     2
                 )
 
+
                 send_message(
+
                     f"❌ معامله با ضرر بسته شد\n\n"
+
                     f"🪙 ارز: {symbol}\n"
+
                     f"💰 ورود: {trade['entry']}\n"
+
                     f"🏁 خروج: {trade['sl']}\n"
+
                     f"📉 ضرر: {loss}%"
+
                 )
 
+
                 close_trade(symbol)
+
+
+                update_trade(
+                    symbol,
+                    "LOSS",
+                    -loss
+                )
+
+
                 continue
 
 
@@ -87,9 +135,13 @@ def check_open_trades():
 
 
 
+
+
 def run_bot():
 
+
     check_open_trades()
+
 
 
     signal_text = {
@@ -110,13 +162,17 @@ def run_bot():
 
     report = "📊 گزارش بررسی بازار\n\n"
 
+
     signal_count = 0
+
 
 
 
     for symbol in SYMBOLS:
 
+
         try:
+
 
             result = analyze_symbol(symbol)
 
@@ -125,9 +181,11 @@ def run_bot():
             report += (
 
                 f"{signal_text.get(result['signal'], result['signal'])}"
+
                 f" | {symbol}\n"
 
                 f"⭐ امتیاز نهایی: "
+
                 f"{result['confidence']}%\n"
 
             )
@@ -136,18 +194,27 @@ def run_bot():
 
             if "detail" in result:
 
+
                 report += (
 
                     f"⏱ 15M: "
+
                     f"{result['detail']['15m']['signal']} "
+
                     f"({result['detail']['15m']['confidence']}%)\n"
 
+
                     f"⏱ 1H: "
+
                     f"{result['detail']['1h']['signal']} "
+
                     f"({result['detail']['1h']['confidence']}%)\n"
 
+
                     f"⏱ 4H: "
+
                     f"{result['detail']['4h']['signal']} "
+
                     f"({result['detail']['4h']['confidence']}%)\n\n"
 
                 )
@@ -160,13 +227,16 @@ def run_bot():
 
 
 
+
             signal_count += 1
+
 
 
 
             if not can_buy(symbol):
 
                 continue
+
 
 
 
@@ -179,6 +249,7 @@ def run_bot():
                 result["sl"]
 
             )
+
 
 
 
@@ -198,6 +269,7 @@ def run_bot():
 
 
 
+
             add_trade(
 
                 symbol=symbol,
@@ -214,6 +286,8 @@ def run_bot():
 
 
 
+
+
             message = (
 
                 f"🚨 سیگنال جدید\n\n"
@@ -221,6 +295,7 @@ def run_bot():
                 f"🪙 ارز: {symbol}\n"
 
                 f"📊 نوع سیگنال: "
+
                 f"{signal_text[result['signal']]}\n\n"
 
                 f"💰 قیمت ورود: {result['entry']}\n"
@@ -232,6 +307,7 @@ def run_bot():
                 f"📦 حجم ورود: {quantity}\n\n"
 
                 f"⭐ قدرت سیگنال: "
+
                 f"{result['confidence']}%\n\n"
 
                 f"🤖 Pourya Trader AI"
@@ -249,6 +325,8 @@ def run_bot():
 
 
 
+
+
     report += (
 
         f"\n📈 تعداد سیگنال‌ها: {signal_count}\n"
@@ -259,6 +337,7 @@ def run_bot():
 
 
     send_message(report)
+
 
 
 
