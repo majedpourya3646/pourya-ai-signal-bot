@@ -1,6 +1,7 @@
 from market import get_market_data
 from signal_engine import analyze_market
 from telegram_sender import send_message
+from performance import add_trade
 
 
 SYMBOLS = [
@@ -13,7 +14,8 @@ SYMBOLS = [
 
 
 def run_bot():
-    send_message("✅ Test message from Pourya Trader Bot")
+    send_message("✅ ربات تریدر پوریا فعال شد")
+
     for symbol in SYMBOLS:
 
         try:
@@ -24,16 +26,24 @@ def run_bot():
             if result["signal"] != "WAIT":
 
                 message = (
-                    f"🚨 Crypto Signal\n\n"
-                    f"🪙 {symbol}\n"
-                    f"📈 Action: {result['signal']}\n\n"
-                    f"💰 Entry: {result["entry"]}\n"
-                    f"🎯 TP: {result['tp']}\n"
-                    f"🛑 SL: {result['sl']}\n\n"
-                    f"⭐ Confidence: {result['confidence']}%"
+                    f"🚨 سیگنال ارز دیجیتال\n\n"
+                    f"🪙 ارز: {symbol}\n"
+                    f"📈 وضعیت: {result['signal']}\n\n"
+                    f"💰 قیمت ورود: {result['entry']}\n"
+                    f"🎯 حد سود: {result['tp']}\n"
+                    f"🛑 حد ضرر: {result['sl']}\n\n"
+                    f"⭐ قدرت سیگنال: {result['confidence']}٪"
                 )
 
                 send_message(message)
+
+                add_trade(
+                    symbol=symbol,
+                    signal=result["signal"],
+                    entry=result["entry"],
+                    tp=result["tp"],
+                    sl=result["sl"]
+                )
 
         except Exception as e:
             print(symbol, e)
