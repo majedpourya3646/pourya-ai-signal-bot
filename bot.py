@@ -156,7 +156,7 @@ def check_open_trades():
                 symbol,
                 e
             )
-          def run_bot():
+        def run_bot():
 
     check_open_trades()
 
