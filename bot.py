@@ -1,14 +1,12 @@
+from market import get_market_data
+from signal_engine import analyze_market
+from telegram_sender import send_message
 from trade_manager import (
     can_buy,
     open_trade,
     close_trade,
     get_all_trades,
 )
-
-from market import get_market_data
-from multi_timeframe import analyze_symbol
-from telegram_sender import send_message
-
 
 SYMBOLS = [
     "BTCUSDT",
@@ -20,34 +18,55 @@ SYMBOLS = [
 
 
 def check_open_trades():
-
     trades = get_all_trades()
 
     for symbol, trade in list(trades.items()):
-
         try:
             df = get_market_data(symbol)
-            price = float(df["close"].iloc[-1])
 
-            if price >= trade["tp"]:
+            high = float(df["high"].iloc[-1])
+            low = float(df["low"].iloc[-1])
+            close = float(df["close"].iloc[-1])
+
+            if high >= trade["tp"]:
+
+                profit = round(
+                    ((trade["tp"] - trade["entry"]) / trade["entry"]) * 100,
+                    2,
+                )
 
                 send_message(
-                    f"🎉 معامله {symbol} با سود بسته شد.\n\n"
-                    f"💰 قیمت خروج: {price}\n"
-                    f"✅ TP لمس شد."
+                    f"🎉 معامله بسته شد\n\n"
+                    f"🪙 ارز: {symbol}\n"
+                    f"✅ حد سود فعال شد\n\n"
+                    f"💰 ورود: {trade['entry']}\n"
+                    f"🏁 خروج: {trade['tp']}\n"
+                    f"📈 سود: {profit}%"
                 )
 
                 close_trade(symbol)
+                continue
 
-            elif price <= trade["sl"]:
+            if low <= trade["sl"]:
+
+                loss = round(
+                    ((trade["entry"] - trade["sl"]) / trade["entry"]) * 100,
+                    2,
+                )
 
                 send_message(
-                    f"🛑 معامله {symbol} با ضرر بسته شد.\n\n"
-                    f"💰 قیمت خروج: {price}\n"
-                    f"❌ SL لمس شد."
+                    f"❌ معامله بسته شد\n\n"
+                    f"🪙 ارز: {symbol}\n"
+                    f"🛑 حد ضرر فعال شد\n\n"
+                    f"💰 ورود: {trade['entry']}\n"
+                    f"🏁 خروج: {trade['sl']}\n"
+                    f"📉 ضرر: {loss}%"
                 )
 
                 close_trade(symbol)
+                continue
+
+            print(f"{symbol} | قیمت فعلی: {close}")
 
         except Exception as e:
             print(symbol, e)
@@ -55,15 +74,13 @@ def check_open_trades():
 
 def run_bot():
 
-    send_message("🤖 ربات پوریا فعال شد")
-
     check_open_trades()
 
     signal_text = {
         "BUY": "🟢 خرید",
         "STRONG BUY": "🚀 خرید قوی",
         "SELL": "🔴 فروش",
-        "STRONG SELL": "⚠️ فروش قوی"
+        "STRONG SELL": "⚠️ فروش قوی",
     }
 
     for symbol in SYMBOLS:
@@ -73,7 +90,8 @@ def run_bot():
             if not can_buy(symbol):
                 continue
 
-            result = analyze_symbol(symbol)
+            df = get_market_data(symbol)
+            result = analyze_market(df)
 
             if result["signal"] in signal_text:
 
@@ -81,17 +99,18 @@ def run_bot():
                     symbol,
                     result["entry"],
                     result["tp"],
-                    result["sl"]
+                    result["sl"],
                 )
 
                 message = (
                     f"🚨 سیگنال جدید\n\n"
                     f"🪙 ارز: {symbol}\n"
-                    f"📈 نوع معامله: {signal_text[result['signal']]}\n\n"
-                    f"💰 ورود: {result['entry']}\n"
-                    f"🎯 هدف: {result['tp']}\n"
+                    f"📊 نوع سیگنال: {signal_text[result['signal']]}\n\n"
+                    f"💰 قیمت ورود: {result['entry']}\n"
+                    f"🎯 حد سود: {result['tp']}\n"
                     f"🛑 حد ضرر: {result['sl']}\n\n"
-                    f"⭐ قدرت سیگنال: {result['confidence']}٪"
+                    f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
+                    f"🤖 Pourya Trader AI"
                 )
 
                 send_message(message)
