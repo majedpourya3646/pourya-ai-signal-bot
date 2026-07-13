@@ -177,18 +177,34 @@ def run_bot():
     check_open_trades()
 
     market_report = "📊 <b>Pourya Trader AI</b>\n\n"
+
+    signal_count = 0
+
+    for symbol in SYMBOLS:
+
+        try:
+
+            result = analyze_symbol(symbol)
+
+            market_report += (
+                f"🪙 <b>{symbol}</b>\n"
+                f"📌 {signal_text.get(result['signal'], result['signal'])}\n"
+                f"⭐ Confidence: {result['confidence']}%\n"
+            )
+
+            if "detail" in result:
+
+                market_report += (
                     f"15M ➜ {result['detail']['15m']['signal']} "
                     f"({result['detail']['15m']['confidence']}%)\n"
-
                     f"1H ➜ {result['detail']['1h']['signal']} "
                     f"({result['detail']['1h']['confidence']}%)\n"
-
                     f"4H ➜ {result['detail']['4h']['signal']} "
                     f"({result['detail']['4h']['confidence']}%)\n\n"
                 )
 
             if result["signal"] == "WAIT":
-                continue
+                continue                continue
 
             signal_count += 1
 
