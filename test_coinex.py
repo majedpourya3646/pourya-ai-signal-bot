@@ -1,8 +1,7 @@
-from core.coinex_futures import coinex
+from coinex_futures_api import coinex
 
-result = coinex.request(
-    "GET",
-    "/futures/balance"
-)
+print("===== COINEX FUTURES TEST =====")
 
-print(result)
+balance = coinex.get_futures_balance()
+
+print(balance)
