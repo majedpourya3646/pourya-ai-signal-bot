@@ -1,35 +1,10 @@
-import os
-import requests
-
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-
-
-session = requests.Session()
-
-retry = Retry(
-    total=3,
-    backoff_factor=1,
-    status_forcelist=[
-        500,
-        502,
-        503,
-        504
-    ]
+from config import (
+    BOT_TOKEN,
+    CHAT_ID
 )
 
-adapter = HTTPAdapter(
-    max_retries=retry
-)
-
-session.mount(
-    "https://",
-    adapter
-)
+from core.session import session
+from core.logger import logger
 
 
 def send_message(
@@ -40,7 +15,7 @@ def send_message(
 
     if not BOT_TOKEN or not CHAT_ID:
 
-        print("Telegram settings missing")
+        logger.error("BOT_TOKEN or CHAT_ID not found")
 
         return False
 
@@ -48,24 +23,26 @@ def send_message(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     )
 
-    data = {
-
-        "chat_id": CHAT_ID,
-
-        "text": text,
-
-        "parse_mode": parse_mode,
-
-        "disable_web_page_preview": disable_preview
-
-    }
-
     try:
 
         response = session.post(
+
             url,
-            data=data,
-            timeout=30
+
+            data={
+
+                "chat_id": CHAT_ID,
+
+                "text": text,
+
+                "parse_mode": parse_mode,
+
+                "disable_web_page_preview": disable_preview
+
+            },
+
+            timeout=session.request_timeout
+
         )
 
         response.raise_for_status()
@@ -74,10 +51,7 @@ def send_message(
 
         if not result.get("ok"):
 
-            print(
-                "TELEGRAM ERROR:",
-                result
-            )
+            logger.error(result)
 
             return False
 
@@ -85,9 +59,6 @@ def send_message(
 
     except Exception as e:
 
-        print(
-            "TELEGRAM ERROR:",
-            e
-        )
+        logger.exception(e)
 
         return False
