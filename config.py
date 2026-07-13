@@ -20,7 +20,7 @@ SYMBOLS = [
 # ===========================
 # CoinEx API
 # ===========================
-BASE_URL = "https://api.coinex.com/v2"
+BASE_URL = "https://api.coinex.com"
 COINEX_API_KEY = os.getenv("COINEX_API_KEY")
 COINEX_SECRET_KEY = os.getenv("COINEX_SECRET_KEY")
 
