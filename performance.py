@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 
-FILE_NAME = "history.json"
+FILE_NAME = "data/history.json"
 
 
 def load_trades():
@@ -20,6 +20,8 @@ def load_trades():
 
 
 def save_trades(data):
+
+    os.makedirs("data", exist_ok=True)
 
     with open(FILE_NAME, "w") as f:
 
@@ -217,4 +219,5 @@ def report():
         f"📉 بدترین معامله: {stats['worst_trade']}%\n\n"
 
         "🚀 AI Trading System"
+
     )
