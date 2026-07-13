@@ -204,7 +204,7 @@ def run_bot():
                 )
 
             if result["signal"] == "WAIT":
-                continue                continue
+                continue               
 
             signal_count += 1
 
