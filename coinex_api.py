@@ -1,14 +1,16 @@
 import time
 import hmac
 import hashlib
-import requests
+import json
 
 from config import (
+    BASE_URL,
     COINEX_API_KEY,
     COINEX_SECRET_KEY
 )
 
-BASE_URL = "https://api.coinex.com/v2"
+from core.session import session
+from core.logger import logger
 
 
 class CoinExAPI:
@@ -36,16 +38,61 @@ class CoinExAPI:
             "Content-Type": "application/json"
         }
 
+    def _request(
+        self,
+        method,
+        path,
+        payload=None
+    ):
+
+        url = BASE_URL + path
+
+        body = ""
+
+        if payload:
+            body = json.dumps(
+                payload,
+                separators=(",", ":")
+            )
+
+        try:
+
+            response = session.request(
+                method=method,
+                url=url,
+                json=payload,
+                headers=self._headers(
+                    method,
+                    path,
+                    body
+                ),
+                timeout=session.request_timeout
+            )
+
+            response.raise_for_status()
+
+            result = response.json()
+
+            if result.get("code") != 0:
+
+                logger.error(result)
+
+                return None
+
+            return result
+
+        except Exception as e:
+
+            logger.exception(e)
+
+            return None
+
     def get_balance(self):
 
-        path = "/assets/spot/balance"
-
-        response = requests.get(
-            BASE_URL + path,
-            headers=self._headers("GET", path)
+        return self._request(
+            "GET",
+            "/assets/spot/balance"
         )
-
-        return response.json()
 
     def market_buy(
         self,
@@ -53,27 +100,17 @@ class CoinExAPI:
         amount
     ):
 
-        path = "/spot/order"
-
-        data = {
-            "market": market,
-            "market_type": "SPOT",
-            "side": "buy",
-            "type": "market",
-            "amount": str(amount)
-        }
-
-        response = requests.post(
-            BASE_URL + path,
-            json=data,
-            headers=self._headers(
-                "POST",
-                path,
-                str(data)
-            )
+        return self._request(
+            "POST",
+            "/spot/order",
+            {
+                "market": market,
+                "market_type": "SPOT",
+                "side": "buy",
+                "type": "market",
+                "amount": str(amount)
+            }
         )
-
-        return response.json()
 
     def market_sell(
         self,
@@ -81,27 +118,17 @@ class CoinExAPI:
         amount
     ):
 
-        path = "/spot/order"
-
-        data = {
-            "market": market,
-            "market_type": "SPOT",
-            "side": "sell",
-            "type": "market",
-            "amount": str(amount)
-        }
-
-        response = requests.post(
-            BASE_URL + path,
-            json=data,
-            headers=self._headers(
-                "POST",
-                path,
-                str(data)
-            )
+        return self._request(
+            "POST",
+            "/spot/order",
+            {
+                "market": market,
+                "market_type": "SPOT",
+                "side": "sell",
+                "type": "market",
+                "amount": str(amount)
+            }
         )
-
-        return response.json()
 
 
 coinex = CoinExAPI()
