@@ -1,4 +1,3 @@
-BASE_URL = "https://api.coinex.com/v2"
 import time
 import hmac
 import hashlib
@@ -20,17 +19,23 @@ class CoinExAPI:
         self.api_key = COINEX_API_KEY
         self.secret_key = COINEX_SECRET_KEY
 
+
     def _headers(self, method, path, body=""):
 
         timestamp = str(int(time.time() * 1000))
 
-        message = timestamp + method.upper() + path + body
+        prepared = (
+            method.upper()
+            + path
+            + body
+            + timestamp
+        )
 
         signature = hmac.new(
             self.secret_key.encode(),
-            message.encode(),
+            prepared.encode(),
             hashlib.sha256
-        ).hexdigest()
+        ).hexdigest().lower()
 
         return {
             "X-COINEX-KEY": self.api_key,
@@ -38,6 +43,7 @@ class CoinExAPI:
             "X-COINEX-TIMESTAMP": timestamp,
             "Content-Type": "application/json"
         }
+
 
     def _request(
         self,
@@ -70,9 +76,11 @@ class CoinExAPI:
                 timeout=session.request_timeout
             )
 
+
             response.raise_for_status()
 
             result = response.json()
+
 
             if result.get("code") != 0:
 
@@ -80,7 +88,9 @@ class CoinExAPI:
 
                 return None
 
+
             return result
+
 
         except Exception as e:
 
@@ -88,12 +98,19 @@ class CoinExAPI:
 
             return None
 
+
+
+    # ===========================
+    # SPOT
+    # ===========================
+
     def get_balance(self):
 
         return self._request(
             "GET",
             "/assets/spot/balance"
         )
+
 
     def market_buy(
         self,
@@ -113,6 +130,7 @@ class CoinExAPI:
             }
         )
 
+
     def market_sell(
         self,
         market,
@@ -130,6 +148,27 @@ class CoinExAPI:
                 "amount": str(amount)
             }
         )
+
+
+    # ===========================
+    # FUTURES
+    # ===========================
+
+    def get_futures_balance(self):
+
+        return self._request(
+            "GET",
+            "/assets/futures/balance"
+        )
+
+
+    def get_futures_positions(self):
+
+        return self._request(
+            "GET",
+            "/futures/pending-position"
+        )
+
 
 
 coinex = CoinExAPI()
