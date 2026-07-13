@@ -159,27 +159,24 @@ def check_open_trades():
             )
 def run_bot():
 
+    try:
+        balance = coinex.get_balance()
+
+        send_message(
+            "🤖 <b>ربات با موفقیت اجرا شد</b>\n\n"
+            "✅ اتصال به API کوینکس برقرار است."
+        )
+
+    except Exception as e:
+
+        send_message(
+            f"❌ <b>خطا در اتصال به CoinEx</b>\n\n{e}"
+        )
+        return
+
     check_open_trades()
 
     market_report = "📊 <b>Pourya Trader AI</b>\n\n"
-
-    signal_count = 0
-
-    for symbol in SYMBOLS:
-
-        try:
-
-            result = analyze_symbol(symbol)
-
-            market_report += (
-                f"🪙 <b>{symbol}</b>\n"
-                f"📌 {signal_text.get(result['signal'], result['signal'])}\n"
-                f"⭐ Confidence: {result['confidence']}%\n"
-            )
-
-            if "detail" in result:
-
-                market_report += (
                     f"15M ➜ {result['detail']['15m']['signal']} "
                     f"({result['detail']['15m']['confidence']}%)\n"
 
