@@ -13,46 +13,46 @@ def run_backtest(symbol="BTCUSDT"):
 
     for i in range(200, len(df) - 20):
 
-        result = analyze_market(df.iloc[:i+1])
+        result = analyze_market(df.iloc[: i + 1])
 
-        if result["signal"] == "STRONG BUY":
+        if result["signal"] != "STRONG BUY":
+            continue
 
-            if last_trade == result["entry"]:
-                continue
+        if last_trade == result["entry"]:
+            continue
 
-            last_trade = result["entry"]
+        last_trade = result["entry"]
 
-            trades += 1
-            entry = result["entry"]
-            tp = result["tp"]
-            sl = result["sl"]
+        trades += 1
 
-            future = df.iloc[i+1:i+33]
+        entry = result["entry"]
+        tp = result["tp"]
+        sl = result["sl"]
 
-            trade_result = None
+        future = df.iloc[i + 1 : i + 33]
 
-            for _, candle in future.iterrows():
+        trade_result = None
 
-                if candle["high"] >= tp:
-                    trade_result = "WIN"
-                    break
+        for _, candle in future.iterrows():
 
-                if candle["low"] <= sl:
-                    trade_result = "LOSS"
-                    break
+            if candle["high"] >= tp:
+                trade_result = "WIN"
+                break
 
-            if trade_result == "WIN":
-                wins += 1
+            if candle["low"] <= sl:
+                trade_result = "LOSS"
+                break
 
-            elif trade_result == "LOSS":
-                losses += 1
+        if trade_result == "WIN":
+            wins += 1
 
+        elif trade_result == "LOSS":
+            losses += 1
 
     win_rate = 0
 
     if trades > 0:
         win_rate = (wins / trades) * 100
-
 
     print("====================")
     print(symbol)
