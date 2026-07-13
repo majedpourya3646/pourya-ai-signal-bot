@@ -1,3 +1,8 @@
 from core.coinex_futures import coinex
 
-print("Connection Successful")
+result = coinex.request(
+    "GET",
+    "/futures/balance"
+)
+
+print(result)
