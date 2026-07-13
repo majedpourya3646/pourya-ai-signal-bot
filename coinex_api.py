@@ -45,6 +45,7 @@ class CoinExAPI:
         }
 
 
+
     def _request(
         self,
         method,
@@ -79,9 +80,16 @@ class CoinExAPI:
             )
 
 
-            result = response.json()
+            # DEBUG
+            print("==============================")
+            print("URL:", url)
+            print("STATUS:", response.status_code)
+            print("RESPONSE:")
+            print(response.text)
+            print("==============================")
 
-            logger.info(result)
+
+            result = response.json()
 
 
             if result.get("code") != 0:
@@ -94,6 +102,7 @@ class CoinExAPI:
             return result
 
 
+
         except Exception as e:
 
             logger.exception(e)
@@ -102,8 +111,9 @@ class CoinExAPI:
 
 
 
+
     # =========================
-    # SPOT / GENERAL BALANCE
+    # BALANCE
     # =========================
 
     def get_balance(self):
@@ -111,10 +121,6 @@ class CoinExAPI:
         return self.get_futures_balance()
 
 
-
-    # =========================
-    # FUTURES BALANCE
-    # =========================
 
     def get_futures_balance(self):
 
@@ -126,7 +132,7 @@ class CoinExAPI:
 
 
     # =========================
-    # FUTURES POSITIONS
+    # POSITIONS
     # =========================
 
     def get_futures_positions(self):
@@ -139,7 +145,7 @@ class CoinExAPI:
 
 
     # =========================
-    # FUTURES ORDER
+    # ORDER
     # =========================
 
     def create_futures_order(
