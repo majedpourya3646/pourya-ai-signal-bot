@@ -35,7 +35,7 @@ class CoinExAPI:
             self.secret_key.encode("utf-8"),
             message.encode("utf-8"),
             hashlib.sha256
-        ).hexdigest()
+        ).hexdigest().lower()
 
         return {
             "X-COINEX-KEY": self.api_key,
@@ -57,6 +57,7 @@ class CoinExAPI:
         body = ""
 
         if payload:
+
             body = json.dumps(
                 payload,
                 separators=(",", ":")
@@ -101,9 +102,19 @@ class CoinExAPI:
 
 
 
-    # ===========================
-    # Futures
-    # ===========================
+    # =========================
+    # SPOT / GENERAL BALANCE
+    # =========================
+
+    def get_balance(self):
+
+        return self.get_futures_balance()
+
+
+
+    # =========================
+    # FUTURES BALANCE
+    # =========================
 
     def get_futures_balance(self):
 
@@ -113,6 +124,11 @@ class CoinExAPI:
         )
 
 
+
+    # =========================
+    # FUTURES POSITIONS
+    # =========================
+
     def get_futures_positions(self):
 
         return self._request(
@@ -121,9 +137,10 @@ class CoinExAPI:
         )
 
 
-    # ===========================
-    # Futures Order
-    # ===========================
+
+    # =========================
+    # FUTURES ORDER
+    # =========================
 
     def create_futures_order(
         self,
