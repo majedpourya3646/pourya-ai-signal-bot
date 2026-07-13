@@ -1,1 +1,35 @@
+name: Crypto Signal Bot
 
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */1 * * *"
+
+jobs:
+  run-bot:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Pourya Trader AI
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          COINEX_API_KEY: ${{ secrets.COINEX_API_KEY }}
+          COINEX_API_SECRET: ${{ secrets.COINEX_API_SECRET }}
+
+        run: |
+          python bot.py
