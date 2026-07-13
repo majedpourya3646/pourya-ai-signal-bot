@@ -24,7 +24,7 @@ class CoinExAPI:
 
         timestamp = str(int(time.time() * 1000))
 
-        prepared = (
+        message = (
             method.upper()
             + path
             + body
@@ -32,10 +32,10 @@ class CoinExAPI:
         )
 
         signature = hmac.new(
-            self.secret_key.encode(),
-            prepared.encode(),
+            self.secret_key.encode("utf-8"),
+            message.encode("utf-8"),
             hashlib.sha256
-        ).hexdigest().lower()
+        ).hexdigest()
 
         return {
             "X-COINEX-KEY": self.api_key,
@@ -62,6 +62,7 @@ class CoinExAPI:
                 separators=(",", ":")
             )
 
+
         try:
 
             response = session.request(
@@ -77,9 +78,9 @@ class CoinExAPI:
             )
 
 
-            response.raise_for_status()
-
             result = response.json()
+
+            logger.info(result)
 
 
             if result.get("code") != 0:
@@ -101,64 +102,14 @@ class CoinExAPI:
 
 
     # ===========================
-    # SPOT
-    # ===========================
-
-    def get_balance(self):
-
-        return self._request(
-            "GET",
-            "/assets/spot/balance"
-        )
-
-
-    def market_buy(
-        self,
-        market,
-        amount
-    ):
-
-        return self._request(
-            "POST",
-            "/spot/order",
-            {
-                "market": market,
-                "market_type": "SPOT",
-                "side": "buy",
-                "type": "market",
-                "amount": str(amount)
-            }
-        )
-
-
-    def market_sell(
-        self,
-        market,
-        amount
-    ):
-
-        return self._request(
-            "POST",
-            "/spot/order",
-            {
-                "market": market,
-                "market_type": "SPOT",
-                "side": "sell",
-                "type": "market",
-                "amount": str(amount)
-            }
-        )
-
-
-    # ===========================
-    # FUTURES
+    # Futures
     # ===========================
 
     def get_futures_balance(self):
 
         return self._request(
             "GET",
-            "/assets/futures/balance"
+            "/v2/assets/futures/balance"
         )
 
 
@@ -166,7 +117,32 @@ class CoinExAPI:
 
         return self._request(
             "GET",
-            "/futures/pending-position"
+            "/v2/futures/pending-position"
+        )
+
+
+    # ===========================
+    # Futures Order
+    # ===========================
+
+    def create_futures_order(
+        self,
+        market,
+        side,
+        amount,
+        order_type="market"
+    ):
+
+        return self._request(
+            "POST",
+            "/v2/futures/order",
+            {
+                "market": market,
+                "market_type": "FUTURES",
+                "side": side,
+                "type": order_type,
+                "amount": str(amount)
+            }
         )
 
 
