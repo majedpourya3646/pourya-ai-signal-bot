@@ -19,7 +19,7 @@ SYMBOLS = [
 # ===========================
 # CoinEx API
 # ===========================
-
+BASE_URL = "https://api.coinex.com/v2"
 COINEX_API_KEY = ""
 COINEX_SECRET_KEY = ""
 
