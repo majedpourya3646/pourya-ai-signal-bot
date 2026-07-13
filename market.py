@@ -1,65 +1,34 @@
-import requests
 import pandas as pd
 
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from config import BASE_URL
+from core.session import session
+from core.logger import logger
 
 
-BASE_URL = "https://api.coinex.com/v2/spot/kline"
+KLINE_URL = BASE_URL + "/spot/kline"
 
 
-# =========================
-# HTTP Session + Retry
-# =========================
-
-session = requests.Session()
-
-retry = Retry(
-    total=3,
-    backoff_factor=1,
-    status_forcelist=[
-        500,
-        502,
-        503,
-        504
-    ]
-)
-
-adapter = HTTPAdapter(
-    max_retries=retry
-)
-
-session.mount(
-    "https://",
-    adapter
-)
+INTERVAL_MAP = {
+    "15": "15min",
+    "60": "1hour",
+    "240": "4hour"
+}
 
 
 def get_market_data(symbol, interval="15"):
 
     try:
 
-        interval_map = {
-            "15": "15min",
-            "60": "1hour",
-            "240": "4hour"
-        }
-
-        coinex_interval = interval_map.get(
-            interval,
-            "15min"
-        )
-
         params = {
             "market": symbol,
-            "period": coinex_interval,
+            "period": INTERVAL_MAP.get(interval, "15min"),
             "limit": 300
         }
 
         response = session.get(
-            BASE_URL,
+            KLINE_URL,
             params=params,
-            timeout=30
+            timeout=session.request_timeout
         )
 
         response.raise_for_status()
@@ -67,61 +36,36 @@ def get_market_data(symbol, interval="15"):
         result = response.json()
 
         if result.get("code") != 0:
+            logger.error(result)
+            return pd.DataFrame()
 
-            raise Exception(result)
-
-        data = result["data"]
-
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(result["data"])
 
         if df.empty:
             return pd.DataFrame()
 
-        df = df.rename(
-            columns={
-                "created_at": "time",
-                "open": "open",
-                "high": "high",
-                "low": "low",
-                "close": "close",
-                "volume": "volume"
-            }
-        )
+        df = df.rename(columns={
+            "created_at": "time"
+        })
 
-        required_columns = [
-            "time",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume"
-        ]
-
-        if not all(
-            column in df.columns
-            for column in required_columns
-        ):
-            return pd.DataFrame()
-
-        for column in [
+        for col in [
             "open",
             "high",
             "low",
             "close",
             "volume"
         ]:
-
-            df[column] = pd.to_numeric(
-                df[column],
+            df[col] = pd.to_numeric(
+                df[col],
                 errors="coerce"
             )
 
         df.dropna(inplace=True)
 
-        if df.empty:
-            return pd.DataFrame()
-
-        df = df.sort_values("time")
+        df.sort_values(
+            "time",
+            inplace=True
+        )
 
         df.reset_index(
             drop=True,
@@ -132,11 +76,6 @@ def get_market_data(symbol, interval="15"):
 
     except Exception as e:
 
-        print(
-            "COINEX MARKET ERROR:",
-            symbol,
-            interval,
-            e
-        )
+        logger.exception(e)
 
         return pd.DataFrame()
