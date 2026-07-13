@@ -42,22 +42,6 @@ signal_text = {
     "STRONG SELL": "⚠️ STRONG SELL",
     "WAIT": "⏳ WAIT",
 }
-try:
-    balance = coinex.get_balance()
-
-    send_message(
-        f"🤖 <b>ربات با موفقیت اجرا شد</b>\n\n"
-        f"✅ اتصال به API کوینکس برقرار است.\n"
-        f"📊 اطلاعات حساب دریافت شد."
-    )
-
-except Exception as e:
-
-    send_message(
-        f"❌ <b>خطا در اتصال به CoinEx</b>\n\n{e}"
-    )
-
-    return
 def check_open_trades():
 
     trades = get_all_trades()
