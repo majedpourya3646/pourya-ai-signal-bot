@@ -1,3 +1,4 @@
+import os
 BOT_NAME = "Pourya Trader AI"
 
 TIMEFRAME = "15m"
