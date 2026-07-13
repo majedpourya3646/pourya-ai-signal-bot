@@ -7,7 +7,7 @@ from risk_manager import (
     validate_trade
 )
 
-TRADE_FILE = "open_trades.json"
+TRADE_FILE = "data/open_trades.json"
 
 
 def load_trades():
@@ -24,6 +24,8 @@ def load_trades():
 
 
 def save_trades(trades):
+
+    os.makedirs("data", exist_ok=True)
 
     with open(TRADE_FILE, "w") as f:
         json.dump(
@@ -85,7 +87,8 @@ def open_trade(
     quantity=0,
     signal="",
     confidence=0,
-    grade=""
+    grade="",
+    order_id=None
 ):
 
     trades = load_trades()
@@ -107,6 +110,8 @@ def open_trade(
         "confidence": confidence,
 
         "grade": grade,
+
+        "order_id": order_id,
 
         "status": "OPEN",
 
