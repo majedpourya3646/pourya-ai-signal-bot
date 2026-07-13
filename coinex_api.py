@@ -1,3 +1,4 @@
+BASE_URL = "https://api.coinex.com/v2"
 import time
 import hmac
 import hashlib
