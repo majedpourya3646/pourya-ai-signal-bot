@@ -5,7 +5,7 @@ from core.session import session
 from core.logger import logger
 
 
-KLINE_URL = BASE_URL + "/spot/kline"
+KLINE_URL = BASE_URL + "/v2/spot/kline"
 
 
 INTERVAL_MAP = {
@@ -39,14 +39,26 @@ def get_market_data(symbol, interval="15"):
             logger.error(result)
             return pd.DataFrame()
 
-        df = pd.DataFrame(result["data"])
+        data = result.get("data", [])
 
-        if df.empty:
+        if not data:
             return pd.DataFrame()
 
-        df = df.rename(columns={
-            "created_at": "time"
-        })
+        df = pd.DataFrame(data)
+
+        # پشتیبانی از هر دو فرمت پاسخ CoinEx
+        if "created_at" in df.columns:
+            df.rename(columns={"created_at": "time"}, inplace=True)
+
+        elif len(df.columns) >= 6:
+            df.columns = [
+                "time",
+                "open",
+                "close",
+                "high",
+                "low",
+                "volume"
+            ]
 
         for col in [
             "open",
