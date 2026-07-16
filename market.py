@@ -5,7 +5,7 @@ from core.session import session
 from core.logger import logger
 
 
-KLINE_URL = BASE_URL + "/v2/spot/kline"
+KLINE_URL = BASE_URL + "/spot/kline"
 
 
 INTERVAL_MAP = {
@@ -31,6 +31,13 @@ def get_market_data(symbol, interval="15"):
             timeout=session.request_timeout
         )
 
+        print("==========================")
+        print("MARKET URL:", response.url)
+        print("STATUS:", response.status_code)
+        print("BODY:")
+        print(response.text)
+        print("==========================")
+
         response.raise_for_status()
 
         result = response.json()
@@ -46,31 +53,39 @@ def get_market_data(symbol, interval="15"):
 
         df = pd.DataFrame(data)
 
-        # پشتیبانی از هر دو فرمت پاسخ CoinEx
         if "created_at" in df.columns:
-            df.rename(columns={"created_at": "time"}, inplace=True)
+            df.rename(
+                columns={
+                    "created_at": "time"
+                },
+                inplace=True
+            )
 
-        elif len(df.columns) >= 6:
-            df.columns = [
-                "time",
-                "open",
-                "close",
-                "high",
-                "low",
-                "volume"
-            ]
+        elif "timestamp" in df.columns:
+            df.rename(
+                columns={
+                    "timestamp": "time"
+                },
+                inplace=True
+            )
 
-        for col in [
+        elif "time" not in df.columns:
+            df["time"] = range(len(df))
+
+        for column in [
             "open",
             "high",
             "low",
             "close",
             "volume"
         ]:
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce"
-            )
+
+            if column in df.columns:
+
+                df[column] = pd.to_numeric(
+                    df[column],
+                    errors="coerce"
+                )
 
         df.dropna(inplace=True)
 
