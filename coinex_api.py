@@ -98,7 +98,7 @@ class CoinExAPI:
                         body
                     ),
 
-                    timeout=session.request_timeout
+                    timeout=session.timeout
 
                 )
 
