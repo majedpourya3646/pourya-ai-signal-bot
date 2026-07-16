@@ -276,3 +276,34 @@ class CoinExAPI:
             "/futures/set-position-stop",
             payload
         )
+    def cancel_order(
+        self,
+        market,
+        order_id
+    ):
+
+        return self._request(
+            "POST",
+            "/futures/cancel-order",
+            {
+                "market": market,
+                "order_id": order_id
+            }
+        )
+
+
+    def get_open_orders(
+        self,
+        market
+    ):
+
+        return self._request(
+            "GET",
+            "/futures/pending-order",
+            {
+                "market": market
+            }
+        )
+
+
+coinex = CoinExAPI()
