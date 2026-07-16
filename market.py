@@ -5,7 +5,7 @@ from core.session import session
 from core.logger import logger
 
 
-KLINE_URL = BASE_URL + "/spot/kline"
+KLINE_URL = BASE_URL + "/v2/spot/kline"
 
 
 INTERVAL_MAP = {
@@ -31,12 +31,11 @@ def get_market_data(symbol, interval="15"):
             timeout=session.request_timeout
         )
 
-        print("==========================")
-        print("MARKET URL:", response.url)
+        print("=" * 60)
+        print("URL:", response.url)
         print("STATUS:", response.status_code)
-        print("BODY:")
         print(response.text)
-        print("==========================")
+        print("=" * 60)
 
         response.raise_for_status()
 
@@ -54,25 +53,15 @@ def get_market_data(symbol, interval="15"):
         df = pd.DataFrame(data)
 
         if "created_at" in df.columns:
-            df.rename(
-                columns={
-                    "created_at": "time"
-                },
-                inplace=True
-            )
+            df.rename(columns={"created_at": "time"}, inplace=True)
 
         elif "timestamp" in df.columns:
-            df.rename(
-                columns={
-                    "timestamp": "time"
-                },
-                inplace=True
-            )
+            df.rename(columns={"timestamp": "time"}, inplace=True)
 
         elif "time" not in df.columns:
             df["time"] = range(len(df))
 
-        for column in [
+        for col in [
             "open",
             "high",
             "low",
@@ -80,10 +69,9 @@ def get_market_data(symbol, interval="15"):
             "volume"
         ]:
 
-            if column in df.columns:
-
-                df[column] = pd.to_numeric(
-                    df[column],
+            if col in df.columns:
+                df[col] = pd.to_numeric(
+                    df[col],
                     errors="coerce"
                 )
 
