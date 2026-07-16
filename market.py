@@ -28,7 +28,7 @@ def get_market_data(symbol, interval="15"):
         response = session.get(
             KLINE_URL,
             params=params,
-            timeout=session.request_timeout
+            timeout=session.timeout
         )
 
         print("=" * 60)
