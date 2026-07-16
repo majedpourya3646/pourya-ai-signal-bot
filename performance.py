@@ -11,10 +11,8 @@ def load_trades():
         return []
 
     try:
-
         with open(FILE_NAME, "r") as f:
             return json.load(f)
-
     except Exception:
         return []
 
@@ -24,12 +22,7 @@ def save_trades(data):
     os.makedirs("data", exist_ok=True)
 
     with open(FILE_NAME, "w") as f:
-
-        json.dump(
-            data,
-            f,
-            indent=4
-        )
+        json.dump(data, f, indent=4)
 
 
 def add_trade(
@@ -50,29 +43,17 @@ def add_trade(
     trades.append({
 
         "symbol": symbol,
-
         "signal": signal,
-
         "entry": entry,
-
         "tp": tp,
-
         "sl": sl,
-
         "quantity": quantity,
-
         "confidence": confidence,
-
         "grade": grade,
-
         "result": result,
-
         "profit": profit,
-
-        "open_time": datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-
+        "status": "OPEN",
+        "open_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "close_time": None
 
     })
@@ -92,21 +73,13 @@ def update_trade(
 
         if (
             trade["symbol"] == symbol
-            and
-            trade["result"] is None
+            and trade["result"] is None
         ):
 
             trade["result"] = result
-
-            trade["profit"] = round(
-                profit,
-                2
-            )
-
-            trade["close_time"] = datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-
+            trade["profit"] = round(profit, 2)
+            trade["status"] = "CLOSED"
+            trade["close_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             break
 
     save_trades(trades)
@@ -118,106 +91,80 @@ def statistics():
 
     total = len(trades)
 
-    wins = len([
-        t for t in trades
+    wins = sum(
+        1 for t in trades
         if t["result"] == "WIN"
-    ])
+    )
 
-    losses = len([
-        t for t in trades
+    losses = sum(
+        1 for t in trades
         if t["result"] == "LOSS"
-    ])
+    )
 
-    open_trades = len([
-        t for t in trades
+    open_trades = sum(
+        1 for t in trades
         if t["result"] is None
-    ])
-
-    total_profit = round(
-        sum(
-            t.get("profit", 0)
-            for t in trades
-        ),
-        2
     )
 
     closed = wins + losses
 
-    win_rate = round(
-        (wins / closed) * 100,
+    total_profit = round(
+        sum(t.get("profit", 0) for t in trades),
         2
-    ) if closed else 0
+    )
 
     avg_profit = round(
         total_profit / closed,
         2
     ) if closed else 0
 
-    best_trade = max(
-        [t.get("profit", 0) for t in trades],
-        default=0
-    )
+    win_rate = round(
+        (wins / closed) * 100,
+        2
+    ) if closed else 0
 
-    worst_trade = min(
-        [t.get("profit", 0) for t in trades],
-        default=0
-    )
+    profits = [
+        t.get("profit", 0)
+        for t in trades
+        if t["result"] is not None
+    ]
+
+    best_trade = round(max(profits), 2) if profits else 0
+
+    worst_trade = round(min(profits), 2) if profits else 0
 
     return {
 
         "total": total,
-
         "open": open_trades,
-
-        "wins": wins,
-
-        "losses": losses,
-
         "closed": closed,
-
+        "wins": wins,
+        "losses": losses,
         "win_rate": win_rate,
-
         "profit": total_profit,
-
         "average_profit": avg_profit,
-
-        "best_trade": round(best_trade, 2),
-
-        "worst_trade": round(worst_trade, 2)
+        "best_trade": best_trade,
+        "worst_trade": worst_trade
 
     }
 
 
 def report():
 
-    stats = statistics()
+    s = statistics()
 
     return (
-
-        "🤖 Pourya Trader AI\n\n"
-
-        "📊 گزارش عملکرد\n\n"
-
-        f"📈 کل معاملات: {stats['total']}\n"
-
-        f"🟢 باز: {stats['open']}\n"
-
-        f"🏁 بسته شده: {stats['closed']}\n\n"
-
-        f"✅ موفق: {stats['wins']}\n"
-
-        f"❌ ناموفق: {stats['losses']}\n\n"
-
-        f"🎯 Win Rate: {stats['win_rate']}%\n"
-
-        f"💰 سود/ضرر کل: {stats['profit']}%\n"
-
-        f"📊 میانگین هر معامله: {stats['average_profit']}%\n"
-
-        f"🥇 بهترین معامله: {stats['best_trade']}%\n"
-
-        f"📉 بدترین معامله: {stats['worst_trade']}%\n\n"
-
+        "😎 <b>Pourya Trader AI</b>\n\n"
+        "📊 <b>Performance Report</b>\n\n"
+        f"📈 Total Trades : {s['total']}\n"
+        f"🟢 Open : {s['open']}\n"
+        f"🏁 Closed : {s['closed']}\n\n"
+        f"✅ Wins : {s['wins']}\n"
+        f"❌ Losses : {s['losses']}\n"
+        f"🎯 Win Rate : {s['win_rate']}%\n\n"
+        f"💰 Total Profit : {s['profit']}%\n"
+        f"📊 Average : {s['average_profit']}%\n"
+        f"🥇 Best : {s['best_trade']}%\n"
+        f"📉 Worst : {s['worst_trade']}%\n\n"
         "🚀 AI Trading System"
-
     )
