@@ -1,41 +1,22 @@
-from coinex_futures_api import coinex
+from coinex_api import coinex
 
 
-def main():
-
-    print("================================")
-    print("   COINEX FUTURES TEST")
-    print("================================")
-
-    print("\n1) Checking Futures Balance...\n")
-
-    try:
-        balance = coinex.get_futures_balance()
-
-        print("BALANCE RESULT:")
-        print(balance)
-
-    except Exception as e:
-        print("BALANCE ERROR:")
-        print(e)
+print("=" * 50)
+print("Testing CoinEx API...")
+print("=" * 50)
 
 
-    print("\n--------------------------------")
+result = coinex.get_balance()
 
 
-    print("\n2) Checking Futures Positions...\n")
+if result:
 
-    try:
-        positions = coinex.get_futures_positions()
+    print("✅ اتصال موفق به CoinEx")
 
-        print("POSITIONS RESULT:")
-        print(positions)
-
-    except Exception as e:
-        print("POSITIONS ERROR:")
-        print(e)
+    print(result)
 
 
+else:
 
-if __name__ == "__main__":
-    main()
+    print("❌ اتصال ناموفق")
+    print("API Key یا Signature یا Endpoint بررسی شود")
