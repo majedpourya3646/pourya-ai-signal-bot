@@ -71,6 +71,7 @@ def create_session():
 
     # Default timeout
     session.timeout = REQUEST_TIMEOUT
+    session.request_timeout = REQUEST_TIMEOUT
 
 
     # Headers عمومی
