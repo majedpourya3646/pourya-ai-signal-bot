@@ -21,7 +21,7 @@ class CoinExAPI:
         self.api_key = COINEX_API_KEY
         self.secret_key = COINEX_SECRET_KEY
 
-        self.base_url = BASE_URL.rstrip("/") + "/v2"
+        self.base_url = BASE_URL.rstrip("/")
 
 
     def _headers(
