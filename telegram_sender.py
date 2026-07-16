@@ -38,7 +38,7 @@ def send_message(
         response = session.post(
             url,
             data=payload,
-            timeout=session.request_timeout
+            timeout=session.timeout
         )
 
         if response.status_code != 200:
