@@ -19,33 +19,35 @@ def send_message(
 
         return False
 
-    url = (
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    )
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+    payload = {
+
+        "chat_id": CHAT_ID,
+
+        "text": text,
+
+        "parse_mode": parse_mode,
+
+        "disable_web_page_preview": disable_preview
+
+    }
 
     try:
 
         response = session.post(
-
             url,
-
-            data={
-
-                "chat_id": CHAT_ID,
-
-                "text": text,
-
-                "parse_mode": parse_mode,
-
-                "disable_web_page_preview": disable_preview
-
-            },
-
+            data=payload,
             timeout=session.request_timeout
-
         )
 
-        response.raise_for_status()
+        if response.status_code != 200:
+
+            logger.error(
+                f"Telegram Error {response.status_code}: {response.text}"
+            )
+
+            return False
 
         result = response.json()
 
@@ -54,6 +56,8 @@ def send_message(
             logger.error(result)
 
             return False
+
+        logger.info("Telegram message sent.")
 
         return True
 
