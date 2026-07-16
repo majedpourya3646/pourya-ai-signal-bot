@@ -10,7 +10,7 @@ def get_futures_balance(self):
 
     return self._request(
         "GET",
-        "/v2/assets/futures/balance"
+        "/assets/futures/balance"
     )
 
 
@@ -22,7 +22,7 @@ def get_futures_positions(self):
 
     return self._request(
         "GET",
-        "/v2/futures/pending-position"
+        "/futures/pending-position"
     )
 
 
@@ -57,7 +57,7 @@ def create_futures_order(
 
     return self._request(
         "POST",
-        "/v2/futures/order",
+        "/futures/order",
         payload
     )
 
@@ -74,7 +74,7 @@ def cancel_order(
 
     return self._request(
         "POST",
-        "/v2/futures/cancel-order",
+        "/futures/cancel-order",
         {
             "market": market,
             "order_id": order_id
@@ -93,7 +93,7 @@ def get_open_orders(
 
     return self._request(
         "GET",
-        f"/v2/futures/pending-order?market={market}"
+        f"/futures/pending-order?market={market}"
     )
 
 
