@@ -35,17 +35,8 @@ def create_session():
         max_retries=retry
     )
 
-    session.mount(
-        "https://",
-        adapter
-    )
-
-    session.mount(
-        "http://",
-        adapter
-    )
-
-    session.request_timeout = REQUEST_TIMEOUT
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
 
     return session
 
