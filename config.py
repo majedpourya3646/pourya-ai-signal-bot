@@ -1,13 +1,12 @@
 import os
+
+# ===========================
+# Bot
+# ===========================
+
 BOT_NAME = "Pourya Trader AI"
 
 TIMEFRAME = "15m"
-
-RISK_REWARD = 2
-
-MAX_OPEN_TRADES = 5
-
-MIN_CONFIDENCE = 60
 
 SYMBOLS = [
     "BTCUSDT",
@@ -17,27 +16,80 @@ SYMBOLS = [
     "DOGEUSDT"
 ]
 
+MIN_CONFIDENCE = 60
+
+# ===========================
+# Telegram
+# ===========================
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+CHAT_ID = os.getenv("CHAT_ID")
+
 # ===========================
 # CoinEx API
 # ===========================
-BASE_URL = "https://api.coinex.com"
+
+BASE_URL = "https://api.coinex.com/v2"
+
 COINEX_API_KEY = os.getenv("COINEX_API_KEY")
+
 COINEX_SECRET_KEY = os.getenv("COINEX_SECRET_KEY")
 
-# Futures
 MARKET_TYPE = "FUTURES"
 
-# Risk Management
-RISK_PER_TRADE = 2      # درصد سرمایه در هر معامله
-LEVERAGE = 10           # اهرم پیش‌فرض
+# ===========================
+# Trading
+# ===========================
 
-# Default TP/SL
-DEFAULT_TP = 5          # درصد
-DEFAULT_SL = 2          # درصد
+LEVERAGE = 10
 
+RISK_REWARD = 2.0
+
+MAX_OPEN_TRADES = 5
+
+RISK_PER_TRADE = 1.0
+
+DEFAULT_TP = 5.0
+
+DEFAULT_SL = 2.0
+
+# ===========================
 # Trailing Stop
-TRAILING_TRIGGER = 2    # شروع تریلینگ بعد از ۲٪ سود
-TRAILING_DISTANCE = 1   # فاصله تریلینگ
+# ===========================
 
-# Break Even
-BREAK_EVEN_TRIGGER = 2  # انتقال استاپ به نقطه ورود
+TRAILING_TRIGGER = 2.0
+
+TRAILING_DISTANCE = 1.0
+
+BREAK_EVEN_TRIGGER = 2.0
+
+# ===========================
+# Portfolio
+# ===========================
+
+INITIAL_BALANCE = 1000.0
+
+# ===========================
+# Paper Trading
+# ===========================
+
+PAPER_TRADING = True
+
+AUTO_CLOSE = True
+
+# ===========================
+# AI
+# ===========================
+
+USE_MULTI_TIMEFRAME = True
+
+USE_VOLUME_FILTER = True
+
+USE_ADX_FILTER = True
+
+USE_RSI_FILTER = True
+
+USE_MACD_FILTER = True
+
+USE_ATR_FILTER = True
