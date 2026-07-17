@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import datetime
+import os
 
 from config import (
     MAX_OPEN_TRADES,
@@ -13,13 +14,7 @@ DB_FILE = "data/trades.db"
 
 
 
-# ==========================
-# Database
-# ==========================
-
 def get_connection():
-
-    import os
 
     os.makedirs(
         "data",
@@ -35,7 +30,6 @@ def get_connection():
 def init_db():
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
@@ -45,7 +39,7 @@ def init_db():
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            symbol TEXT,
+            symbol TEXT UNIQUE,
 
             side TEXT,
 
@@ -77,7 +71,6 @@ def init_db():
 
 
     conn.commit()
-
     conn.close()
 
 
@@ -86,36 +79,24 @@ init_db()
 
 
 
-# ==========================
-# Get Trades
-# ==========================
+def now():
+
+    return datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
 
 def get_all_trades():
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
     cursor.execute(
         """
-        SELECT
-        symbol,
-        side,
-        entry,
-        tp,
-        sl,
-        quantity,
-        leverage,
-        signal,
-        confidence,
-        order_id,
-        status,
-        open_time,
-        updated_at
-
+        SELECT *
         FROM trades
-
         WHERE status='OPEN'
         """
     )
@@ -123,9 +104,7 @@ def get_all_trades():
 
     rows = cursor.fetchall()
 
-
     conn.close()
-
 
 
     trades = {}
@@ -133,33 +112,21 @@ def get_all_trades():
 
     for r in rows:
 
-        trades[r[0]] = {
+        trades[r[1]] = {
 
-            "symbol": r[0],
-
-            "side": r[1],
-
-            "entry": r[2],
-
-            "tp": r[3],
-
-            "sl": r[4],
-
-            "quantity": r[5],
-
-            "leverage": r[6],
-
-            "signal": r[7],
-
-            "confidence": r[8],
-
-            "order_id": r[9],
-
-            "status": r[10],
-
-            "open_time": r[11],
-
-            "updated_at": r[12]
+            "symbol": r[1],
+            "side": r[2],
+            "entry": r[3],
+            "tp": r[4],
+            "sl": r[5],
+            "quantity": r[6],
+            "leverage": r[7],
+            "signal": r[8],
+            "confidence": r[9],
+            "order_id": r[10],
+            "status": r[11],
+            "open_time": r[12],
+            "updated_at": r[13]
 
         }
 
@@ -168,25 +135,26 @@ def get_all_trades():
 
 
 
-
-# ==========================
-# Permission
-# ==========================
-
-def can_buy(symbol=None):
-
+def can_buy(symbol):
 
     trades = get_all_trades()
 
 
+    if symbol in trades:
 
-    if symbol and symbol in trades:
+        print(
+            f"SKIP {symbol}: already open"
+        )
 
         return False
 
 
 
     if len(trades) >= MAX_OPEN_TRADES:
+
+        print(
+            "MAX OPEN TRADES REACHED"
+        )
 
         return False
 
@@ -196,26 +164,20 @@ def can_buy(symbol=None):
 
 
 
-
-
-# ==========================
-# Open Trade
-# ==========================
-
 def open_trade(
-        symbol,
-        side,
-        entry,
-        quantity,
-        confidence,
-        signal="BUY",
-        order_id=None
+    symbol,
+    side,
+    entry,
+    quantity,
+    confidence,
+    signal="BUY",
+    order_id=None
 ):
 
 
-    conn = get_connection()
+    if not can_buy(symbol):
 
-    cursor = conn.cursor()
+        return False
 
 
 
@@ -229,16 +191,14 @@ def open_trade(
     )
 
 
+    conn = get_connection()
 
-    now = datetime.now().strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
-
+    cursor = conn.cursor()
 
 
     cursor.execute(
         """
-        INSERT INTO trades
+        INSERT OR IGNORE INTO trades
 
         (
         symbol,
@@ -264,7 +224,8 @@ def open_trade(
 
         symbol,
 
-        "LONG" if side.lower()=="buy" else "SHORT",
+        "LONG" if side.lower()=="buy"
+        else "SHORT",
 
         entry,
 
@@ -284,39 +245,46 @@ def open_trade(
 
         "OPEN",
 
-        now,
+        now(),
 
-        now
+        now()
 
         )
 
     )
 
 
-
     conn.commit()
+
+    result = cursor.rowcount
+
 
     conn.close()
 
 
+    if result:
 
-    return True
+        print(
+            f"OPENED {symbol}"
+        )
+
+        return True
 
 
+    print(
+        f"FAILED OPEN {symbol}"
+    )
 
 
+    return False
 
-# ==========================
-# Close Trade
-# ==========================
+
 
 def close_trade(symbol):
-
 
     conn = get_connection()
 
     cursor = conn.cursor()
-
 
 
     cursor.execute(
@@ -336,26 +304,18 @@ def close_trade(symbol):
         """,
 
         (
-
-        datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-
-        symbol
-
+            now(),
+            symbol
         )
 
     )
-
 
 
     conn.commit()
 
     changed = cursor.rowcount
 
-
     conn.close()
-
 
 
     return changed > 0
