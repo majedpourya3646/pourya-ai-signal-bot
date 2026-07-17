@@ -1,8 +1,8 @@
+import os
 import time
 import json
 import hmac
 import hashlib
-import requests
 
 from config import BASE_URL
 from core.session import session
@@ -13,16 +13,11 @@ class CoinExAPI:
 
     def __init__(self):
         self.base_url = BASE_URL
-        self.api_key = None
-        self.secret_key = None
-
-        import os
-
         self.api_key = os.getenv("COINEX_API_KEY")
         self.secret_key = os.getenv("COINEX_SECRET_KEY")
 
 
-    def _signature(self, method, path, body="", timestamp=None):
+    def _create_signature(self, method, path, body="", timestamp=None):
 
         if timestamp is None:
             timestamp = str(int(time.time() * 1000))
@@ -34,13 +29,14 @@ class CoinExAPI:
             + timestamp
         )
 
-        sign = hmac.new(
-            self.secret_key.encode(),
-            message.encode(),
+        signature = hmac.new(
+            self.secret_key.encode("utf-8"),
+            message.encode("utf-8"),
             hashlib.sha256
-        ).hexdigest()
+        ).hexdigest().upper()
 
-        return sign, timestamp
+        return signature, timestamp
+
 
 
     def _request(self, method, path, params=None, private=False):
@@ -67,20 +63,23 @@ class CoinExAPI:
 
                 if not self.api_key or not self.secret_key:
                     raise Exception(
-                        "CoinEx API keys missing"
+                        "CoinEx API keys not found"
                     )
 
-                sign, timestamp = self._signature(
+
+                sign, timestamp = self._create_signature(
                     method,
                     path,
                     body
                 )
+
 
                 headers.update({
                     "X-COINEX-KEY": self.api_key,
                     "X-COINEX-SIGN": sign,
                     "X-COINEX-TIMESTAMP": timestamp
                 })
+
 
 
             if method.upper() == "GET":
@@ -96,7 +95,7 @@ class CoinExAPI:
 
                 response = session.post(
                     url,
-                    json=params,
+                    data=body,
                     headers=headers,
                     timeout=session.timeout
                 )
@@ -118,6 +117,7 @@ class CoinExAPI:
             return response.json()
 
 
+
         except Exception as e:
 
             logger.error(e)
@@ -125,8 +125,9 @@ class CoinExAPI:
 
 
 
+
     # =========================
-    # Market Data
+    # SPOT KLINE
     # =========================
 
     def get_kline(
@@ -136,32 +137,27 @@ class CoinExAPI:
         limit=300
     ):
 
-        path = "/spot/kline"
-
-        params = {
-            "market": market,
-            "period": period,
-            "limit": limit
-        }
-
         return self._request(
             "GET",
-            path,
-            params
+            "/spot/kline",
+            {
+                "market": market,
+                "period": period,
+                "limit": limit
+            }
         )
 
 
+
     # =========================
-    # Futures Balance
+    # FUTURES BALANCE
     # =========================
 
     def get_futures_balance(self):
 
-        path = "/assets/futures/balance"
-
         return self._request(
             "GET",
-            path,
+            "/assets/futures/balance",
             private=True
         )
 
