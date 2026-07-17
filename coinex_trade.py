@@ -1,13 +1,12 @@
 import time
-import json
 import hmac
 import hashlib
-import requests
+import json
 
 from config import (
     BASE_URL,
     COINEX_API_KEY,
-    COINEX_SECRET_KEY,
+    COINEX_SECRET_KEY
 )
 
 from core.session import session
@@ -20,7 +19,7 @@ class CoinExTrade:
         self.base_url = BASE_URL
 
 
-    def _sign(
+    def sign(
         self,
         method,
         path,
@@ -31,27 +30,26 @@ class CoinExTrade:
             int(time.time() * 1000)
         )
 
-        prepared = (
+        message = (
             method
-            +
-            path
-            +
-            body
-            +
-            timestamp
+            + path
+            + body
+            + timestamp
         )
 
-        sign = hmac.new(
+        signature = hmac.new(
             COINEX_SECRET_KEY.encode(),
-            prepared.encode(),
+            message.encode(),
             hashlib.sha256
         ).hexdigest()
 
+
         return {
             "X-COINEX-KEY": COINEX_API_KEY,
-            "X-COINEX-SIGN": sign,
+            "X-COINEX-SIGN": signature,
             "X-COINEX-TIMESTAMP": timestamp
         }
+
 
 
     def request(
@@ -72,7 +70,7 @@ class CoinExTrade:
             )
 
 
-        headers = self._sign(
+        headers = self.sign(
             method,
             path,
             body
@@ -101,9 +99,8 @@ class CoinExTrade:
 
 
             logger.info(
-                f"CoinEx Trade Response: {response.text}"
+                f"ORDER RESPONSE: {response.text}"
             )
-
 
             return response.json()
 
@@ -116,29 +113,24 @@ class CoinExTrade:
 
 
 
-    # ==========================
-    # Open Futures Order
-    # ==========================
+    # ======================
+    # OPEN LONG
+    # ======================
 
-    def open_order(
+    def open_long(
         self,
-        market,
-        side,
+        symbol,
         amount,
-        price=None,
         leverage=10
     ):
 
-        path = "/futures/order"
-
-
         params = {
 
-            "market": market,
+            "market": symbol,
 
-            "side": side,
+            "side": "buy",
 
-            "type": "limit" if price else "market",
+            "type": "market",
 
             "amount": str(amount),
 
@@ -147,36 +139,62 @@ class CoinExTrade:
         }
 
 
-        if price:
-
-            params["price"] = str(price)
-
-
         return self.request(
             "POST",
-            path,
+            "/futures/order",
             params
         )
 
 
 
-    # ==========================
-    # Close Position
-    # ==========================
+    # ======================
+    # OPEN SHORT
+    # ======================
+
+    def open_short(
+        self,
+        symbol,
+        amount,
+        leverage=10
+    ):
+
+        params = {
+
+            "market": symbol,
+
+            "side": "sell",
+
+            "type": "market",
+
+            "amount": str(amount),
+
+            "leverage": str(leverage)
+
+        }
+
+
+        return self.request(
+            "POST",
+            "/futures/order",
+            params
+        )
+
+
+
+    # ======================
+    # CLOSE
+    # ======================
 
     def close_position(
         self,
-        market,
+        symbol,
         side,
         amount
     ):
 
-        path = "/futures/order"
-
-
         params = {
 
-            "market": market,
+            "market": symbol,
 
             "side": side,
 
@@ -191,15 +209,11 @@ class CoinExTrade:
 
         return self.request(
             "POST",
-            path,
+            "/futures/order",
             params
         )
 
 
-
-    # ==========================
-    # Balance
-    # ==========================
 
     def get_balance(self):
 
