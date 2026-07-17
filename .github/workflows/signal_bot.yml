@@ -1,35 +1,55 @@
-name: Crypto Signal Bot
+from coinex_api import coinex
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 */1 * * *"
 
-jobs:
-  run-bot:
+print("=" * 60)
+print("        COINEX BALANCE TEST")
+print("=" * 60)
 
-    runs-on: ubuntu-latest
 
-    steps:
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+# =========================
+# Futures Balance
+# =========================
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+print("\n1) FUTURES BALANCE")
+print("-" * 60)
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+futures = coinex.get_futures_balance()
 
-      - name: Run Pourya Trader AI
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-          COINEX_API_KEY: ${{ secrets.COINEX_API_KEY }}
-          COINEX_SECRET_KEY: ${{ secrets.COINEX_SECRET_KEY }}
+print(futures)
 
-        run: |
-          python coinex_test.py
+
+
+# =========================
+# Spot Balance
+# =========================
+
+print("\n2) SPOT BALANCE")
+print("-" * 60)
+
+spot = coinex.get_spot_balance()
+
+print(spot)
+
+
+
+# =========================
+# Result
+# =========================
+
+print("\n" + "=" * 60)
+
+if futures and futures.get("code") == 0:
+    print("✅ Futures API Connected")
+else:
+    print("❌ Futures API Error")
+
+
+
+if spot and spot.get("code") == 0:
+    print("✅ Spot API Connected")
+else:
+    print("❌ Spot API Error")
+
+
+print("=" * 60)
