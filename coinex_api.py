@@ -29,19 +29,12 @@ class CoinExAPI:
             int(time.time() * 1000)
         )
 
-
         sign_string = (
             method.upper()
             + request_path
             + body
             + timestamp
         )
-
-
-        print("================")
-        print("SIGN STRING:")
-        print(sign_string)
-        print("================")
 
 
         signature = hmac.new(
@@ -67,9 +60,7 @@ class CoinExAPI:
 
             url = self.base_url + path
 
-
             body = ""
-
 
             if method.upper() == "POST" and params:
 
@@ -84,7 +75,6 @@ class CoinExAPI:
             }
 
 
-
             if private:
 
                 request_path = "/v2" + path
@@ -93,7 +83,6 @@ class CoinExAPI:
                 if method.upper() == "GET" and params:
 
                     request_path += "?" + urlencode(params)
-
 
 
                 sign, timestamp = self.create_signature(
@@ -107,11 +96,9 @@ class CoinExAPI:
 
                     "X-COINEX-KEY": self.api_key,
                     "X-COINEX-SIGN": sign,
-                    "X-COINEX-TIMESTAMP": timestamp,
-                    "Authorization": self.api_key
+                    "X-COINEX-TIMESTAMP": timestamp
 
                 })
-
 
 
             if method.upper() == "GET":
@@ -132,14 +119,6 @@ class CoinExAPI:
                     headers=headers,
                     timeout=session.timeout
                 )
-
-
-            else:
-
-                raise Exception(
-                    "Unsupported method"
-                )
-
 
 
             logger.info(
@@ -167,6 +146,9 @@ class CoinExAPI:
 
 
 
+    # ======================
+    # Futures Balance
+    # ======================
 
     def get_futures_balance(self):
 
@@ -178,21 +160,16 @@ class CoinExAPI:
 
 
 
-    def get_kline(
-        self,
-        market="BTCUSDT",
-        period="15min",
-        limit=300
-    ):
+    # ======================
+    # Spot Balance
+    # ======================
+
+    def get_spot_balance(self):
 
         return self._request(
             "GET",
-            "/spot/kline",
-            {
-                "market": market,
-                "period": period,
-                "limit": limit
-            }
+            "/assets/spot/balance",
+            private=True
         )
 
 
