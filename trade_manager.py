@@ -1,38 +1,72 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from risk_manager import (
     can_open_trade,
     validate_trade
 )
 
+
 TRADE_FILE = "data/open_trades.json"
+
+
+
+def now():
+
+    return datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
 
 
 def load_trades():
 
-    if not os.path.exists(TRADE_FILE):
+    if not os.path.exists(
+        TRADE_FILE
+    ):
         return {}
+
 
     try:
-        with open(TRADE_FILE, "r") as f:
+
+        with open(
+            TRADE_FILE,
+            "r"
+        ) as f:
+
             return json.load(f)
 
+
     except Exception:
+
         return {}
 
 
-def save_trades(trades):
 
-    os.makedirs("data", exist_ok=True)
+def save_trades(
+    trades
+):
 
-    with open(TRADE_FILE, "w") as f:
+    os.makedirs(
+        "data",
+        exist_ok=True
+    )
+
+
+    with open(
+        TRADE_FILE,
+        "w"
+    ) as f:
+
         json.dump(
             trades,
             f,
             indent=4
         )
+
 
 
 def can_buy(
@@ -46,37 +80,52 @@ def can_buy(
 
     trades = load_trades()
 
+
     if symbol in trades:
+
         return False
 
-    if not can_open_trade(trades):
+
+
+    if not can_open_trade(
+        trades
+    ):
+
         return False
 
-    if (
-        balance is not None
-        and
-        start_balance is not None
-        and
-        entry is not None
-        and
-        tp is not None
-        and
-        sl is not None
+
+
+    if all(
+        x is not None
+        for x in [
+            balance,
+            start_balance,
+            entry,
+            tp,
+            sl
+        ]
     ):
 
         valid, _ = validate_trade(
+
             balance,
             start_balance,
             trades,
             entry,
             tp,
             sl
+
         )
 
+
         if not valid:
+
             return False
 
+
+
     return True
+
 
 
 def open_trade(
@@ -88,14 +137,19 @@ def open_trade(
     signal="",
     confidence=0,
     grade="",
-    order_id=None
+    order_id=None,
+    side="LONG",
+    leverage=1
 ):
 
     trades = load_trades()
 
+
     trades[symbol] = {
 
         "symbol": symbol,
+
+        "side": side,
 
         "entry": entry,
 
@@ -104,6 +158,8 @@ def open_trade(
         "sl": sl,
 
         "quantity": quantity,
+
+        "leverage": leverage,
 
         "signal": signal,
 
@@ -115,29 +171,33 @@ def open_trade(
 
         "status": "OPEN",
 
-        "open_time": datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        "open_time": now()
+
     }
 
-    save_trades(trades)
+
+    save_trades(
+        trades
+    )
 
 
-def close_trade(symbol):
+
+def close_trade(
+    symbol
+):
 
     trades = load_trades()
 
+
     if symbol in trades:
-
-        trades[symbol]["status"] = "CLOSED"
-
-        trades[symbol]["close_time"] = datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
 
         del trades[symbol]
 
-    save_trades(trades)
+
+    save_trades(
+        trades
+    )
+
 
 
 def update_stop_loss(
@@ -147,11 +207,15 @@ def update_stop_loss(
 
     trades = load_trades()
 
+
     if symbol in trades:
 
         trades[symbol]["sl"] = new_sl
 
-        save_trades(trades)
+        save_trades(
+            trades
+        )
+
 
 
 def update_take_profit(
@@ -161,25 +225,33 @@ def update_take_profit(
 
     trades = load_trades()
 
+
     if symbol in trades:
 
         trades[symbol]["tp"] = new_tp
 
-        save_trades(trades)
+        save_trades(
+            trades
+        )
 
 
-def trade_exists(symbol):
 
-    trades = load_trades()
+def trade_exists(
+    symbol
+):
 
-    return symbol in trades
+    return symbol in load_trades()
 
 
-def get_trade(symbol):
 
-    trades = load_trades()
+def get_trade(
+    symbol
+):
 
-    return trades.get(symbol)
+    return load_trades().get(
+        symbol
+    )
+
 
 
 def get_all_trades():
@@ -187,9 +259,23 @@ def get_all_trades():
     return load_trades()
 
 
+
 def count_open_trades():
 
-    return len(load_trades())
+    trades = load_trades()
+
+
+    return sum(
+
+        1
+        for trade in trades.values()
+
+        if trade.get(
+            "status"
+        ) == "OPEN"
+
+    )
+
 
 
 def clear_all_trades():
