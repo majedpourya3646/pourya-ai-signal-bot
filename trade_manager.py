@@ -57,7 +57,8 @@ def save_trades(trades):
             f,
             indent=4
         )
-
+print("SAVED TRADES:", trades)
+print("FILE PATH:", os.path.abspath(TRADE_FILE))
 
 
 def can_buy(
