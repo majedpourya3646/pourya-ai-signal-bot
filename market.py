@@ -5,7 +5,7 @@ from core.session import session
 from core.logger import logger
 
 
-KLINE_URL = BASE_URL + "/v2/spot/kline"
+KLINE_URL = BASE_URL + "/spot/kline"
 
 
 INTERVAL_MAP = {
