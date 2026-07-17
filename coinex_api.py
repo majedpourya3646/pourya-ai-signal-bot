@@ -3,6 +3,7 @@ import time
 import json
 import hmac
 import hashlib
+from urllib.parse import urlencode
 
 from config import BASE_URL
 from core.session import session
@@ -13,46 +14,52 @@ class CoinExAPI:
 
     def __init__(self):
         self.base_url = BASE_URL
-
-        self.api_key = os.getenv(
-            "COINEX_API_KEY"
-        )
-
-        self.secret_key = os.getenv(
-            "COINEX_SECRET_KEY"
-        )
+        self.api_key = os.getenv("COINEX_API_KEY")
+        self.secret_key = os.getenv("COINEX_SECRET_KEY")
 
 
     def create_signature(
         self,
         method,
         path,
-        body="",
-        timestamp=None
+        params=None,
+        body=""
     ):
 
-        if timestamp is None:
-            timestamp = str(
-                int(time.time() * 1000)
+        timestamp = str(
+            int(time.time() * 1000)
+        )
+
+
+        request_path = path
+
+
+        # برای GET پارامترها باید داخل امضا بیایند
+        if method.upper() == "GET" and params:
+
+            query = urlencode(
+                params
             )
 
+            request_path += "?" + query
 
-        message = (
+
+        prepared_str = (
             method.upper()
-            + path
+            + request_path
             + body
             + timestamp
         )
 
 
-        signature = hmac.new(
-            self.secret_key.encode("utf-8"),
-            message.encode("utf-8"),
+        sign = hmac.new(
+            self.secret_key.encode("latin-1"),
+            prepared_str.encode("latin-1"),
             hashlib.sha256
-        ).hexdigest()
+        ).hexdigest().lower()
 
 
-        return signature, timestamp
+        return sign, timestamp
 
 
 
@@ -68,14 +75,7 @@ class CoinExAPI:
 
             url = self.base_url + path
 
-
             body = ""
-
-            if params:
-                body = json.dumps(
-                    params,
-                    separators=(",", ":")
-                )
 
 
             headers = {
@@ -85,31 +85,19 @@ class CoinExAPI:
 
             if private:
 
-                if not self.api_key or not self.secret_key:
-                    raise Exception(
-                        "Missing CoinEx API keys"
-                    )
-
-
                 sign, timestamp = self.create_signature(
                     method,
                     path,
+                    params,
                     body
                 )
 
 
                 headers.update({
-
                     "X-COINEX-KEY": self.api_key,
-
                     "X-COINEX-SIGN": sign,
-
-                    "X-COINEX-TIMESTAMP": timestamp,
-
-                    "X-COINEX-WINDOWTIME": "5000"
-
+                    "X-COINEX-TIMESTAMP": timestamp
                 })
-
 
 
             if method.upper() == "GET":
@@ -122,7 +110,7 @@ class CoinExAPI:
                 )
 
 
-            elif method.upper() == "POST":
+            else:
 
                 response = session.post(
                     url,
@@ -130,13 +118,6 @@ class CoinExAPI:
                     headers=headers,
                     timeout=session.timeout
                 )
-
-
-            else:
-                raise Exception(
-                    "Unsupported method"
-                )
-
 
 
             logger.info(
@@ -155,19 +136,22 @@ class CoinExAPI:
             return response.json()
 
 
-
         except Exception as e:
 
             logger.error(e)
-
             return None
 
 
 
+    def get_futures_balance(self):
 
-    # ==========================
-    # SPOT MARKET DATA
-    # ==========================
+        return self._request(
+            "GET",
+            "/assets/futures/balance",
+            private=True
+        )
+
+
 
     def get_kline(
         self,
@@ -184,20 +168,6 @@ class CoinExAPI:
                 "period": period,
                 "limit": limit
             }
-        )
-
-
-
-    # ==========================
-    # FUTURES BALANCE
-    # ==========================
-
-    def get_futures_balance(self):
-
-        return self._request(
-            "GET",
-            "/assets/futures/balance",
-            private=True
         )
 
 
