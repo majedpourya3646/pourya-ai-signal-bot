@@ -24,37 +24,27 @@ def now():
 
 def load_trades():
 
-    if not os.path.exists(
-        TRADE_FILE
-    ):
+    if not os.path.exists(TRADE_FILE):
         return {}
 
-
     try:
-
         with open(
             TRADE_FILE,
             "r"
         ) as f:
-
             return json.load(f)
 
-
     except Exception:
-
         return {}
 
 
 
-def save_trades(
-    trades
-):
+def save_trades(trades):
 
     os.makedirs(
         "data",
         exist_ok=True
     )
-
 
     with open(
         TRADE_FILE,
@@ -81,16 +71,14 @@ def can_buy(
     trades = load_trades()
 
 
+    # جلوگیری از خرید تکراری
     if symbol in trades:
-
         return False
 
 
 
-    if not can_open_trade(
-        trades
-    ):
-
+    # محدودیت تعداد معاملات
+    if not can_open_trade(trades):
         return False
 
 
@@ -107,21 +95,17 @@ def can_buy(
     ):
 
         valid, _ = validate_trade(
-
             balance,
             start_balance,
             trades,
             entry,
             tp,
             sl
-
         )
 
 
         if not valid:
-
             return False
-
 
 
     return True
@@ -151,13 +135,13 @@ def open_trade(
 
         "side": side,
 
-        "entry": entry,
+        "entry": float(entry),
 
-        "tp": tp,
+        "tp": float(tp),
 
-        "sl": sl,
+        "sl": float(sl),
 
-        "quantity": quantity,
+        "quantity": float(quantity),
 
         "leverage": leverage,
 
@@ -171,20 +155,18 @@ def open_trade(
 
         "status": "OPEN",
 
-        "open_time": now()
+        "open_time": now(),
+
+        "updated_at": now()
 
     }
 
 
-    save_trades(
-        trades
-    )
+    save_trades(trades)
 
 
 
-def close_trade(
-    symbol
-):
+def close_trade(symbol):
 
     trades = load_trades()
 
@@ -194,9 +176,29 @@ def close_trade(
         del trades[symbol]
 
 
-    save_trades(
-        trades
-    )
+    save_trades(trades)
+
+
+
+def update_trade(
+    symbol,
+    **kwargs
+):
+
+    trades = load_trades()
+
+
+    if symbol in trades:
+
+        for key,value in kwargs.items():
+
+            trades[symbol][key] = value
+
+
+        trades[symbol]["updated_at"] = now()
+
+
+        save_trades(trades)
 
 
 
@@ -205,16 +207,10 @@ def update_stop_loss(
     new_sl
 ):
 
-    trades = load_trades()
-
-
-    if symbol in trades:
-
-        trades[symbol]["sl"] = new_sl
-
-        save_trades(
-            trades
-        )
+    update_trade(
+        symbol,
+        sl=new_sl
+    )
 
 
 
@@ -223,34 +219,22 @@ def update_take_profit(
     new_tp
 ):
 
-    trades = load_trades()
-
-
-    if symbol in trades:
-
-        trades[symbol]["tp"] = new_tp
-
-        save_trades(
-            trades
-        )
+    update_trade(
+        symbol,
+        tp=new_tp
+    )
 
 
 
-def trade_exists(
-    symbol
-):
+def trade_exists(symbol):
 
     return symbol in load_trades()
 
 
 
-def get_trade(
-    symbol
-):
+def get_trade(symbol):
 
-    return load_trades().get(
-        symbol
-    )
+    return load_trades().get(symbol)
 
 
 
@@ -264,17 +248,7 @@ def count_open_trades():
 
     trades = load_trades()
 
-
-    return sum(
-
-        1
-        for trade in trades.values()
-
-        if trade.get(
-            "status"
-        ) == "OPEN"
-
-    )
+    return len(trades)
 
 
 
