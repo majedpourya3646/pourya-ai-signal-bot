@@ -51,6 +51,11 @@ class CoinExAPI:
         print("================")
         print("SIGN STRING:")
         print(sign_string)
+
+        print("API KEY LENGTH:", len(self.api_key))
+        print("SECRET LENGTH:", len(self.secret_key))
+        print("SECRET START:", self.secret_key[:4])
+
         print("================")
 
 
