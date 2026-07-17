@@ -13,14 +13,29 @@ class CoinExAPI:
 
     def __init__(self):
         self.base_url = BASE_URL
-        self.api_key = os.getenv("COINEX_API_KEY")
-        self.secret_key = os.getenv("COINEX_SECRET_KEY")
+
+        self.api_key = os.getenv(
+            "COINEX_API_KEY"
+        )
+
+        self.secret_key = os.getenv(
+            "COINEX_SECRET_KEY"
+        )
 
 
-    def _create_signature(self, method, path, body="", timestamp=None):
+    def create_signature(
+        self,
+        method,
+        path,
+        body="",
+        timestamp=None
+    ):
 
         if timestamp is None:
-            timestamp = str(int(time.time() * 1000))
+            timestamp = str(
+                int(time.time() * 1000)
+            )
+
 
         message = (
             method.upper()
@@ -29,21 +44,30 @@ class CoinExAPI:
             + timestamp
         )
 
+
         signature = hmac.new(
             self.secret_key.encode("utf-8"),
             message.encode("utf-8"),
             hashlib.sha256
-        ).hexdigest().upper()
+        ).hexdigest()
+
 
         return signature, timestamp
 
 
 
-    def _request(self, method, path, params=None, private=False):
+    def _request(
+        self,
+        method,
+        path,
+        params=None,
+        private=False
+    ):
 
         try:
 
             url = self.base_url + path
+
 
             body = ""
 
@@ -63,11 +87,11 @@ class CoinExAPI:
 
                 if not self.api_key or not self.secret_key:
                     raise Exception(
-                        "CoinEx API keys not found"
+                        "Missing CoinEx API keys"
                     )
 
 
-                sign, timestamp = self._create_signature(
+                sign, timestamp = self.create_signature(
                     method,
                     path,
                     body
@@ -75,9 +99,15 @@ class CoinExAPI:
 
 
                 headers.update({
+
                     "X-COINEX-KEY": self.api_key,
+
                     "X-COINEX-SIGN": sign,
-                    "X-COINEX-TIMESTAMP": timestamp
+
+                    "X-COINEX-TIMESTAMP": timestamp,
+
+                    "X-COINEX-WINDOWTIME": "5000"
+
                 })
 
 
@@ -91,7 +121,8 @@ class CoinExAPI:
                     timeout=session.timeout
                 )
 
-            else:
+
+            elif method.upper() == "POST":
 
                 response = session.post(
                     url,
@@ -99,6 +130,13 @@ class CoinExAPI:
                     headers=headers,
                     timeout=session.timeout
                 )
+
+
+            else:
+                raise Exception(
+                    "Unsupported method"
+                )
+
 
 
             logger.info(
@@ -121,14 +159,15 @@ class CoinExAPI:
         except Exception as e:
 
             logger.error(e)
+
             return None
 
 
 
 
-    # =========================
-    # SPOT KLINE
-    # =========================
+    # ==========================
+    # SPOT MARKET DATA
+    # ==========================
 
     def get_kline(
         self,
@@ -149,9 +188,9 @@ class CoinExAPI:
 
 
 
-    # =========================
+    # ==========================
     # FUTURES BALANCE
-    # =========================
+    # ==========================
 
     def get_futures_balance(self):
 
