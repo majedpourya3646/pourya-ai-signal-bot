@@ -4,14 +4,7 @@ import hmac
 import hashlib
 import requests
 
-from urllib.parse import urlencode
-
-from config import (
-    BASE_URL,
-    COINEX_API_KEY,
-    COINEX_SECRET_KEY
-)
-
+from config import BASE_URL
 from core.session import session
 from core.logger import logger
 
@@ -19,65 +12,83 @@ from core.logger import logger
 class CoinExAPI:
 
     def __init__(self):
-        self.api_key = COINEX_API_KEY
-        self.secret_key = COINEX_SECRET_KEY
-        self.base_url = BASE_URL.rstrip("/")
+        self.base_url = BASE_URL
+        self.api_key = None
+        self.secret_key = None
 
-    def _headers(self, method, request_path, body=""):
+        import os
 
-        timestamp = str(int(time.time() * 1000))
+        self.api_key = os.getenv("COINEX_API_KEY")
+        self.secret_key = os.getenv("COINEX_SECRET_KEY")
 
-        prepared = method.upper() + request_path + body + timestamp
 
-        signature = hmac.new(
-            self.secret_key.encode("latin-1"),
-            prepared.encode("latin-1"),
+    def _signature(self, method, path, body="", timestamp=None):
+
+        if timestamp is None:
+            timestamp = str(int(time.time() * 1000))
+
+        message = (
+            method.upper()
+            + path
+            + body
+            + timestamp
+        )
+
+        sign = hmac.new(
+            self.secret_key.encode(),
+            message.encode(),
             hashlib.sha256
-        ).hexdigest().lower()
+        ).hexdigest()
 
-        return {
-            "X-COINEX-KEY": self.api_key,
-            "X-COINEX-SIGN": signature,
-            "X-COINEX-TIMESTAMP": timestamp,
-            "Content-Type": "application/json"
-        }
+        return sign, timestamp
 
-    def _request(self, method, path, payload=None):
 
-        body = ""
-
-        params = None
-
-        request_path = path
-
-        if method == "GET" and payload:
-
-            query = urlencode(payload)
-
-            request_path = f"{path}?{query}"
-
-            params = payload
-
-        elif payload:
-
-            body = json.dumps(
-                payload,
-                separators=(",", ":")
-            )
-
-        url = self.base_url + request_path
+    def _request(self, method, path, params=None, private=False):
 
         try:
 
-            if method == "GET":
+            url = self.base_url + path
+
+            body = ""
+
+            if params:
+                body = json.dumps(
+                    params,
+                    separators=(",", ":")
+                )
+
+
+            headers = {
+                "Content-Type": "application/json"
+            }
+
+
+            if private:
+
+                if not self.api_key or not self.secret_key:
+                    raise Exception(
+                        "CoinEx API keys missing"
+                    )
+
+                sign, timestamp = self._signature(
+                    method,
+                    path,
+                    body
+                )
+
+                headers.update({
+                    "X-COINEX-KEY": self.api_key,
+                    "X-COINEX-SIGN": sign,
+                    "X-COINEX-TIMESTAMP": timestamp
+                })
+
+
+            if method.upper() == "GET":
 
                 response = session.get(
                     url,
                     params=params,
-                    headers=self._headers(
-                        method,
-                        request_path
-                    ),
+                    headers=headers,
                     timeout=session.timeout
                 )
 
@@ -85,166 +96,75 @@ class CoinExAPI:
 
                 response = session.post(
                     url,
-                    json=payload,
-                    headers=self._headers(
-                        method,
-                        request_path,
-                        body
-                    ),
+                    json=params,
+                    headers=headers,
                     timeout=session.timeout
                 )
 
-            print("=" * 60)
-            print("URL:", response.request.url)
-            print("STATUS:", response.status_code)
-            print(response.text)
-            print("=" * 60)
 
-            result = response.json()
+            logger.info(
+                f"URL: {response.url}"
+            )
 
-            if result.get("code") != 0:
-                logger.error(result)
-                return None
+            logger.info(
+                f"STATUS: {response.status_code}"
+            )
 
-            return result
+            logger.info(
+                response.text[:500]
+            )
+
+
+            return response.json()
+
 
         except Exception as e:
-            logger.exception(e)
+
+            logger.error(e)
             return None
 
+
+
     # =========================
-    # BALANCE
+    # Market Data
     # =========================
 
-    def get_balance(self):
-        return self.get_futures_balance()
+    def get_kline(
+        self,
+        market="BTCUSDT",
+        period="15min",
+        limit=300
+    ):
+
+        path = "/spot/kline"
+
+        params = {
+            "market": market,
+            "period": period,
+            "limit": limit
+        }
+
+        return self._request(
+            "GET",
+            path,
+            params
+        )
+
+
+    # =========================
+    # Futures Balance
+    # =========================
 
     def get_futures_balance(self):
-        return self._request(
-            "GET",
-            "/assets/futures/balance"
-        )
 
-    # =========================
-    # POSITIONS
-    # =========================
-
-    def get_futures_positions(self):
-        return self._request(
-            "GET",
-            "/futures/pending-position"
-        )
-
-    # =========================
-    # CREATE ORDER
-    # =========================
-
-    def create_futures_order(
-        self,
-        market,
-        side,
-        amount,
-        order_type="market",
-        leverage=10
-    ):
-
-        payload = {
-            "market": market,
-            "market_type": "FUTURES",
-            "side": side,
-            "type": order_type,
-            "amount": str(amount),
-            "leverage": leverage
-        }
-
-        return self._request(
-            "POST",
-            "/futures/order",
-            payload
-        )
-
-    # =========================
-    # LEVERAGE
-    # =========================
-
-    def set_leverage(
-        self,
-        market,
-        leverage
-    ):
-
-        payload = {
-            "market": market,
-            "market_type": "FUTURES",
-            "leverage": leverage
-        }
-
-        return self._request(
-            "POST",
-            "/futures/set-leverage",
-            payload
-        )
-
-    # =========================
-    # TP / SL
-    # =========================
-
-    def set_tp_sl(
-        self,
-        market,
-        position_id,
-        take_profit,
-        stop_loss
-    ):
-
-        payload = {
-            "market": market,
-            "position_id": position_id,
-            "take_profit": str(take_profit),
-            "stop_loss": str(stop_loss)
-        }
-
-        return self._request(
-            "POST",
-            "/futures/set-position-stop",
-            payload
-        )
-
-    # =========================
-    # CANCEL
-    # =========================
-
-    def cancel_order(
-        self,
-        market,
-        order_id
-    ):
-
-        return self._request(
-            "POST",
-            "/futures/cancel-order",
-            {
-                "market": market,
-                "order_id": order_id
-            }
-        )
-
-    # =========================
-    # OPEN ORDERS
-    # =========================
-
-    def get_open_orders(
-        self,
-        market
-    ):
+        path = "/assets/futures/balance"
 
         return self._request(
             "GET",
-            "/futures/pending-order",
-            {
-                "market": market
-            }
+            path,
+            private=True
         )
+
 
 
 coinex = CoinExAPI()
