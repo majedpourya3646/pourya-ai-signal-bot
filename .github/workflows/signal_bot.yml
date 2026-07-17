@@ -30,4 +30,4 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
 
         run: |
-          python test.py
+          python coinex_balance_test.py
