@@ -1,110 +1,230 @@
 import sqlite3
+import os
 from datetime import datetime
 
 
-DATABASE_NAME = "pourya_trader.db"
+DB_FOLDER = "data"
+DB_FILE = os.path.join(
+    DB_FOLDER,
+    "trader.db"
+)
 
 
 def get_connection():
-    return sqlite3.connect(DATABASE_NAME)
+
+    os.makedirs(
+        DB_FOLDER,
+        exist_ok=True
+    )
+
+    conn = sqlite3.connect(
+        DB_FILE
+    )
+
+    conn.row_factory = sqlite3.Row
+
+    return conn
+
 
 
 def init_database():
+
     conn = get_connection()
+
     cursor = conn.cursor()
 
-    # Users table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telegram_id INTEGER UNIQUE,
-        name TEXT,
-        role TEXT DEFAULT 'USER',
-        status TEXT DEFAULT 'ACTIVE',
-        created_at TEXT
-    )
-    """)
 
-    # Exchange accounts table
+    # معاملات باز
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        exchange TEXT,
-        api_key TEXT,
-        api_secret TEXT,
-        capital REAL DEFAULT 0,
-        created_at TEXT,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-    """)
+    CREATE TABLE IF NOT EXISTS open_trades (
 
-    # Trades table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS trades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        symbol TEXT,
+
+        symbol TEXT UNIQUE,
+
         side TEXT,
+
         entry REAL,
-        exit REAL,
-        profit REAL DEFAULT 0,
-        status TEXT DEFAULT 'OPEN',
-        opened_at TEXT,
-        closed_at TEXT,
-        FOREIGN KEY(user_id) REFERENCES users(id)
+
+        tp REAL,
+
+        sl REAL,
+
+        quantity REAL,
+
+        leverage INTEGER,
+
+        confidence INTEGER,
+
+        signal TEXT,
+
+        order_id TEXT,
+
+        status TEXT,
+
+        open_time TEXT
+
     )
     """)
 
-    # Profit sharing table
+
+
+    # تاریخچه معاملات
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS profit_share (
+    CREATE TABLE IF NOT EXISTS history (
+
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
+
+        symbol TEXT,
+
+        result TEXT,
+
         profit REAL,
-        fee_percent REAL,
-        fee_amount REAL,
-        created_at TEXT,
-        FOREIGN KEY(user_id) REFERENCES users(id)
+
+        close_time TEXT
+
     )
     """)
+
+
 
     conn.commit()
+
     conn.close()
 
 
-def add_user(telegram_id, name, role="USER"):
+
+def add_open_trade(trade):
+
     conn = get_connection()
+
     cursor = conn.cursor()
 
+
     cursor.execute("""
-    INSERT OR IGNORE INTO users
-    (telegram_id, name, role, created_at)
-    VALUES (?, ?, ?, ?)
-    """,
+
+    INSERT OR REPLACE INTO open_trades
+
     (
-        telegram_id,
-        name,
-        role,
-        datetime.now().isoformat()
+    symbol,
+    side,
+    entry,
+    tp,
+    sl,
+    quantity,
+    leverage,
+    confidence,
+    signal,
+    order_id,
+    status,
+    open_time
+    )
+
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+
+    """,
+
+    (
+
+    trade["symbol"],
+    trade["side"],
+    trade["entry"],
+    trade["tp"],
+    trade["sl"],
+    trade["quantity"],
+    trade["leverage"],
+    trade["confidence"],
+    trade["signal"],
+    trade["order_id"],
+    trade["status"],
+    trade["open_time"]
+
     ))
 
+
     conn.commit()
+
     conn.close()
 
 
-def get_user(telegram_id):
+
+def get_open_trades():
+
     conn = get_connection()
+
     cursor = conn.cursor()
 
-    cursor.execute("""
-    SELECT * FROM users
-    WHERE telegram_id=?
-    """,
-    (telegram_id,))
 
-    user = cursor.fetchone()
+    cursor.execute(
+        """
+        SELECT * FROM open_trades
+        WHERE status='OPEN'
+        """
+    )
+
+
+    rows = cursor.fetchall()
 
     conn.close()
 
-    return user
+
+    return [
+        dict(row)
+        for row in rows
+    ]
+
+
+
+def close_trade_db(
+    symbol,
+    result,
+    profit
+):
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+
+    cursor.execute(
+    """
+    UPDATE open_trades
+
+    SET status='CLOSED'
+
+    WHERE symbol=?
+
+    """,
+    (symbol,)
+    )
+
+
+    cursor.execute(
+    """
+    INSERT INTO history
+
+    (
+    symbol,
+    result,
+    profit,
+    close_time
+    )
+
+    VALUES (?,?,?,?)
+
+    """,
+
+    (
+    symbol,
+    result,
+    profit,
+    datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    ))
+
+
+    conn.commit()
+
+    conn.close()
