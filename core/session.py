@@ -1,93 +1,26 @@
+import os
 import requests
+from dotenv import load_dotenv
 
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+load_dotenv()
 
-from config import (
-    REQUEST_TIMEOUT,
-    MAX_RETRIES
-)
+COINEX_API_KEY = os.getenv("COINEX_API_KEY")
+COINEX_SECRET_KEY = os.getenv("COINEX_SECRET_KEY")
 
-
-def create_session():
-
-    session = requests.Session()
+BASE_URL = "https://api.coinex.com/v2"
 
 
-    retry = Retry(
-
-        total=MAX_RETRIES,
-
-        backoff_factor=1,
-
-        status_forcelist=[
-
-            429,
-            500,
-            502,
-            503,
-            504
-
-        ],
-
-        allowed_methods=[
-
-            "GET",
-            "POST",
-            "PUT",
-            "DELETE"
-
-        ],
-
-        raise_on_status=False
-
-    )
+session = requests.Session()
 
 
-    adapter = HTTPAdapter(
+def test_connection():
+    if not COINEX_API_KEY or not COINEX_SECRET_KEY:
+        return {
+            "status": "error",
+            "message": "API keys not found"
+        }
 
-        max_retries=retry
-
-    )
-
-
-    session.mount(
-
-        "https://",
-
-        adapter
-
-    )
-
-
-    session.mount(
-
-        "http://",
-
-        adapter
-
-    )
-
-
-    # Default timeout
-    session.timeout = REQUEST_TIMEOUT
-    session.request_timeout = REQUEST_TIMEOUT
-
-
-    # Headers عمومی
-    session.headers.update({
-
-        "User-Agent": "Pourya-Trader-AI/1.0",
-
-        "Accept": "application/json"
-
-    })
-
-
-    return session
-
-
-
-# Global Session
-
-session = create_session()
+    return {
+        "status": "ok",
+        "message": "CoinEx API keys loaded"
+    }
