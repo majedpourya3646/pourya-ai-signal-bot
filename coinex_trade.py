@@ -1,12 +1,13 @@
 import time
+import json
 import hmac
 import hashlib
-import json
 
 from config import (
     BASE_URL,
     COINEX_API_KEY,
-    COINEX_SECRET_KEY
+    COINEX_SECRET_KEY,
+    PAPER_TRADING
 )
 
 from core.session import session
@@ -15,9 +16,20 @@ from core.logger import logger
 
 class CoinExTrade:
 
+
     def __init__(self):
+
         self.base_url = BASE_URL
 
+        self.api_key = COINEX_API_KEY
+
+        self.secret_key = COINEX_SECRET_KEY
+
+
+
+    # =========================
+    # Signature
+    # =========================
 
     def sign(
         self,
@@ -30,82 +42,157 @@ class CoinExTrade:
             int(time.time() * 1000)
         )
 
-        message = (
-            method
-            + path
-            + body
-            + timestamp
+
+        prepared = (
+            method.upper()
+            +
+            path
+            +
+            body
+            +
+            timestamp
         )
 
+
         signature = hmac.new(
-            COINEX_SECRET_KEY.encode(),
-            message.encode(),
+            self.secret_key.encode(),
+            prepared.encode(),
             hashlib.sha256
         ).hexdigest()
 
 
-        return {
-            "X-COINEX-KEY": COINEX_API_KEY,
-            "X-COINEX-SIGN": signature,
-            "X-COINEX-TIMESTAMP": timestamp
+        return signature, timestamp
+
+
+
+
+    # =========================
+    # Futures Order
+    # =========================
+
+    def create_order(
+        self,
+        market,
+        side,
+        amount,
+        price=None
+    ):
+
+
+        if PAPER_TRADING:
+
+            logger.info(
+                f"PAPER ORDER {side} {market} qty={amount}"
+            )
+
+
+            return {
+
+                "code":0,
+
+                "message":"Paper Trading",
+
+                "data":{
+
+                    "market":market,
+
+                    "side":side,
+
+                    "amount":amount
+
+                }
+
+            }
+
+
+
+        path = "/v2/futures/order"
+
+
+        url = self.base_url + path
+
+
+        body_data = {
+
+            "market": market,
+
+            "side": side,
+
+            "type": "market",
+
+            "amount": str(amount)
+
         }
 
 
 
-    def request(
-        self,
-        method,
-        path,
-        params=None
-    ):
-
-        url = self.base_url + path
-
-        body = ""
-
-        if params:
-            body = json.dumps(
-                params,
-                separators=(",", ":")
-            )
+        body = json.dumps(
+            body_data,
+            separators=(",",":")
+        )
 
 
-        headers = self.sign(
-            method,
+
+        sign, timestamp = self.sign(
+            "POST",
             path,
             body
         )
 
 
+
+        headers = {
+
+            "X-COINEX-KEY":
+                self.api_key,
+
+            "X-COINEX-SIGN":
+                sign,
+
+            "X-COINEX-TIMESTAMP":
+                timestamp,
+
+            "Content-Type":
+                "application/json"
+
+        }
+
+
+
         try:
 
-            if method == "POST":
 
-                response = session.post(
-                    url,
-                    json=params,
-                    headers=headers,
-                    timeout=session.timeout
-                )
+            response = session.post(
 
-            else:
+                url,
 
-                response = session.get(
-                    url,
-                    params=params,
-                    headers=headers,
-                    timeout=session.timeout
-                )
+                data=body,
+
+                headers=headers,
+
+                timeout=10
+
+            )
+
 
 
             logger.info(
-                f"ORDER RESPONSE: {response.text}"
+                f"ORDER STATUS: {response.status_code}"
             )
+
+
+            logger.info(
+                response.text
+            )
+
+
 
             return response.json()
 
 
+
         except Exception as e:
+
 
             logger.exception(e)
 
@@ -113,114 +200,70 @@ class CoinExTrade:
 
 
 
-    # ======================
-    # OPEN LONG
-    # ======================
+
+    # =========================
+    # Long Position
+    # =========================
 
     def open_long(
         self,
         symbol,
-        amount,
-        leverage=10
+        quantity
     ):
 
-        params = {
 
-            "market": symbol,
+        return self.create_order(
 
-            "side": "buy",
+            symbol,
 
-            "type": "market",
+            "buy",
 
-            "amount": str(amount),
+            quantity
 
-            "leverage": str(leverage)
-
-        }
-
-
-        return self.request(
-            "POST",
-            "/futures/order",
-            params
         )
 
 
 
-    # ======================
-    # OPEN SHORT
-    # ======================
+    # =========================
+    # Short Position
+    # =========================
 
     def open_short(
         self,
         symbol,
-        amount,
-        leverage=10
+        quantity
     ):
 
-        params = {
 
-            "market": symbol,
+        return self.create_order(
 
-            "side": "sell",
+            symbol,
 
-            "type": "market",
+            "sell",
 
-            "amount": str(amount),
+            quantity
 
-            "leverage": str(leverage)
-
-        }
-
-
-        return self.request(
-            "POST",
-            "/futures/order",
-            params
         )
 
 
 
-    # ======================
-    # CLOSE
-    # ======================
+    # =========================
+    # Close Position
+    # =========================
 
     def close_position(
         self,
-        symbol,
-        side,
-        amount
+        symbol
     ):
 
-        params = {
 
-            "market": symbol,
-
-            "side": side,
-
-            "type": "market",
-
-            "amount": str(amount),
-
-            "reduce_only": True
-
-        }
-
-
-        return self.request(
-            "POST",
-            "/futures/order",
-            params
+        logger.info(
+            f"Close position {symbol}"
         )
 
 
+        return True
 
-    def get_balance(self):
-
-        return self.request(
-            "GET",
-            "/assets/futures/balance"
-        )
 
 
 
