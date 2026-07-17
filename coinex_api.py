@@ -87,9 +87,6 @@ class CoinExAPI:
 
             if private:
 
-                # BASE_URL شامل /v2 است
-                # Signature باید مسیر کامل V2 را داشته باشد
-
                 request_path = "/v2" + path
 
 
@@ -109,10 +106,9 @@ class CoinExAPI:
                 headers.update({
 
                     "X-COINEX-KEY": self.api_key,
-
                     "X-COINEX-SIGN": sign,
-
-                    "X-COINEX-TIMESTAMP": timestamp
+                    "X-COINEX-TIMESTAMP": timestamp,
+                    "Authorization": self.api_key
 
                 })
 
@@ -172,10 +168,6 @@ class CoinExAPI:
 
 
 
-    # =========================
-    # FUTURES BALANCE
-    # =========================
-
     def get_futures_balance(self):
 
         return self._request(
@@ -185,10 +177,6 @@ class CoinExAPI:
         )
 
 
-
-    # =========================
-    # SPOT KLINE
-    # =========================
 
     def get_kline(
         self,
