@@ -19,33 +19,19 @@ from core.logger import logger
 class CoinExAPI:
 
     def __init__(self):
-
         self.api_key = COINEX_API_KEY
         self.secret_key = COINEX_SECRET_KEY
         self.base_url = BASE_URL.rstrip("/")
-        print("API KEY =", self.api_key)
-        print("SECRET LENGTH =", len(self.secret_key) if self.secret_key else 0)
-        print("BASE URL =", self.base_url)
 
-    def _headers(
-        self,
-        method,
-        request_path,
-        body=""
-    ):
+    def _headers(self, method, request_path, body=""):
 
         timestamp = str(int(time.time() * 1000))
 
-        prepared = (
-            method.upper()
-            + request_path
-            + body
-            + timestamp
-        )
+        prepared = method.upper() + request_path + body + timestamp
 
         signature = hmac.new(
-            self.secret_key.encode("utf-8"),
-            prepared.encode("utf-8"),
+            self.secret_key.encode("latin-1"),
+            prepared.encode("latin-1"),
             hashlib.sha256
         ).hexdigest().lower()
 
@@ -56,49 +42,42 @@ class CoinExAPI:
             "Content-Type": "application/json"
         }
 
-    def _request(
-        self,
-        method,
-        path,
-        payload=None
-    ):
+    def _request(self, method, path, payload=None):
 
         body = ""
 
+        params = None
+
         request_path = path
 
-        if method.upper() == "GET" and payload:
+        if method == "GET" and payload:
 
             query = urlencode(payload)
 
             request_path = f"{path}?{query}"
 
-            url = self.base_url + request_path
+            params = payload
 
-        else:
+        elif payload:
 
-            url = self.base_url + path
+            body = json.dumps(
+                payload,
+                separators=(",", ":")
+            )
 
-            if payload is not None:
-
-                body = json.dumps(
-                    payload,
-                    separators=(",", ":")
-                )
+        url = self.base_url + request_path
 
         try:
 
-            headers = self._headers(
-                method,
-                request_path,
-                body
-            )
-
-            if method.upper() == "GET":
+            if method == "GET":
 
                 response = session.get(
                     url,
-                    headers=headers,
+                    params=params,
+                    headers=self._headers(
+                        method,
+                        request_path
+                    ),
                     timeout=session.timeout
                 )
 
@@ -106,18 +85,20 @@ class CoinExAPI:
 
                 response = session.post(
                     url,
-                    headers=headers,
-                    data=body if body else None,
-                    timeout=session.request_timeout
+                    json=payload,
+                    headers=self._headers(
+                        method,
+                        request_path,
+                        body
+                    ),
+                    timeout=session.timeout
                 )
 
             print("=" * 60)
-            print("URL:", url)
+            print("URL:", response.request.url)
             print("STATUS:", response.status_code)
             print(response.text)
             print("=" * 60)
-
-            response.raise_for_status()
 
             result = response.json()
 
@@ -128,9 +109,7 @@ class CoinExAPI:
             return result
 
         except Exception as e:
-
             logger.exception(e)
-
             return None
 
     # =========================
@@ -231,6 +210,10 @@ class CoinExAPI:
             payload
         )
 
+    # =========================
+    # CANCEL
+    # =========================
+
     def cancel_order(
         self,
         market,
@@ -245,6 +228,10 @@ class CoinExAPI:
                 "order_id": order_id
             }
         )
+
+    # =========================
+    # OPEN ORDERS
+    # =========================
 
     def get_open_orders(
         self,
