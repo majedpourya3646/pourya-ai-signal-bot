@@ -6,21 +6,9 @@ def analyze_symbol(symbol):
 
     try:
 
-        df_15m = get_market_data(
-            symbol,
-            interval="15"
-        )
-
-        df_1h = get_market_data(
-            symbol,
-            interval="60"
-        )
-
-        df_4h = get_market_data(
-            symbol,
-            interval="240"
-        )
-
+        df_15m = get_market_data(symbol, interval="15")
+        df_1h = get_market_data(symbol, interval="60")
+        df_4h = get_market_data(symbol, interval="240")
 
         if (
             df_15m.empty
@@ -34,132 +22,66 @@ def analyze_symbol(symbol):
                 "tp": None,
                 "sl": None,
                 "confidence": 0,
+                "reasons": [],
                 "detail": {}
             }
 
-
-
         result_15m = analyze_market(df_15m)
-
         result_1h = analyze_market(df_1h)
-
         result_4h = analyze_market(df_4h)
 
-
-
         score_15m = result_15m["confidence"]
-
         score_1h = result_1h["confidence"]
-
         score_4h = result_4h["confidence"]
-
-
 
         average_score = round(
             (
-                score_15m * 0.25
-                +
-                score_1h * 0.35
-                +
-                score_4h * 0.40
+                score_15m * 0.40 +
+                score_1h * 0.35 +
+                score_4h * 0.25
             )
         )
 
-
-
         print(
-            symbol,
-            "| 15M:",
-            score_15m,
-            result_15m["signal"],
-            "| 1H:",
-            score_1h,
-            result_1h["signal"],
-            "| 4H:",
-            score_4h,
-            result_4h["signal"],
-            "| AVG:",
-            average_score
+            f"{symbol} | "
+            f"15M: {score_15m} {result_15m['signal']} | "
+            f"1H: {score_1h} {result_1h['signal']} | "
+            f"4H: {score_4h} {result_4h['signal']} | "
+            f"AVG: {average_score}"
         )
 
+        bullish = 0
 
+        for r in (result_15m, result_1h, result_4h):
 
-        bullish_count = 0
+            if r["signal"] in ["BUY", "STRONG BUY"]:
+                bullish += 1
 
-
-        for result in [
-            result_15m,
-            result_1h,
-            result_4h
-        ]:
-
-            if result["signal"] in [
-                "BUY",
-                "STRONG BUY"
-            ]:
-
-                bullish_count += 1
-
-
-
-        # ================= SMART FILTER =================
-
-
-        higher_timeframe_ok = (
-            result_4h["signal"] in [
-                "BUY",
-                "STRONG BUY"
-            ]
-        )
-
-
-        medium_timeframe_ok = (
-            result_1h["signal"] in [
-                "BUY",
-                "STRONG BUY"
-            ]
-        )
-
-
-        short_timeframe_ok = (
-            result_15m["signal"] in [
-                "BUY",
-                "STRONG BUY"
-            ]
-        )
-
-
-
-        # ================= FINAL SIGNAL =================
-
-
-        if (
-            bullish_count == 3
-            and
-            average_score >= 70
-        ):
+        if bullish >= 3 and average_score >= 70:
 
             final_signal = "STRONG BUY"
 
-
-
-        elif (
-            higher_timeframe_ok
-            and
-            (medium_timeframe_ok or short_timeframe_ok)
-            and
-            average_score >= 45
-        ):
+        elif bullish >= 2 and average_score >= 55:
 
             final_signal = "BUY"
 
+        elif (
+            result_15m["signal"] == "BUY"
+            and result_1h["signal"] == "BUY"
+            and average_score >= 50
+        ):
 
+            final_signal = "BUY"
 
         else:
 
             final_signal = "WAIT"
 
-
+        reasons = (
+            result_15m.get("reasons", [])
+            + result_1h.get("reasons", [])
+            + result_4h.get("reasons", [])
+        )
 
         return {
 
@@ -173,6 +95,8 @@ def analyze_symbol(symbol):
 
             "confidence": average_score,
 
+            "reasons": reasons,
+
             "detail": {
 
                 "15m": result_15m,
@@ -185,16 +109,9 @@ def analyze_symbol(symbol):
 
         }
 
-
-
     except Exception as e:
 
-        print(
-            "MULTI ERROR:",
-            symbol,
-            e
-        )
-
+        print("MULTI ERROR:", symbol, e)
 
         return {
 
@@ -207,6 +124,8 @@ def analyze_symbol(symbol):
             "sl": None,
 
             "confidence": 0,
+
+            "reasons": [],
 
             "detail": {}
 
