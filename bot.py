@@ -1,9 +1,5 @@
 from coinex_api import coinex
-
-from config import (
-    SYMBOLS,
-    INITIAL_BALANCE
-)
+from coinex_trade import coinex_trade
 
 from performance import (
     add_trade,
@@ -11,13 +7,19 @@ from performance import (
     report as performance_report
 )
 
+from market import get_market_data
 from multi_timeframe import analyze_symbol
 
 from telegram_sender import send_message
 
-from portfolio import get_trade_summary
+from portfolio import (
+    INITIAL_BALANCE,
+    get_trade_summary
+)
 
-from risk_manager import validate_trade
+from risk_manager import (
+    validate_trade
+)
 
 from trade_manager import (
     can_buy,
@@ -26,8 +28,15 @@ from trade_manager import (
     get_all_trades
 )
 
-from core.logger import logger
 
+
+SYMBOLS = [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT"
+]
 
 
 START_BALANCE = INITIAL_BALANCE
@@ -40,11 +49,19 @@ signal_text = {
 
     "STRONG BUY": "🚀 STRONG BUY",
 
+    "SELL": "🔴 SELL",
+
+    "STRONG SELL": "⚠️ STRONG SELL",
+
     "WAIT": "⏳ WAIT"
 
 }
 
 
+
+# ==========================
+# Check Open Trades
+# ==========================
 
 def check_open_trades():
 
@@ -59,41 +76,49 @@ def check_open_trades():
 
         try:
 
-            result = analyze_symbol(symbol)
-
-
-            price = result.get(
-                "entry"
+            df = get_market_data(
+                symbol,
+                interval="15"
             )
 
 
-            if price is None:
+            if df.empty:
                 continue
 
 
 
-            if price >= trade["tp"]:
+            high = float(
+                df["high"].iloc[-1]
+            )
+
+            low = float(
+                df["low"].iloc[-1]
+            )
+
+
+
+            if high >= trade["tp"]:
+
 
                 profit = round(
-
                     (
                         (trade["tp"] - trade["entry"])
                         /
                         trade["entry"]
-
-                    ) * 100,
-
+                    )
+                    * 100,
                     2
-
                 )
 
 
                 send_message(
+                    f"""
+🎉 <b>TP HIT</b>
 
-                    f"🎉 <b>TP HIT</b>\n\n"
-                    f"🪙 {symbol}\n"
-                    f"📈 Profit: {profit}%"
+🪙 {symbol}
 
+📈 Profit: {profit}%
+"""
                 )
 
 
@@ -106,29 +131,34 @@ def check_open_trades():
                 )
 
 
+                continue
 
-            elif price <= trade["sl"]:
+
+
+
+
+            if low <= trade["sl"]:
+
 
                 loss = round(
-
                     (
                         (trade["entry"] - trade["sl"])
                         /
                         trade["entry"]
-
-                    ) * 100,
-
+                    )
+                    * 100,
                     2
-
                 )
 
 
                 send_message(
+                    f"""
+❌ <b>SL HIT</b>
 
-                    f"❌ <b>SL HIT</b>\n\n"
-                    f"🪙 {symbol}\n"
-                    f"📉 Loss: {loss}%"
+🪙 {symbol}
 
+📉 Loss: {loss}%
+"""
                 )
 
 
@@ -141,52 +171,74 @@ def check_open_trades():
                 )
 
 
+
         except Exception as e:
 
-            logger.exception(
-                f"CHECK ERROR {symbol}: {e}"
+            print(
+                "CHECK ERROR",
+                symbol,
+                e
             )
 
 
 
+
+
+# ==========================
+# Main Bot
+# ==========================
+
+
 def run_bot():
 
-
     try:
+
 
         api = coinex.get_balance()
 
 
         if not api or api.get("code") != 0:
 
+
             send_message(
-                "❌ CoinEx Connection Failed"
+                "❌ CoinEx connection failed"
             )
 
             return
 
 
 
-        logger.info(
-            "CoinEx Connected"
+        send_message(
+            """
+✅ <b>Pourya Trader AI Started</b>
+
+CoinEx Connected
+"""
         )
+
 
 
     except Exception as e:
 
 
-        logger.exception(e)
+        send_message(
+            f"❌ CoinEx Error\n\n{e}"
+        )
 
         return
+
+
 
 
 
     check_open_trades()
 
 
-    report = (
-        "📊 <b>Pourya Trader AI</b>\n\n"
-    )
+
+    report = """
+📊 <b>Pourya Trader AI</b>
+
+"""
 
 
     signals = 0
@@ -199,20 +251,20 @@ def run_bot():
         try:
 
 
-            result = analyze_symbol(
-                symbol
-            )
+            result = analyze_symbol(symbol)
+
 
 
             report += (
 
                 f"🪙 <b>{symbol}</b>\n"
 
-                f"📌 {signal_text.get(result['signal'],'WAIT')}\n"
+                f"📌 {signal_text.get(result['signal'])}\n"
 
-                f"⭐ {result['confidence']}%\n\n"
+                f"⭐ Confidence: {result['confidence']}%\n\n"
 
             )
+
 
 
             if result["signal"] == "WAIT":
@@ -221,7 +273,15 @@ def run_bot():
 
 
 
-            entry = result["entry"]
+            entry = result.get("entry")
+
+
+
+            if entry is None:
+
+                continue
+
+
 
 
 
@@ -245,7 +305,9 @@ def run_bot():
 
 
 
-            valid, _ = validate_trade(
+
+
+            valid, position = validate_trade(
 
                 INITIAL_BALANCE,
 
@@ -262,9 +324,12 @@ def run_bot():
             )
 
 
+
             if not valid:
 
                 continue
+
+
 
 
 
@@ -281,7 +346,34 @@ def run_bot():
             )
 
 
+
             qty = summary["quantity"]
+
+
+
+
+
+            # ==========================
+            # CoinEx Execution
+            # ==========================
+
+
+            order = coinex_trade.open_long(
+
+                symbol,
+
+                qty
+
+            )
+
+
+
+            print(
+                "ORDER RESULT:",
+                order
+            )
+
+
 
 
 
@@ -299,68 +391,103 @@ def run_bot():
 
                 result["signal"],
 
-                result["confidence"]
+                result["confidence"],
+
+                result.get("grade",""),
 
             )
 
 
 
+
+
             add_trade(
-    symbol,
-    result["signal"],
-    entry,
-    result["tp"],
-    result["sl"],
-    quantity=qty,
-    confidence=result["confidence"],
-    grade=result.get("grade","")
-)
+
+                symbol,
+
+                result["signal"],
+
+                entry,
+
+                result["tp"],
+
+                result["sl"],
+
+                None,
+
+                0,
+
+                qty,
+
+                result["confidence"],
+
+                result.get("grade","")
+
+            )
+
 
 
             signals += 1
 
 
 
+
+
             send_message(
 
-                f"🚨 <b>NEW SIGNAL</b>\n\n"
+                f"""
+🚨 <b>NEW SIGNAL</b>
 
-                f"🪙 {symbol}\n"
+🪙 {symbol}
 
-                f"📊 {result['signal']}\n"
+📊 {result['signal']}
 
-                f"💰 Entry: {entry}\n"
+💰 Entry: {entry}
 
-                f"🎯 TP: {result['tp']}\n"
+🎯 TP: {result['tp']}
 
-                f"🛑 SL: {result['sl']}"
+🛑 SL: {result['sl']}
 
+📦 Quantity: {qty}
+"""
             )
+
+
 
 
 
         except Exception as e:
 
-            logger.exception(
-                f"BOT ERROR {symbol}: {e}"
+
+            print(
+                "BOT ERROR",
+                symbol,
+                e
             )
+
+
 
 
 
     report += (
 
-        f"\n📈 Signals: {signals}\n"
+        f"📈 Signals: {signals}\n\n"
 
         "🤖 Pourya Trader AI"
 
     )
 
 
+
     send_message(report)
+
+
 
     send_message(
         performance_report()
     )
+
+
 
 
 
