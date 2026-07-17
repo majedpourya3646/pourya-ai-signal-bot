@@ -1,3 +1,4 @@
+
 import json
 import os
 from datetime import datetime, timezone
@@ -125,7 +126,7 @@ def open_trade(
     side="LONG",
     leverage=1
 ):
-
+    print("OPEN TRADE CALLED:", symbol)
     trades = load_trades()
 
 
