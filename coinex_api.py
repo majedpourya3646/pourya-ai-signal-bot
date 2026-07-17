@@ -38,13 +38,14 @@ class CoinExAPI:
             + timestamp
         )
 
-        sign = hmac.new(
+        signature = hmac.new(
             self.secret_key.encode("utf-8"),
             sign_string.encode("utf-8"),
             hashlib.sha256
-        ).hexdigest().lower()
+        ).hexdigest()
 
-        return sign, timestamp
+        return signature, timestamp
+
 
     def _request(
         self,
@@ -58,17 +59,22 @@ class CoinExAPI:
 
             url = self.base_url + path
 
-            body = ""
-
             headers = {
                 "Content-Type": "application/json"
             }
 
+            body = ""
+
             if private:
+
+                if not self.api_key or not self.secret_key:
+                    raise Exception(
+                        "CoinEx API keys are missing"
+                    )
 
                 sign, timestamp = self.create_signature(
                     method,
-                    "/v2" + path,
+                    path,
                     params,
                     body
                 )
@@ -79,13 +85,21 @@ class CoinExAPI:
                     "X-COINEX-TIMESTAMP": timestamp
                 })
 
+
+            timeout = getattr(
+                session,
+                "timeout",
+                15
+            )
+
+
             if method.upper() == "GET":
 
                 response = session.get(
                     url,
                     params=params,
                     headers=headers,
-                    timeout=session.timeout
+                    timeout=timeout
                 )
 
             else:
@@ -94,19 +108,32 @@ class CoinExAPI:
                     url,
                     json=params,
                     headers=headers,
-                    timeout=session.timeout
+                    timeout=timeout
                 )
 
-            logger.info(f"URL: {response.url}")
-            logger.info(f"STATUS: {response.status_code}")
-            logger.info(response.text[:500])
+
+            logger.info(
+                f"URL: {response.url}"
+            )
+
+            logger.info(
+                f"STATUS: {response.status_code}"
+            )
+
+            logger.info(
+                response.text[:500]
+            )
+
 
             return response.json()
+
 
         except Exception as e:
 
             logger.exception(e)
             return None
+
+
 
     # ===========================
     # Futures Balance
@@ -120,6 +147,7 @@ class CoinExAPI:
             private=True
         )
 
+
     # ===========================
     # Spot Balance
     # ===========================
@@ -132,15 +160,15 @@ class CoinExAPI:
             private=True
         )
 
+
     # ===========================
     # Compatibility
     # ===========================
 
     def get_balance(self):
-        """
-        برای سازگاری با فایل‌های قدیمی ربات
-        """
+
         return self.get_futures_balance()
+
 
 
 coinex = CoinExAPI()
