@@ -32,4 +32,4 @@ jobs:
           COINEX_SECRET_KEY: ${{ secrets.COINEX_SECRET_KEY }}
 
         run: |
-          python bot.py
+          python coinex_test.py
