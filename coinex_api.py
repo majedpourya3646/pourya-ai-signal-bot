@@ -35,7 +35,6 @@ class CoinExAPI:
         body=""
     ):
 
-
         timestamp = str(
             int(time.time() * 1000)
         )
@@ -58,35 +57,29 @@ class CoinExAPI:
 
 
         sign_string = (
-
             method.upper()
-
             +
             request_path
-
             +
             body
-
             +
             timestamp
-
         )
 
 
         sign = hmac.new(
-
             self.secret_key.encode("utf-8"),
-
             sign_string.encode("utf-8"),
-
             hashlib.sha256
-
         ).hexdigest().lower()
-
 
 
         logger.info(
             f"SIGN STRING: {sign_string}"
+        )
+
+        logger.info(
+            f"SIGN: {sign}"
         )
 
 
@@ -103,9 +96,7 @@ class CoinExAPI:
         private=False
     ):
 
-
         try:
-
 
             url = self.base_url + path
 
@@ -128,7 +119,7 @@ class CoinExAPI:
 
                     method,
 
-                    path,
+                    "/v2" + path,
 
                     params,
 
@@ -197,7 +188,6 @@ class CoinExAPI:
             )
 
 
-
             return response.json()
 
 
@@ -206,7 +196,6 @@ class CoinExAPI:
 
 
             logger.exception(e)
-
 
             return None
 
@@ -218,9 +207,7 @@ class CoinExAPI:
     # Futures Balance
     # ===========================
 
-
     def get_futures_balance(self):
-
 
         return self._request(
 
@@ -240,9 +227,7 @@ class CoinExAPI:
     # Spot Balance
     # ===========================
 
-
     def get_spot_balance(self):
-
 
         return self._request(
 
@@ -262,9 +247,7 @@ class CoinExAPI:
     # Compatibility
     # ===========================
 
-
     def get_balance(self):
-
 
         return self.get_futures_balance()
 
