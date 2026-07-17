@@ -7,6 +7,7 @@ from core.session import session
 from core.logger import logger
 
 
+
 TELEGRAM_URL = (
     f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 )
@@ -23,16 +24,6 @@ def send_message(
 
         logger.error(
             "توکن تلگرام یا شناسه چت تنظیم نشده است"
-        )
-
-        return False
-
-
-
-    if not text:
-
-        logger.warning(
-            "متن پیام خالی است"
         )
 
         return False
@@ -62,19 +53,14 @@ def send_message(
     try:
 
         response = session.post(
-
             TELEGRAM_URL,
-
             data=payload
-
         )
 
 
 
         logger.info(
-
             f"وضعیت ارسال تلگرام: {response.status_code}"
-
         )
 
 
@@ -82,9 +68,7 @@ def send_message(
         if response.status_code != 200:
 
             logger.error(
-
-                f"خطای تلگرام: {response.text}"
-
+                response.text
             )
 
             return False
@@ -98,9 +82,7 @@ def send_message(
         if not result.get("ok"):
 
             logger.error(
-
-                f"پاسخ ناموفق تلگرام: {result}"
-
+                result
             )
 
             return False
@@ -113,11 +95,8 @@ def send_message(
 
     except Exception as e:
 
-
         logger.exception(
-
-            f"خطا در ارسال پیام تلگرام: {e}"
-
+            f"خطای ارسال تلگرام: {e}"
         )
 
         return False
