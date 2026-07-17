@@ -122,3 +122,10 @@ USE_RSI_FILTER = True
 USE_MACD_FILTER = True
 
 USE_ATR_FILTER = True
+# ===========================
+# Network
+# ===========================
+
+REQUEST_TIMEOUT = 15
+
+MAX_RETRIES = 3
