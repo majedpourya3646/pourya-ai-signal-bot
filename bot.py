@@ -1,308 +1,86 @@
+# bot.py
 from coinex_api import coinex
-from performance import (
-    add_trade,
-    update_trade,
-    report as performance_report
-)
-
+from performance import add_trade, update_trade, report as performance_report
 from market import get_market_data
 from multi_timeframe import analyze_symbol
 from telegram_sender import send_message
+from portfolio import INITIAL_BALANCE, get_trade_summary
+from risk_manager import validate_trade
+from trade_manager import can_buy, open_trade, close_trade, get_all_trades
 
-from portfolio import (
-    INITIAL_BALANCE,
-    get_trade_summary
-)
+SYMBOLS=["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT"]
+START_BALANCE=INITIAL_BALANCE
 
-from risk_manager import (
-    validate_trade
-)
-
-from trade_manager import (
-    can_buy,
-    open_trade,
-    close_trade,
-    get_all_trades
-)
-
-SYMBOLS = [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT",
-    "XRPUSDT",
-    "DOGEUSDT",
-]
-
-START_BALANCE = INITIAL_BALANCE
-
-signal_text = {
-    "BUY": "🟢 BUY",
-    "STRONG BUY": "🚀 STRONG BUY",
-    "SELL": "🔴 SELL",
-    "STRONG SELL": "⚠️ STRONG SELL",
-    "WAIT": "⏳ WAIT",
+signal_text={
+    "BUY":"🟢 BUY",
+    "STRONG BUY":"🚀 STRONG BUY",
+    "SELL":"🔴 SELL",
+    "STRONG SELL":"⚠️ STRONG SELL",
+    "WAIT":"⏳ WAIT",
 }
+
 def check_open_trades():
-
-    trades = get_all_trades()
-
+    trades=get_all_trades()
     if not trades:
         return
-
-    for symbol, trade in list(trades.items()):
-
+    for symbol,trade in list(trades.items()):
         try:
-
-            df = get_market_data(
-                symbol,
-                interval="15"
-            )
-
+            df=get_market_data(symbol,interval="15")
             if df.empty:
                 continue
-
-            high = float(df["high"].iloc[-1])
-            low = float(df["low"].iloc[-1])
-
-            # Take Profit
-
-            if high >= trade["tp"]:
-
-                profit = round(
-                    (
-                        (trade["tp"] - trade["entry"])
-                        / trade["entry"]
-                    ) * 100,
-                    2
-                )
-
-                send_message(
-
-                    f"🎉 <b>TP HIT</b>\n\n"
-
-                    f"🪙 {symbol}\n"
-
-                    f"💰 Entry : {trade['entry']}\n"
-
-                    f"🏁 Exit : {trade['tp']}\n"
-
-                    f"📈 Profit : {profit}%"
-
-                )
-
-                close_trade(symbol)
-
-                update_trade(
-                    symbol,
-                    "WIN",
-                    profit
-                )
-
-                continue
-
-            # Stop Loss
-
-            if low <= trade["sl"]:
-
-                loss = round(
-                    (
-                        (trade["entry"] - trade["sl"])
-                        / trade["entry"]
-                    ) * 100,
-                    2
-                )
-
-                send_message(
-
-                    f"❌ <b>SL HIT</b>\n\n"
-
-                    f"🪙 {symbol}\n"
-
-                    f"💰 Entry : {trade['entry']}\n"
-
-                    f"🛑 Exit : {trade['sl']}\n"
-
-                    f"📉 Loss : {loss}%"
-
-                )
-
-                close_trade(symbol)
-
-                update_trade(
-                    symbol,
-                    "LOSS",
-                    -loss
-                )
-
+            high=float(df["high"].iloc[-1]); low=float(df["low"].iloc[-1])
+            if high>=trade["tp"]:
+                profit=round(((trade["tp"]-trade["entry"])/trade["entry"])*100,2)
+                send_message(f"🎉 <b>TP HIT</b>\n\n🪙 {symbol}\n📈 Profit: {profit}%")
+                close_trade(symbol); update_trade(symbol,"WIN",profit); continue
+            if low<=trade["sl"]:
+                loss=round(((trade["entry"]-trade["sl"])/trade["entry"])*100,2)
+                send_message(f"❌ <b>SL HIT</b>\n\n🪙 {symbol}\n📉 Loss: {loss}%")
+                close_trade(symbol); update_trade(symbol,"LOSS",-loss)
         except Exception as e:
+            print("CHECK ERROR",symbol,e)
 
-            print(
-                "CHECK TRADE ERROR:",
-                symbol,
-                e
-            )
 def run_bot():
-
     try:
-        balance = coinex.get_balance()
-
-        send_message(
-            "🤖 <b>ربات با موفقیت اجرا شد</b>\n\n"
-            "✅ اتصال به API کوینکس برقرار است."
-        )
-
+        api=coinex.get_balance()
+        if not api or api.get("code")!=0:
+            send_message("❌ اتصال به CoinEx برقرار نشد.")
+            return
+        send_message("✅ <b>Pourya Trader AI Started</b>\n\nCoinEx Connected")
     except Exception as e:
-
-        send_message(
-            f"❌ <b>خطا در اتصال به CoinEx</b>\n\n{e}"
-        )
+        send_message(f"❌ CoinEx Error\n\n{e}")
         return
 
     check_open_trades()
-
-    market_report = "📊 <b>Pourya Trader AI</b>\n\n"
-
-    signal_count = 0
+    report="📊 <b>Pourya Trader AI</b>\n\n"
+    signals=0
 
     for symbol in SYMBOLS:
-
         try:
-
-            result = analyze_symbol(symbol)
-
-            market_report += (
-                f"🪙 <b>{symbol}</b>\n"
-                f"📌 {signal_text.get(result['signal'], result['signal'])}\n"
-                f"⭐ Confidence: {result['confidence']}%\n"
-            )
-
-            if "detail" in result:
-
-                market_report += (
-                    f"15M ➜ {result['detail']['15m']['signal']} "
-                    f"({result['detail']['15m']['confidence']}%)\n"
-                    f"1H ➜ {result['detail']['1h']['signal']} "
-                    f"({result['detail']['1h']['confidence']}%)\n"
-                    f"4H ➜ {result['detail']['4h']['signal']} "
-                    f"({result['detail']['4h']['confidence']}%)\n\n"
-                )
-
-            if result["signal"] == "WAIT":
-                continue               
-
-            signal_count += 1
-
-            if not can_buy(
-                symbol,
-                balance=INITIAL_BALANCE,
-                start_balance=START_BALANCE,
-                entry=result["entry"],
-                tp=result["tp"],
-                sl=result["sl"]
-            ):
+            result=analyze_symbol(symbol)
+            report+=f"🪙 <b>{symbol}</b>\n📌 {signal_text.get(result['signal'])}\n⭐ {result['confidence']}%\n\n"
+            if result["signal"]=="WAIT":
                 continue
-
-            valid, _ = validate_trade(
-                INITIAL_BALANCE,
-                START_BALANCE,
-                get_all_trades(),
-                result["entry"],
-                result["tp"],
-                result["sl"]
-            )
-
+            entry=result.get("entry") or result.get("price")
+            if entry is None:
+                continue
+            if not can_buy(symbol,INITIAL_BALANCE,START_BALANCE,entry,result["tp"],result["sl"]):
+                continue
+            valid,_=validate_trade(INITIAL_BALANCE,START_BALANCE,get_all_trades(),entry,result["tp"],result["sl"])
             if not valid:
                 continue
-
-            summary = get_trade_summary(
-                INITIAL_BALANCE,
-                result["entry"],
-                result["tp"],
-                result["sl"]
-            )
-
-            quantity = summary["quantity"]
-            open_trade(
-                symbol=symbol,
-                entry=result["entry"],
-                tp=result["tp"],
-                sl=result["sl"],
-                quantity=quantity,
-                signal=result["signal"],
-                confidence=result["confidence"],
-                grade=result.get("grade", "")
-            )
-
-            add_trade(
-                symbol=symbol,
-                signal=result["signal"],
-                entry=result["entry"],
-                tp=result["tp"],
-                sl=result["sl"],
-                quantity=quantity,
-                confidence=result["confidence"],
-                grade=result.get("grade", "")
-            )
-
-            reasons = result.get("reasons", [])
-
-            reason_text = ""
-
-            if reasons:
-
-                reason_text = "\n".join(
-                    f"• {reason}"
-                    for reason in reasons
-                )
-
-            send_message(
-
-                f"🚨 <b>NEW SIGNAL</b>\n\n"
-
-                f"🪙 {symbol}\n"
-
-                f"📊 {signal_text[result['signal']]}\n"
-
-                f"⭐ Confidence: {result['confidence']}%\n\n"
-
-                f"💰 Entry: {result['entry']}\n"
-
-                f"🎯 TP: {result['tp']}\n"
-
-                f"🛑 SL: {result['sl']}\n"
-
-                f"📦 Position Size: {quantity}\n"
-
-                f"⚖️ Risk/Reward: {summary['risk_reward']}\n"
-
-                f"💵 Risk: {summary['risk_amount']}$\n"
-
-                f"💲 Expected Profit: {summary['expected_profit']}$\n\n"
-
-                f"{reason_text}"
-
-            )
-
+            summary=get_trade_summary(INITIAL_BALANCE,entry,result["tp"],result["sl"])
+            qty=summary["quantity"]
+            open_trade(symbol,entry,result["tp"],result["sl"],qty,result["signal"],result["confidence"],result.get("grade",""))
+            add_trade(symbol,result["signal"],entry,result["tp"],result["sl"],qty,result["confidence"],result.get("grade",""))
+            signals+=1
+            send_message(f"🚨 <b>NEW SIGNAL</b>\n\n🪙 {symbol}\n📊 {result['signal']}\n💰 Entry: {entry}\n🎯 TP: {result['tp']}\n🛑 SL: {result['sl']}")
         except Exception as e:
+            print("BOT ERROR",symbol,e)
 
-            print(
-                "BOT ERROR:",
-                symbol,
-                e
-            )
+    report+=f"\n📈 Signals: {signals}\n🤖 Pourya Trader AI"
+    send_message(report)
+    send_message(performance_report())
 
-    market_report += (
-        f"\n📈 Signals: {signal_count}\n"
-        "🤖 Pourya Trader AI"
-    )
-
-    send_message(market_report)
-
-    send_message(
-        performance_report()
-    )
-
-
-if __name__ == "__main__":
-
+if __name__=="__main__":
     run_bot()
