@@ -1,28 +1,67 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+
 
 FILE_NAME = "data/history.json"
 
 
+
+def now():
+
+    return datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
+
 def load_trades():
 
-    if not os.path.exists(FILE_NAME):
+    if not os.path.exists(
+        FILE_NAME
+    ):
         return []
+
 
     try:
-        with open(FILE_NAME, "r") as f:
+
+        with open(
+            FILE_NAME,
+            "r"
+        ) as f:
+
             return json.load(f)
+
+
     except Exception:
+
         return []
 
 
-def save_trades(data):
 
-    os.makedirs("data", exist_ok=True)
+def save_trades(
+    data
+):
 
-    with open(FILE_NAME, "w") as f:
-        json.dump(data, f, indent=4)
+    os.makedirs(
+        "data",
+        exist_ok=True
+    )
+
+
+    with open(
+        FILE_NAME,
+        "w"
+    ) as f:
+
+        json.dump(
+            data,
+            f,
+            indent=4
+        )
+
 
 
 def add_trade(
@@ -35,30 +74,56 @@ def add_trade(
     profit=0,
     quantity=0,
     confidence=0,
-    grade=""
+    grade="",
+    side="LONG",
+    leverage=1,
+    order_id=None
 ):
 
     trades = load_trades()
 
+
     trades.append({
 
         "symbol": symbol,
-        "signal": signal,
+
+        "side": side,
+
         "entry": entry,
+
         "tp": tp,
+
         "sl": sl,
+
         "quantity": quantity,
+
+        "leverage": leverage,
+
+        "order_id": order_id,
+
+        "signal": signal,
+
         "confidence": confidence,
+
         "grade": grade,
+
         "result": result,
+
         "profit": profit,
+
         "status": "OPEN",
-        "open_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+
+        "open_time": now(),
+
         "close_time": None
 
     })
 
-    save_trades(trades)
+
+    save_trades(
+        trades
+    )
+
 
 
 def update_trade(
@@ -69,102 +134,171 @@ def update_trade(
 
     trades = load_trades()
 
+
     for trade in reversed(trades):
 
         if (
             trade["symbol"] == symbol
-            and trade["result"] is None
+            and trade["status"] == "OPEN"
         ):
 
             trade["result"] = result
-            trade["profit"] = round(profit, 2)
+
+            trade["profit"] = round(
+                profit,
+                2
+            )
+
             trade["status"] = "CLOSED"
-            trade["close_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            trade["close_time"] = now()
+
             break
 
-    save_trades(trades)
+
+    save_trades(
+        trades
+    )
+
 
 
 def statistics():
 
     trades = load_trades()
 
+
     total = len(trades)
 
+
     wins = sum(
-        1 for t in trades
-        if t["result"] == "WIN"
+        1
+        for t in trades
+        if t.get("result") == "WIN"
     )
+
 
     losses = sum(
-        1 for t in trades
-        if t["result"] == "LOSS"
+        1
+        for t in trades
+        if t.get("result") == "LOSS"
     )
 
+
     open_trades = sum(
-        1 for t in trades
-        if t["result"] is None
+        1
+        for t in trades
+        if t.get("status") == "OPEN"
     )
+
 
     closed = wins + losses
 
+
     total_profit = round(
-        sum(t.get("profit", 0) for t in trades),
+
+        sum(
+            t.get("profit",0)
+            for t in trades
+        ),
+
         2
     )
 
+
     avg_profit = round(
+
         total_profit / closed,
+
         2
+
     ) if closed else 0
+
+
 
     win_rate = round(
+
         (wins / closed) * 100,
+
         2
+
     ) if closed else 0
 
+
+
     profits = [
-        t.get("profit", 0)
+
+        t.get("profit",0)
+
         for t in trades
-        if t["result"] is not None
+
+        if t.get("status") == "CLOSED"
+
     ]
 
-    best_trade = round(max(profits), 2) if profits else 0
-
-    worst_trade = round(min(profits), 2) if profits else 0
 
     return {
 
         "total": total,
+
         "open": open_trades,
+
         "closed": closed,
+
         "wins": wins,
+
         "losses": losses,
+
         "win_rate": win_rate,
+
         "profit": total_profit,
+
         "average_profit": avg_profit,
-        "best_trade": best_trade,
-        "worst_trade": worst_trade
+
+        "best_trade": round(
+            max(profits),
+            2
+        ) if profits else 0,
+
+        "worst_trade": round(
+            min(profits),
+            2
+        ) if profits else 0
 
     }
+
 
 
 def report():
 
     s = statistics()
 
+
     return (
+
         "😎 <b>Pourya Trader AI</b>\n\n"
+
         "📊 <b>Performance Report</b>\n\n"
+
         f"📈 Total Trades : {s['total']}\n"
+
         f"🟢 Open : {s['open']}\n"
+
         f"🏁 Closed : {s['closed']}\n\n"
+
         f"✅ Wins : {s['wins']}\n"
+
         f"❌ Losses : {s['losses']}\n"
+
         f"🎯 Win Rate : {s['win_rate']}%\n\n"
+
         f"💰 Total Profit : {s['profit']}%\n"
+
         f"📊 Average : {s['average_profit']}%\n"
+
         f"🥇 Best : {s['best_trade']}%\n"
+
         f"📉 Worst : {s['worst_trade']}%\n\n"
+
         "🚀 AI Trading System"
+
     )
