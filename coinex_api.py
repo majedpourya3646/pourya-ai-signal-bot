@@ -13,16 +13,9 @@ from core.logger import logger
 class CoinExAPI:
 
     def __init__(self):
-
         self.base_url = BASE_URL
-
-        self.api_key = os.getenv(
-            "COINEX_API_KEY"
-        )
-
-        self.secret_key = os.getenv(
-            "COINEX_SECRET_KEY"
-        )
+        self.api_key = os.getenv("COINEX_API_KEY")
+        self.secret_key = os.getenv("COINEX_SECRET_KEY")
 
 
     def create_signature(
@@ -37,18 +30,14 @@ class CoinExAPI:
             int(time.time() * 1000)
         )
 
-
-        request_path = "/v2" + path
+        request_path = path
 
 
         if method.upper() == "GET" and params:
 
-            query = urlencode(
-                params
-            )
+            query = urlencode(params)
 
             request_path += "?" + query
-
 
 
         sign_string = (
@@ -59,17 +48,17 @@ class CoinExAPI:
         )
 
 
-        print("==============================")
+        print("================")
         print("SIGN STRING:")
         print(sign_string)
-        print("==============================")
+        print("================")
 
 
         signature = hmac.new(
-            self.secret_key.encode("utf-8"),
-            sign_string.encode("utf-8"),
+            self.secret_key.encode("latin-1"),
+            sign_string.encode("latin-1"),
             hashlib.sha256
-        ).hexdigest()
+        ).hexdigest().lower()
 
 
         return signature, timestamp
@@ -88,15 +77,7 @@ class CoinExAPI:
 
             url = self.base_url + path
 
-
             body = ""
-
-            if params and method.upper() != "GET":
-
-                body = json.dumps(
-                    params,
-                    separators=(",", ":")
-                )
 
 
             headers = {
@@ -104,12 +85,11 @@ class CoinExAPI:
             }
 
 
-
             if private:
 
                 sign, timestamp = self.create_signature(
                     method,
-                    path,
+                    "/v2" + path,
                     params,
                     body
                 )
@@ -126,41 +106,16 @@ class CoinExAPI:
                 })
 
 
-
-            if method.upper() == "GET":
-
-                response = session.get(
-                    url,
-                    params=params,
-                    headers=headers,
-                    timeout=session.timeout
-                )
-
-
-            elif method.upper() == "POST":
-
-                response = session.post(
-                    url,
-                    data=body,
-                    headers=headers,
-                    timeout=session.timeout
-                )
-
-
-            else:
-
-                raise Exception(
-                    "Unsupported HTTP method"
-                )
-
+            response = session.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=session.timeout
+            )
 
 
             logger.info(
                 f"URL: {response.url}"
-            )
-
-            logger.info(
-                f"STATUS: {response.status_code}"
             )
 
             logger.info(
@@ -171,7 +126,6 @@ class CoinExAPI:
             return response.json()
 
 
-
         except Exception as e:
 
             logger.error(e)
@@ -180,40 +134,12 @@ class CoinExAPI:
 
 
 
-
-    # ==========================
-    # FUTURES BALANCE
-    # ==========================
-
     def get_futures_balance(self):
 
         return self._request(
             "GET",
             "/assets/futures/balance",
             private=True
-        )
-
-
-
-    # ==========================
-    # SPOT KLINE
-    # ==========================
-
-    def get_kline(
-        self,
-        market="BTCUSDT",
-        period="15min",
-        limit=300
-    ):
-
-        return self._request(
-            "GET",
-            "/spot/kline",
-            {
-                "market": market,
-                "period": period,
-                "limit": limit
-            }
         )
 
 
