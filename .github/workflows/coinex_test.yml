@@ -1,28 +1,36 @@
-name: CoinEx Test
+name: CoinEx API Test
 
 on:
   workflow_dispatch:
 
 jobs:
-  test:
+  coinex-test:
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      - name: Checkout repository
         uses: actions/checkout@v4
+
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install requirements
+
+      - name: Install dependencies
         run: |
           pip install -r requirements.txt
+
 
       - name: Run CoinEx Test
         env:
           COINEX_API_KEY: ${{ secrets.COINEX_API_KEY }}
-          COINEX_API_SECRET: ${{ secrets.COINEX_API_SECRET }}
+          COINEX_SECRET_KEY: ${{ secrets.COINEX_SECRET_KEY }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+
         run: |
-          python test_coinex.py
+          python coinex_test.py
