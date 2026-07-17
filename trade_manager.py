@@ -13,10 +13,6 @@ from config import (
 TRADES_FILE = "data/open_trades.json"
 
 
-# -------------------------
-# File Manager
-# -------------------------
-
 def load_trades():
 
     if not os.path.exists(TRADES_FILE):
@@ -44,10 +40,6 @@ def save_trades(trades):
 
 
 
-# -------------------------
-# Get Trades
-# -------------------------
-
 def get_all_trades():
 
     trades = load_trades()
@@ -59,11 +51,7 @@ def get_all_trades():
 
 
 
-# -------------------------
-# Check Permission
-# -------------------------
-
-def can_buy(symbol=None):
+def can_buy(symbol=None, *args):
 
     trades = load_trades()
 
@@ -77,10 +65,6 @@ def can_buy(symbol=None):
 
 
 
-# -------------------------
-# Open Trade
-# -------------------------
-
 def open_trade(
         symbol,
         side,
@@ -93,16 +77,27 @@ def open_trade(
 
     trades = load_trades()
 
+    if symbol in trades:
+        return False
+
 
     if len(trades) >= MAX_OPEN_TRADES:
         return False
 
 
+    if side.lower() == "buy":
 
-    tp = entry * (1 + DEFAULT_TP / 100)
+        tp = entry * (1 + DEFAULT_TP / 100)
+        sl = entry * (1 - DEFAULT_SL / 100)
 
-    sl = entry * (1 - DEFAULT_SL / 100)
+    else:
 
+        tp = entry * (1 - DEFAULT_TP / 100)
+        sl = entry * (1 + DEFAULT_SL / 100)
+
+
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
     trade = {
@@ -113,9 +108,9 @@ def open_trade(
 
         "entry": entry,
 
-        "tp": round(tp, 8),
+        "tp": round(tp,8),
 
-        "sl": round(sl, 8),
+        "sl": round(sl,8),
 
         "quantity": quantity,
 
@@ -129,15 +124,9 @@ def open_trade(
 
         "status": "OPEN",
 
-        "open_time":
-            datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
+        "open_time": now,
 
-        "updated_at":
-            datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+        "updated_at": now
 
     }
 
@@ -157,11 +146,6 @@ def open_trade(
 
 
 
-
-# -------------------------
-# Close Trade
-# -------------------------
-
 def close_trade(symbol):
 
     trades = load_trades()
@@ -178,7 +162,6 @@ def close_trade(symbol):
 
 
         save_trades(trades)
-
 
         return True
 
