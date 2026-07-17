@@ -1,35 +1,29 @@
-import os
 import time
+import json
 import hmac
 import hashlib
-from urllib.parse import urlencode
+import requests
 
-from config import BASE_URL, PAPER_TRADING
+from config import (
+    BASE_URL,
+    COINEX_API_KEY,
+    COINEX_SECRET_KEY,
+)
+
 from core.session import session
 from core.logger import logger
 
 
 class CoinExTrade:
 
-
     def __init__(self):
-
-        self.base_url = BASE_URL.rstrip("/")
-
-        self.api_key = os.getenv(
-            "COINEX_API_KEY"
-        )
-
-        self.secret_key = os.getenv(
-            "COINEX_SECRET_KEY"
-        )
+        self.base_url = BASE_URL
 
 
-    def create_signature(
+    def _sign(
         self,
         method,
         path,
-        params=None,
         body=""
     ):
 
@@ -37,39 +31,27 @@ class CoinExTrade:
             int(time.time() * 1000)
         )
 
-
-        query = ""
-
-
-        if method.upper() == "GET" and params:
-
-            query = "?" + urlencode(
-                sorted(params.items())
-            )
-
-
-        sign_string = (
-            method.upper()
+        prepared = (
+            method
             +
             path
-            +
-            query
             +
             body
             +
             timestamp
         )
 
-
         sign = hmac.new(
-            self.secret_key.encode(),
-            sign_string.encode(),
+            COINEX_SECRET_KEY.encode(),
+            prepared.encode(),
             hashlib.sha256
-        ).hexdigest().lower()
+        ).hexdigest()
 
-
-        return sign, timestamp
-
+        return {
+            "X-COINEX-KEY": COINEX_API_KEY,
+            "X-COINEX-SIGN": sign,
+            "X-COINEX-TIMESTAMP": timestamp
+        }
 
 
     def request(
@@ -79,79 +61,47 @@ class CoinExTrade:
         params=None
     ):
 
-
         url = self.base_url + path
 
+        body = ""
 
-        headers = {
-
-            "Content-Type": "application/json",
-
-            "X-COINEX-KEY": self.api_key
-
-        }
+        if params:
+            body = json.dumps(
+                params,
+                separators=(",", ":")
+            )
 
 
-        sign, timestamp = self.create_signature(
-
+        headers = self._sign(
             method,
-
-            "/v2" + path,
-
-            params
-
+            path,
+            body
         )
-
-
-        headers.update({
-
-            "X-COINEX-SIGN": sign,
-
-            "X-COINEX-TIMESTAMP": timestamp
-
-        })
-
 
 
         try:
 
-
-            if method.upper() == "POST":
+            if method == "POST":
 
                 response = session.post(
-
                     url,
-
                     json=params,
-
                     headers=headers,
-
                     timeout=session.timeout
-
                 )
 
             else:
 
                 response = session.get(
-
                     url,
-
                     params=params,
-
                     headers=headers,
-
                     timeout=session.timeout
-
                 )
 
 
             logger.info(
-                f"TRADE URL: {response.url}"
-            )
-
-
-            logger.info(
-                response.text[:500]
+                f"CoinEx Trade Response: {response.text}"
             )
 
 
@@ -166,149 +116,97 @@ class CoinExTrade:
 
 
 
+    # ==========================
+    # Open Futures Order
+    # ==========================
 
-    def open_long(
+    def open_order(
         self,
         market,
-        amount
+        side,
+        amount,
+        price=None,
+        leverage=10
     ):
 
-
-        if PAPER_TRADING:
-
-
-            logger.info(
-                f"Paper BUY {market} amount={amount}"
-            )
-
-
-            return {
-
-                "paper": True,
-
-                "market": market,
-
-                "amount": amount
-
-            }
+        path = "/futures/order"
 
 
         params = {
 
             "market": market,
 
-            "side": "buy",
+            "side": side,
 
-            "type": "market",
+            "type": "limit" if price else "market",
 
-            "amount": amount
+            "amount": str(amount),
 
-        }
-
-
-        return self.request(
-
-            "POST",
-
-            "/futures/order",
-
-            params
-
-        )
-
-
-
-
-
-    def open_short(
-        self,
-        market,
-        amount
-    ):
-
-
-        if PAPER_TRADING:
-
-
-            logger.info(
-                f"Paper SHORT {market} amount={amount}"
-            )
-
-
-            return {
-
-                "paper": True,
-
-                "market": market,
-
-                "amount": amount
-
-            }
-
-
-
-        params = {
-
-            "market": market,
-
-            "side": "sell",
-
-            "type": "market",
-
-            "amount": amount
+            "leverage": str(leverage)
 
         }
 
 
+        if price:
+
+            params["price"] = str(price)
+
+
         return self.request(
-
             "POST",
-
-            "/futures/order",
-
+            path,
             params
-
         )
 
 
 
-
+    # ==========================
+    # Close Position
+    # ==========================
 
     def close_position(
         self,
-        market
+        market,
+        side,
+        amount
     ):
 
-
-        if PAPER_TRADING:
-
-
-            logger.info(
-                f"Paper CLOSE {market}"
-            )
-
-
-            return True
-
+        path = "/futures/order"
 
 
         params = {
 
-            "market": market
+            "market": market,
+
+            "side": side,
+
+            "type": "market",
+
+            "amount": str(amount),
+
+            "reduce_only": True
 
         }
 
 
         return self.request(
-
             "POST",
-
-            "/futures/close-position",
-
+            path,
             params
-
         )
 
+
+
+    # ==========================
+    # Balance
+    # ==========================
+
+    def get_balance(self):
+
+        return self.request(
+            "GET",
+            "/assets/futures/balance"
+        )
 
 
 
