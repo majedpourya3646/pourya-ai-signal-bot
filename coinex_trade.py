@@ -20,16 +20,10 @@ class CoinExTrade:
     def __init__(self):
 
         self.base_url = BASE_URL
-
         self.api_key = COINEX_API_KEY
-
         self.secret_key = COINEX_SECRET_KEY
 
 
-
-    # =========================
-    # Signature
-    # =========================
 
     def sign(
         self,
@@ -39,11 +33,10 @@ class CoinExTrade:
     ):
 
         timestamp = str(
-            int(time.time() * 1000)
+            int(time.time()*1000)
         )
 
-
-        prepared = (
+        message = (
             method.upper()
             +
             path
@@ -56,26 +49,20 @@ class CoinExTrade:
 
         signature = hmac.new(
             self.secret_key.encode(),
-            prepared.encode(),
+            message.encode(),
             hashlib.sha256
         ).hexdigest()
 
 
-        return signature, timestamp
+        return signature,timestamp
 
 
-
-
-    # =========================
-    # Futures Order
-    # =========================
 
     def create_order(
         self,
         market,
         side,
-        amount,
-        price=None
+        amount
     ):
 
 
@@ -84,7 +71,6 @@ class CoinExTrade:
             logger.info(
                 f"PAPER ORDER {side} {market} qty={amount}"
             )
-
 
             return {
 
@@ -98,7 +84,9 @@ class CoinExTrade:
 
                     "side":side,
 
-                    "amount":amount
+                    "amount":amount,
+
+                    "order_id":"PAPER"
 
                 }
 
@@ -106,54 +94,53 @@ class CoinExTrade:
 
 
 
-        path = "/v2/futures/order"
+        path="/v2/futures/order"
+
+        url=self.base_url+path
 
 
-        url = self.base_url + path
+        payload={
 
+            "market":market,
 
-        body_data = {
+            "side":side,
 
-            "market": market,
+            "type":"market",
 
-            "side": side,
-
-            "type": "market",
-
-            "amount": str(amount)
+            "amount":str(amount)
 
         }
 
 
-
-        body = json.dumps(
-            body_data,
+        body=json.dumps(
+            payload,
             separators=(",",":")
         )
 
 
-
-        sign, timestamp = self.sign(
+        sign,timestamp=self.sign(
             "POST",
             path,
             body
         )
 
 
-
-        headers = {
+        headers={
 
             "X-COINEX-KEY":
-                self.api_key,
+            self.api_key,
+
 
             "X-COINEX-SIGN":
-                sign,
+            sign,
+
 
             "X-COINEX-TIMESTAMP":
-                timestamp,
+            timestamp,
+
 
             "Content-Type":
-                "application/json"
+            "application/json"
 
         }
 
@@ -161,38 +148,28 @@ class CoinExTrade:
 
         try:
 
-
-            response = session.post(
-
+            r=session.post(
                 url,
-
                 data=body,
-
                 headers=headers,
-
                 timeout=10
-
-            )
-
-
-
-            logger.info(
-                f"ORDER STATUS: {response.status_code}"
             )
 
 
             logger.info(
-                response.text
+                "ORDER RESPONSE:"
+            )
+
+            logger.info(
+                r.text
             )
 
 
-
-            return response.json()
+            return r.json()
 
 
 
         except Exception as e:
-
 
             logger.exception(e)
 
@@ -201,32 +178,20 @@ class CoinExTrade:
 
 
 
-    # =========================
-    # Long Position
-    # =========================
-
     def open_long(
         self,
         symbol,
         quantity
     ):
 
-
         return self.create_order(
-
             symbol,
-
             "buy",
-
             quantity
-
         )
 
 
 
-    # =========================
-    # Short Position
-    # =========================
 
     def open_short(
         self,
@@ -234,33 +199,23 @@ class CoinExTrade:
         quantity
     ):
 
-
         return self.create_order(
-
             symbol,
-
             "sell",
-
             quantity
-
         )
 
 
 
-    # =========================
-    # Close Position
-    # =========================
 
     def close_position(
         self,
         symbol
     ):
 
-
         logger.info(
-            f"Close position {symbol}"
+            f"CLOSE REQUEST {symbol}"
         )
-
 
         return True
 
