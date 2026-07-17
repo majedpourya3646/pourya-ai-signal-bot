@@ -306,22 +306,15 @@ def run_bot():
 
 
             add_trade(
-
-                symbol,
-
-                result["signal"],
-
-                entry,
-
-                result["tp"],
-
-                result["sl"],
-
-                quantity=qty,
-
-                confidence=result["confidence"]
-
-            )
+    symbol,
+    result["signal"],
+    entry,
+    result["tp"],
+    result["sl"],
+    quantity=qty,
+    confidence=result["confidence"],
+    grade=result.get("grade","")
+)
 
 
             signals += 1
