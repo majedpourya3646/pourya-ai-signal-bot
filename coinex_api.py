@@ -13,7 +13,7 @@ from core.logger import logger
 class CoinExAPI:
 
     def __init__(self):
-        self.base_url = BASE_URL
+        self.base_url = BASE_URL.rstrip("/")
         self.api_key = os.getenv("COINEX_API_KEY")
         self.secret_key = os.getenv("COINEX_SECRET_KEY")
 
@@ -21,23 +21,13 @@ class CoinExAPI:
     def create_signature(
         self,
         method,
-        path,
-        params=None,
+        request_path,
         body=""
     ):
 
         timestamp = str(
             int(time.time() * 1000)
         )
-
-        request_path = path
-
-
-        if method.upper() == "GET" and params:
-
-            query = urlencode(params)
-
-            request_path += "?" + query
 
 
         sign_string = (
@@ -51,17 +41,12 @@ class CoinExAPI:
         print("================")
         print("SIGN STRING:")
         print(sign_string)
-
-        print("API KEY LENGTH:", len(self.api_key))
-        print("SECRET LENGTH:", len(self.secret_key))
-        print("SECRET START:", self.secret_key[:4])
-
         print("================")
 
 
         signature = hmac.new(
-            self.secret_key.encode("latin-1"),
-            sign_string.encode("latin-1"),
+            self.secret_key.encode("utf-8"),
+            sign_string.encode("utf-8"),
             hashlib.sha256
         ).hexdigest().lower()
 
@@ -82,7 +67,16 @@ class CoinExAPI:
 
             url = self.base_url + path
 
+
             body = ""
+
+
+            if method.upper() == "POST" and params:
+
+                body = json.dumps(
+                    params,
+                    separators=(",", ":")
+                )
 
 
             headers = {
@@ -90,12 +84,24 @@ class CoinExAPI:
             }
 
 
+
             if private:
+
+                # BASE_URL شامل /v2 است
+                # Signature باید مسیر کامل V2 را داشته باشد
+
+                request_path = "/v2" + path
+
+
+                if method.upper() == "GET" and params:
+
+                    request_path += "?" + urlencode(params)
+
+
 
                 sign, timestamp = self.create_signature(
                     method,
-                    "/v2" + path,
-                    params,
+                    request_path,
                     body
                 )
 
@@ -111,16 +117,41 @@ class CoinExAPI:
                 })
 
 
-            response = session.get(
-                url,
-                params=params,
-                headers=headers,
-                timeout=session.timeout
-            )
+
+            if method.upper() == "GET":
+
+                response = session.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                    timeout=session.timeout
+                )
+
+
+            elif method.upper() == "POST":
+
+                response = session.post(
+                    url,
+                    data=body,
+                    headers=headers,
+                    timeout=session.timeout
+                )
+
+
+            else:
+
+                raise Exception(
+                    "Unsupported method"
+                )
+
 
 
             logger.info(
                 f"URL: {response.url}"
+            )
+
+            logger.info(
+                f"STATUS: {response.status_code}"
             )
 
             logger.info(
@@ -131,6 +162,7 @@ class CoinExAPI:
             return response.json()
 
 
+
         except Exception as e:
 
             logger.error(e)
@@ -139,12 +171,40 @@ class CoinExAPI:
 
 
 
+
+    # =========================
+    # FUTURES BALANCE
+    # =========================
+
     def get_futures_balance(self):
 
         return self._request(
             "GET",
             "/assets/futures/balance",
             private=True
+        )
+
+
+
+    # =========================
+    # SPOT KLINE
+    # =========================
+
+    def get_kline(
+        self,
+        market="BTCUSDT",
+        period="15min",
+        limit=300
+    ):
+
+        return self._request(
+            "GET",
+            "/spot/kline",
+            {
+                "market": market,
+                "period": period,
+                "limit": limit
+            }
         )
 
 
