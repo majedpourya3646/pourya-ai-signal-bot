@@ -4,7 +4,7 @@ import hmac
 import hashlib
 from urllib.parse import urlencode
 
-from config import BASE_URL, LIVE_TRADING
+from config import BASE_URL, PAPER_TRADING
 from core.session import session
 from core.logger import logger
 
@@ -23,7 +23,6 @@ class CoinExTrade:
         self.secret_key = os.getenv(
             "COINEX_SECRET_KEY"
         )
-
 
 
     def create_signature(
@@ -63,19 +62,13 @@ class CoinExTrade:
 
 
         sign = hmac.new(
-
-            self.secret_key.encode("utf-8"),
-
-            sign_string.encode("utf-8"),
-
+            self.secret_key.encode(),
+            sign_string.encode(),
             hashlib.sha256
-
         ).hexdigest().lower()
 
 
-
         return sign, timestamp
-
 
 
 
@@ -90,9 +83,6 @@ class CoinExTrade:
         url = self.base_url + path
 
 
-        body = ""
-
-
         headers = {
 
             "Content-Type": "application/json",
@@ -102,16 +92,13 @@ class CoinExTrade:
         }
 
 
-
         sign, timestamp = self.create_signature(
 
             method,
 
             "/v2" + path,
 
-            params,
-
-            body
+            params
 
         )
 
@@ -143,7 +130,6 @@ class CoinExTrade:
 
                 )
 
-
             else:
 
                 response = session.get(
@@ -159,7 +145,6 @@ class CoinExTrade:
                 )
 
 
-
             logger.info(
                 f"TRADE URL: {response.url}"
             )
@@ -173,7 +158,6 @@ class CoinExTrade:
             return response.json()
 
 
-
         except Exception as e:
 
             logger.exception(e)
@@ -183,54 +167,6 @@ class CoinExTrade:
 
 
 
-
-    # ===========================
-    # Set Leverage
-    # ===========================
-
-    def set_leverage(
-        self,
-        market,
-        leverage=10
-    ):
-
-        if not LIVE_TRADING:
-
-            logger.info(
-                "Paper mode: leverage skipped"
-            )
-
-            return True
-
-
-
-        params = {
-
-            "market": market,
-
-            "leverage": leverage
-
-        }
-
-
-        return self.request(
-
-            "POST",
-
-            "/futures/set-leverage",
-
-            params
-
-        )
-
-
-
-
-
-    # ===========================
-    # Open Long Position
-    # ===========================
-
     def open_long(
         self,
         market,
@@ -238,20 +174,23 @@ class CoinExTrade:
     ):
 
 
-        if not LIVE_TRADING:
+        if PAPER_TRADING:
+
 
             logger.info(
                 f"Paper BUY {market} amount={amount}"
             )
 
+
             return {
 
                 "paper": True,
 
-                "market": market
+                "market": market,
+
+                "amount": amount
 
             }
-
 
 
         params = {
@@ -281,10 +220,6 @@ class CoinExTrade:
 
 
 
-    # ===========================
-    # Open Short Position
-    # ===========================
-
     def open_short(
         self,
         market,
@@ -292,17 +227,21 @@ class CoinExTrade:
     ):
 
 
-        if not LIVE_TRADING:
+        if PAPER_TRADING:
+
 
             logger.info(
                 f"Paper SHORT {market} amount={amount}"
             )
 
+
             return {
 
                 "paper": True,
 
-                "market": market
+                "market": market,
+
+                "amount": amount
 
             }
 
@@ -335,21 +274,19 @@ class CoinExTrade:
 
 
 
-    # ===========================
-    # Close Position
-    # ===========================
-
     def close_position(
         self,
         market
     ):
 
 
-        if not LIVE_TRADING:
+        if PAPER_TRADING:
+
 
             logger.info(
-                f"Paper close {market}"
+                f"Paper CLOSE {market}"
             )
+
 
             return True
 
@@ -371,7 +308,6 @@ class CoinExTrade:
             params
 
         )
-
 
 
 
