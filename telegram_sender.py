@@ -7,19 +7,35 @@ from core.session import session
 from core.logger import logger
 
 
+
+TELEGRAM_URL = (
+    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+)
+
+
+
 def send_message(
     text,
     parse_mode="HTML",
     disable_preview=True
 ):
 
+
     if not BOT_TOKEN or not CHAT_ID:
 
-        logger.error("BOT_TOKEN or CHAT_ID not found")
+        logger.error(
+            "BOT_TOKEN or CHAT_ID missing"
+        )
 
         return False
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+
+    if len(text) > 4000:
+
+        text = text[:4000]
+
+
 
     payload = {
 
@@ -33,36 +49,60 @@ def send_message(
 
     }
 
+
+
     try:
 
         response = session.post(
-            url,
-            data=payload,
-            timeout=session.timeout
+
+            TELEGRAM_URL,
+
+            data=payload
+
         )
+
+
+
+        logger.info(
+
+            f"Telegram status: {response.status_code}"
+
+        )
+
+
 
         if response.status_code != 200:
 
             logger.error(
-                f"Telegram Error {response.status_code}: {response.text}"
+                response.text
             )
 
             return False
 
+
+
         result = response.json()
+
+
 
         if not result.get("ok"):
 
-            logger.error(result)
+            logger.error(
+                result
+            )
 
             return False
 
-        logger.info("Telegram message sent.")
+
 
         return True
 
+
+
     except Exception as e:
 
-        logger.exception(e)
+        logger.exception(
+            e
+        )
 
         return False
