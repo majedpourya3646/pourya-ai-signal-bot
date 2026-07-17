@@ -66,6 +66,8 @@ signal_text = {
 def check_open_trades():
 
     trades = get_all_trades()
+    print("CURRENT TRADES:")
+    print(get_all_trades())
 
 
     if not trades:
