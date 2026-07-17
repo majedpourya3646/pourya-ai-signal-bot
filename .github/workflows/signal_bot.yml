@@ -1,55 +1,56 @@
-from coinex_api import coinex
+name: Pourya Trader AI
 
+on:
 
-print("=" * 60)
-print("        COINEX BALANCE TEST")
-print("=" * 60)
+  workflow_dispatch:
 
-
-
-# =========================
-# Futures Balance
-# =========================
-
-print("\n1) FUTURES BALANCE")
-print("-" * 60)
-
-futures = coinex.get_futures_balance()
-
-print(futures)
+  schedule:
+    - cron: "*/15 * * * *"
 
 
 
-# =========================
-# Spot Balance
-# =========================
+jobs:
 
-print("\n2) SPOT BALANCE")
-print("-" * 60)
+  trading-bot:
 
-spot = coinex.get_spot_balance()
-
-print(spot)
+    runs-on: ubuntu-latest
 
 
+    steps:
 
-# =========================
-# Result
-# =========================
 
-print("\n" + "=" * 60)
-
-if futures and futures.get("code") == 0:
-    print("✅ Futures API Connected")
-else:
-    print("❌ Futures API Error")
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
 
 
-if spot and spot.get("code") == 0:
-    print("✅ Spot API Connected")
-else:
-    print("❌ Spot API Error")
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+        with:
+          python-version: "3.12"
 
 
-print("=" * 60)
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+
+
+      - name: Run Trading Bot
+
+        env:
+
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+
+          COINEX_API_KEY: ${{ secrets.COINEX_API_KEY }}
+
+          COINEX_SECRET_KEY: ${{ secrets.COINEX_SECRET_KEY }}
+
+
+        run: |
+
+          python bot.py
