@@ -106,6 +106,27 @@ PAPER_TRADING = True
 AUTO_CLOSE = True
 
 
+# ===========================
+# CoinEx Futures Trading
+# ===========================
+
+ORDER_TYPE = "market"
+
+POSITION_SIDE = "long"
+
+MARGIN_MODE = "isolated"
+
+AUTO_TRADE = True
+
+
+# ===========================
+# Safety
+# ===========================
+
+MAX_POSITION_SIZE = 50
+
+MIN_ORDER_VALUE = 5
+
 
 # ===========================
 # AI Filters
