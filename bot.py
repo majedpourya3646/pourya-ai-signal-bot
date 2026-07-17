@@ -380,24 +380,15 @@ CoinEx Connected
 
 
             open_trade(
-
-                symbol,
-
-                entry,
-
-                result["tp"],
-
-                result["sl"],
-
-                qty,
-
-                result["signal"],
-
-                result["confidence"],
-
-                result.get("grade",""),
-
-            )
+    symbol,
+    entry,
+    tp,
+    sl,
+    quantity,
+    signal,
+    confidence,
+    leverage=LEVERAGE
+)
 
 
 
