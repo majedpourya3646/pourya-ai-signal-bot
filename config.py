@@ -30,7 +30,7 @@ CHAT_ID = os.getenv("CHAT_ID")
 # CoinEx API
 # ===========================
 
-BASE_URL = "https://api.coinex.com"
+BASE_URL = "https://api.coinex.com/v2"
 
 COINEX_API_KEY = os.getenv("COINEX_API_KEY")
 
