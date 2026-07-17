@@ -17,9 +17,7 @@ from portfolio import (
     get_trade_summary
 )
 
-from risk_manager import (
-    validate_trade
-)
+from risk_manager import validate_trade
 
 from trade_manager import (
     can_buy,
@@ -66,9 +64,6 @@ signal_text = {
 def check_open_trades():
 
     trades = get_all_trades()
-    print("CURRENT TRADES:")
-    print(get_all_trades())
-
 
     if not trades:
         return
@@ -89,13 +84,8 @@ def check_open_trades():
 
 
 
-            high = float(
-                df["high"].iloc[-1]
-            )
-
-            low = float(
-                df["low"].iloc[-1]
-            )
+            high = float(df["high"].iloc[-1])
+            low = float(df["low"].iloc[-1])
 
 
 
@@ -132,9 +122,7 @@ def check_open_trades():
                     profit
                 )
 
-
                 continue
-
 
 
 
@@ -187,7 +175,7 @@ def check_open_trades():
 
 
 # ==========================
-# Main Bot
+# MAIN
 # ==========================
 
 
@@ -195,12 +183,10 @@ def run_bot():
 
     try:
 
-
         api = coinex.get_balance()
 
 
         if not api or api.get("code") != 0:
-
 
             send_message(
                 "❌ CoinEx connection failed"
@@ -211,7 +197,7 @@ def run_bot():
 
 
         send_message(
-            """
+"""
 ✅ <b>Pourya Trader AI Started</b>
 
 CoinEx Connected
@@ -219,16 +205,14 @@ CoinEx Connected
         )
 
 
-
     except Exception as e:
 
 
         send_message(
-            f"❌ CoinEx Error\n\n{e}"
+            f"❌ CoinEx Error\n{e}"
         )
 
         return
-
 
 
 
@@ -256,12 +240,11 @@ CoinEx Connected
             result = analyze_symbol(symbol)
 
 
-
             report += (
 
                 f"🪙 <b>{symbol}</b>\n"
 
-                f"📌 {signal_text.get(result['signal'])}\n"
+                f"📌 {signal_text.get(result['signal'],'WAIT')}\n"
 
                 f"⭐ Confidence: {result['confidence']}%\n\n"
 
@@ -278,33 +261,17 @@ CoinEx Connected
             entry = result.get("entry")
 
 
-
             if entry is None:
 
                 continue
 
 
 
+            # permission check
 
-
-            if not can_buy(
-
-                symbol,
-
-                INITIAL_BALANCE,
-
-                START_BALANCE,
-
-                entry,
-
-                result["tp"],
-
-                result["sl"]
-
-            ):
+            if not can_buy(symbol):
 
                 continue
-
 
 
 
@@ -326,11 +293,9 @@ CoinEx Connected
             )
 
 
-
             if not valid:
 
                 continue
-
 
 
 
@@ -348,7 +313,6 @@ CoinEx Connected
             )
 
 
-
             qty = summary["quantity"]
 
 
@@ -356,7 +320,7 @@ CoinEx Connected
 
 
             # ==========================
-            # CoinEx Execution
+            # CoinEx Order
             # ==========================
 
 
@@ -369,7 +333,6 @@ CoinEx Connected
             )
 
 
-
             print(
                 "ORDER RESULT:",
                 order
@@ -378,18 +341,40 @@ CoinEx Connected
 
 
 
+            order_id = None
+
+
+            if isinstance(order, dict):
+
+                order_id = (
+                    order
+                    .get("data", {})
+                    .get("order_id")
+                )
+
+
+
+
+            # SAVE TRADE
+
 
             open_trade(
-    symbol,
-    entry,
-    tp,
-    sl,
-    quantity,
-    signal,
-    confidence,
-    leverage=LEVERAGE
-)
 
+                symbol,
+
+                result["signal"],
+
+                entry,
+
+                qty,
+
+                result["confidence"],
+
+                result["signal"],
+
+                order_id
+
+            )
 
 
 
@@ -425,15 +410,14 @@ CoinEx Connected
 
 
 
-
             send_message(
 
-                f"""
+f"""
 🚨 <b>NEW SIGNAL</b>
 
 🪙 {symbol}
 
-📊 {result['signal']}
+📊 Signal: {result['signal']}
 
 💰 Entry: {entry}
 
@@ -442,6 +426,8 @@ CoinEx Connected
 🛑 SL: {result['sl']}
 
 📦 Quantity: {qty}
+
+⭐ Confidence: {result['confidence']}%
 """
             )
 
@@ -457,7 +443,6 @@ CoinEx Connected
                 symbol,
                 e
             )
-
 
 
 
