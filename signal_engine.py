@@ -3,7 +3,7 @@ import ta
 
 def analyze_market(df):
 
-    if len(df) < 60:
+    if df is None or len(df) < 200:
         return {
             "signal": "WAIT",
             "entry": None,
@@ -18,12 +18,13 @@ def analyze_market(df):
     low = df["low"]
     volume = df["volume"]
 
-    score = 0
     reasons = []
 
-    # =========================
+    score = 0
+
+    # =====================
     # Indicators
-    # =========================
+    # =====================
 
     rsi = ta.momentum.RSIIndicator(
         close=close,
@@ -51,128 +52,125 @@ def analyze_market(df):
     macd_signal = macd.macd_signal()
 
     adx = ta.trend.ADXIndicator(
-        high=high,
-        low=low,
-        close=close,
+        high,
+        low,
+        close,
         window=14
     ).adx()
 
-    avg_volume = volume.tail(20).mean()
+    atr = ta.volatility.AverageTrueRange(
+        high,
+        low,
+        close,
+        window=14
+    ).average_true_range()
 
-    last_price = float(close.iloc[-1])
-    last_rsi = float(rsi.iloc[-1])
+    if (
+        rsi.isna().iloc[-1]
+        or ema200.isna().iloc[-1]
+        or adx.isna().iloc[-1]
+    ):
+        return {
+            "signal": "WAIT",
+            "entry": None,
+            "tp": None,
+            "sl": None,
+            "confidence": 0,
+            "reasons": []
+        }
 
-    # =========================
-    # RSI
-    # =========================
+    price = float(close.iloc[-1])
 
-    if last_rsi < 35:
-        score += 20
-        reasons.append("RSI Oversold")
-
-    elif last_rsi < 50:
-        score += 10
-
-    elif last_rsi > 75:
-        score -= 20
-        reasons.append("RSI Overbought")
-
-    # =========================
-    # EMA20 > EMA50
-    # =========================
+    # =====================
+    # EMA Trend
+    # =====================
 
     if ema20.iloc[-1] > ema50.iloc[-1]:
-        score += 20
-        reasons.append("EMA20 Above EMA50")
+        score += 15
+        reasons.append("EMA20 > EMA50")
 
-    # =========================
-    # Price > EMA200
-    # =========================
+    if ema50.iloc[-1] > ema200.iloc[-1]:
+        score += 15
+        reasons.append("EMA50 > EMA200")
 
-    if not ema200.isna().iloc[-1]:
+    # =====================
+    # RSI
+    # =====================
 
-        if last_price > ema200.iloc[-1]:
-            score += 20
-            reasons.append("Above EMA200")
+    if 45 <= rsi.iloc[-1] <= 65:
+        score += 15
+        reasons.append("Healthy RSI")
 
-    # =========================
+    elif rsi.iloc[-1] < 35:
+        score += 10
+        reasons.append("Oversold")
+
+    # =====================
     # MACD
-    # =========================
+    # =====================
 
     if macd_line.iloc[-1] > macd_signal.iloc[-1]:
         score += 20
         reasons.append("MACD Bullish")
 
-    # =========================
+    # =====================
     # ADX
-    # =========================
+    # =====================
 
-    if not adx.isna().iloc[-1]:
+    if adx.iloc[-1] > 20:
+        score += 15
+        reasons.append("Strong Trend")
 
-        if adx.iloc[-1] > 25:
-            score += 20
-            reasons.append("Strong Trend")
-
-    # =========================
+    # =====================
     # Volume
-    # =========================
+    # =====================
 
-    if volume.iloc[-1] > avg_volume:
+    if volume.iloc[-1] > volume.tail(20).mean():
         score += 10
         reasons.append("High Volume")
 
-    # =========================
-    # Price > EMA20
-    # =========================
+    # =====================
+    # Price
+    # =====================
 
-    if last_price > ema20.iloc[-1]:
+    if price > ema20.iloc[-1]:
         score += 10
+        reasons.append("Price Above EMA20")
 
-    # =========================
-    # LIMIT SCORE
-    # =========================
+    confidence = min(score, 100)
 
-    score = max(0, min(score, 100))
+    entry = round(price, 6)
 
-    # =========================
-    # SIGNAL
-    # =========================
+    sl = round(
+        price - atr.iloc[-1] * 1.5,
+        6
+    )
 
-    if score >= 85:
+    tp = round(
+        price + atr.iloc[-1] * 3,
+        6
+    )
 
+    if confidence >= 80:
         signal = "STRONG BUY"
 
-        tp = round(last_price * 1.05, 6)
-
-        sl = round(last_price * 0.98, 6)
-
-    elif score >= 65:
-
+    elif confidence >= 60:
         signal = "BUY"
 
-        tp = round(last_price * 1.035, 6)
-
-        sl = round(last_price * 0.985, 6)
-
     else:
-
         signal = "WAIT"
-
-        tp = None
-
-        sl = None
 
     return {
 
         "signal": signal,
 
-        "entry": round(last_price, 6),
+        "entry": entry,
 
         "tp": tp,
 
         "sl": sl,
 
-        "confidence": score,
+        "confidence": confidence,
 
         "reasons": reasons
 
