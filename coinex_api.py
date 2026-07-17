@@ -21,13 +21,18 @@ class CoinExAPI:
     def create_signature(
         self,
         method,
-        request_path,
+        path,
+        params=None,
         body=""
     ):
 
-        timestamp = str(
-            int(time.time() * 1000)
-        )
+        timestamp = str(int(time.time() * 1000))
+
+        request_path = path
+
+        if method.upper() == "GET" and params:
+            request_path += "?" + urlencode(params)
+
 
         sign_string = (
             method.upper()
@@ -37,14 +42,14 @@ class CoinExAPI:
         )
 
 
-        signature = hmac.new(
+        sign = hmac.new(
             self.secret_key.encode("utf-8"),
             sign_string.encode("utf-8"),
             hashlib.sha256
         ).hexdigest().lower()
 
 
-        return signature, timestamp
+        return sign, timestamp
 
 
 
@@ -62,14 +67,6 @@ class CoinExAPI:
 
             body = ""
 
-            if method.upper() == "POST" and params:
-
-                body = json.dumps(
-                    params,
-                    separators=(",", ":")
-                )
-
-
             headers = {
                 "Content-Type": "application/json"
             }
@@ -77,17 +74,10 @@ class CoinExAPI:
 
             if private:
 
-                request_path = "/v2" + path
-
-
-                if method.upper() == "GET" and params:
-
-                    request_path += "?" + urlencode(params)
-
-
                 sign, timestamp = self.create_signature(
                     method,
-                    request_path,
+                    "/v2" + path,
+                    params,
                     body
                 )
 
@@ -111,7 +101,7 @@ class CoinExAPI:
                 )
 
 
-            elif method.upper() == "POST":
+            else:
 
                 response = session.post(
                     url,
@@ -146,10 +136,6 @@ class CoinExAPI:
 
 
 
-    # ======================
-    # Futures Balance
-    # ======================
-
     def get_futures_balance(self):
 
         return self._request(
@@ -159,10 +145,6 @@ class CoinExAPI:
         )
 
 
-
-    # ======================
-    # Spot Balance
-    # ======================
 
     def get_spot_balance(self):
 
