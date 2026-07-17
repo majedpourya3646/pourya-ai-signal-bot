@@ -6,7 +6,18 @@ print("COINEX BALANCE TEST")
 print("=" * 50)
 
 
-balance = coinex.get_futures_balance()
+print("\nFUTURES BALANCE")
+print("----------------")
+
+futures = coinex.get_futures_balance()
+
+print(futures)
 
 
-print(balance)
+
+print("\nSPOT BALANCE")
+print("----------------")
+
+spot = coinex.get_spot_balance()
+
+print(spot)
