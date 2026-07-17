@@ -3,15 +3,12 @@ from signal_engine import analyze_market
 from core.logger import logger
 
 
-
+# وزن تایم‌فریم‌ها
+# تایم بالاتر اهمیت بیشتری دارد
 TIMEFRAME_WEIGHTS = {
-
-    "15m": 0.25,
-
+    "15m": 0.20,
     "1h": 0.35,
-
-    "4h": 0.40
-
+    "4h": 0.45
 }
 
 
@@ -19,24 +16,14 @@ TIMEFRAME_WEIGHTS = {
 def empty_result():
 
     return {
-
         "signal": "WAIT",
-
         "entry": None,
-
         "tp": None,
-
         "sl": None,
-
         "confidence": 0,
-
         "reasons": [],
-
         "detail": {}
-
     }
-
-
 
 
 
@@ -44,6 +31,7 @@ def analyze_symbol(symbol):
 
     try:
 
+        # دریافت دیتا
 
         tf15 = get_market_data(
             symbol,
@@ -70,9 +58,15 @@ def analyze_symbol(symbol):
             or tf4h.empty
         ):
 
+            logger.warning(
+                f"{symbol} EMPTY DATA"
+            )
+
             return empty_result()
 
 
+
+        # تحلیل هر تایم فریم
 
         r15 = analyze_market(tf15)
 
@@ -82,23 +76,21 @@ def analyze_symbol(symbol):
 
 
 
+        # محاسبه امتیاز نهایی
 
         score = round(
 
-            r15["confidence"]
-            *
+            r15["confidence"] *
             TIMEFRAME_WEIGHTS["15m"]
 
             +
 
-            r1h["confidence"]
-            *
+            r1h["confidence"] *
             TIMEFRAME_WEIGHTS["1h"]
 
             +
 
-            r4h["confidence"]
-            *
+            r4h["confidence"] *
             TIMEFRAME_WEIGHTS["4h"]
 
         )
@@ -108,28 +100,19 @@ def analyze_symbol(symbol):
         logger.info(
 
             f"{symbol} | "
-
             f"15M {r15['confidence']} {r15['signal']} | "
-
             f"1H {r1h['confidence']} {r1h['signal']} | "
-
             f"4H {r4h['confidence']} {r4h['signal']} | "
-
             f"AVG {score}"
 
         )
 
 
 
-
         results = [
-
             r15,
-
             r1h,
-
             r4h
-
         ]
 
 
@@ -137,11 +120,8 @@ def analyze_symbol(symbol):
         buy_count = sum(
 
             x["signal"] in [
-
                 "BUY",
-
                 "STRONG BUY"
-
             ]
 
             for x in results
@@ -150,15 +130,9 @@ def analyze_symbol(symbol):
 
 
 
-        sell_count = sum(
+        strong_count = sum(
 
-            x["signal"] in [
-
-                "SELL",
-
-                "STRONG SELL"
-
-            ]
+            x["signal"] == "STRONG BUY"
 
             for x in results
 
@@ -166,29 +140,11 @@ def analyze_symbol(symbol):
 
 
 
-
-
-        # =====================
-        # Decision Engine
-        # =====================
-
-
-        signal = "WAIT"
-
-
+        # منطق ورود
 
         if (
-
             buy_count == 3
-
-            and
-
-            sell_count == 0
-
-            and
-
-            score >= 75
-
+            and score >= 70
         ):
 
             signal = "STRONG BUY"
@@ -196,34 +152,17 @@ def analyze_symbol(symbol):
 
 
         elif (
-
             buy_count >= 2
-
-            and
-
-            sell_count == 0
-
-            and
-
-            score >= 65
-
+            and score >= 60
         ):
 
             signal = "BUY"
 
 
 
-        elif (
+        else:
 
-            sell_count >= 2
-
-            and
-
-            score >= 65
-
-        ):
-
-            signal = "SELL"
+            signal = "WAIT"
 
 
 
@@ -232,18 +171,30 @@ def analyze_symbol(symbol):
 
             "signal": signal,
 
-            "entry": r15.get("entry"),
+            "entry": r15.get(
+                "entry"
+            ),
 
-            "tp": r15.get("tp"),
+            "tp": r15.get(
+                "tp"
+            ),
 
-            "sl": r15.get("sl"),
+            "sl": r15.get(
+                "sl"
+            ),
+
 
             "confidence": score,
 
-            "reasons": r15.get(
-                "reasons",
-                []
+
+            "reasons": (
+                r15.get(
+                    "reasons",
+                    []
+                )
             ),
+
+
 
             "detail": {
 
@@ -256,8 +207,6 @@ def analyze_symbol(symbol):
             }
 
         }
-
-
 
 
 
