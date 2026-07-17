@@ -1,6 +1,5 @@
 import os
 import time
-import json
 import hmac
 import hashlib
 from urllib.parse import urlencode
@@ -17,7 +16,6 @@ class CoinExAPI:
         self.api_key = os.getenv("COINEX_API_KEY")
         self.secret_key = os.getenv("COINEX_SECRET_KEY")
 
-
     def create_signature(
         self,
         method,
@@ -33,7 +31,6 @@ class CoinExAPI:
         if method.upper() == "GET" and params:
             request_path += "?" + urlencode(params)
 
-
         sign_string = (
             method.upper()
             + request_path
@@ -41,17 +38,13 @@ class CoinExAPI:
             + timestamp
         )
 
-
         sign = hmac.new(
             self.secret_key.encode("utf-8"),
             sign_string.encode("utf-8"),
             hashlib.sha256
         ).hexdigest().lower()
 
-
         return sign, timestamp
-
-
 
     def _request(
         self,
@@ -71,7 +64,6 @@ class CoinExAPI:
                 "Content-Type": "application/json"
             }
 
-
             if private:
 
                 sign, timestamp = self.create_signature(
@@ -81,15 +73,11 @@ class CoinExAPI:
                     body
                 )
 
-
                 headers.update({
-
                     "X-COINEX-KEY": self.api_key,
                     "X-COINEX-SIGN": sign,
                     "X-COINEX-TIMESTAMP": timestamp
-
                 })
-
 
             if method.upper() == "GET":
 
@@ -100,41 +88,29 @@ class CoinExAPI:
                     timeout=session.timeout
                 )
 
-
             else:
 
                 response = session.post(
                     url,
-                    data=body,
+                    json=params,
                     headers=headers,
                     timeout=session.timeout
                 )
 
-
-            logger.info(
-                f"URL: {response.url}"
-            )
-
-            logger.info(
-                f"STATUS: {response.status_code}"
-            )
-
-            logger.info(
-                response.text[:500]
-            )
-
+            logger.info(f"URL: {response.url}")
+            logger.info(f"STATUS: {response.status_code}")
+            logger.info(response.text[:500])
 
             return response.json()
 
-
-
         except Exception as e:
 
-            logger.error(e)
-
+            logger.exception(e)
             return None
 
-
+    # ===========================
+    # Futures Balance
+    # ===========================
 
     def get_futures_balance(self):
 
@@ -144,7 +120,9 @@ class CoinExAPI:
             private=True
         )
 
-
+    # ===========================
+    # Spot Balance
+    # ===========================
 
     def get_spot_balance(self):
 
@@ -154,6 +132,15 @@ class CoinExAPI:
             private=True
         )
 
+    # ===========================
+    # Compatibility
+    # ===========================
+
+    def get_balance(self):
+        """
+        برای سازگاری با فایل‌های قدیمی ربات
+        """
+        return self.get_futures_balance()
 
 
 coinex = CoinExAPI()
