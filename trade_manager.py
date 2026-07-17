@@ -1,44 +1,45 @@
-
-import json
 import os
-from datetime import datetime, timezone
+import json
+from datetime import datetime
 
-from risk_manager import (
-    can_open_trade,
-    validate_trade
+from config import (
+    MAX_OPEN_TRADES,
+    DEFAULT_TP,
+    DEFAULT_SL,
 )
 
-
-TRADE_FILE = "data/open_trades.json"
-
+from core.logger import logger
 
 
-def now():
-
-    return datetime.now(
-        timezone.utc
-    ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+TRADES_FILE = "data/open_trades.json"
 
 
+# =========================
+# Load Trades
+# =========================
 
 def load_trades():
 
-    if not os.path.exists(TRADE_FILE):
+    if not os.path.exists(TRADES_FILE):
         return {}
 
     try:
         with open(
-            TRADE_FILE,
+            TRADES_FILE,
             "r"
         ) as f:
+
             return json.load(f)
 
     except Exception:
+
         return {}
 
 
+
+# =========================
+# Save Trades
+# =========================
 
 def save_trades(trades):
 
@@ -48,7 +49,7 @@ def save_trades(trades):
     )
 
     with open(
-        TRADE_FILE,
+        TRADES_FILE,
         "w"
     ) as f:
 
@@ -58,92 +59,95 @@ def save_trades(trades):
             indent=4
         )
 
-    print("SAVED TRADES:", trades)
-    print("FILE PATH:", os.path.abspath(TRADE_FILE))
-    
-def can_buy(
-    symbol,
-    balance=None,
-    start_balance=None,
-    entry=None,
-    tp=None,
-    sl=None
-):
+
+
+# =========================
+# Current Trades
+# =========================
+
+def get_all_trades():
+
+    trades = load_trades()
+
+    print(
+        "CURRENT TRADES:"
+    )
+
+    print(
+        trades
+    )
+
+    return trades
+
+
+
+# =========================
+# Check Capacity
+# =========================
+
+def can_buy(symbol):
 
     trades = load_trades()
 
 
-    # جلوگیری از خرید تکراری
     if symbol in trades:
+
         return False
 
 
+    if len(trades) >= MAX_OPEN_TRADES:
 
-    # محدودیت تعداد معاملات
-    if not can_open_trade(trades):
         return False
-
-
-
-    if all(
-        x is not None
-        for x in [
-            balance,
-            start_balance,
-            entry,
-            tp,
-            sl
-        ]
-    ):
-
-        valid, _ = validate_trade(
-            balance,
-            start_balance,
-            trades,
-            entry,
-            tp,
-            sl
-        )
-
-
-        if not valid:
-            return False
 
 
     return True
 
 
 
+# =========================
+# Open Trade
+# =========================
+
 def open_trade(
     symbol,
+    side,
     entry,
-    tp,
-    sl,
-    quantity=0,
-    signal="",
+    quantity,
     confidence=0,
-    grade="",
-    order_id=None,
-    side="LONG",
-    leverage=1
+    signal="BUY",
+    leverage=1,
+    order_id=None
 ):
-    print("OPEN TRADE CALLED:", symbol)
+
+
     trades = load_trades()
 
 
-    trades[symbol] = {
+    # TP / SL
+    tp = entry * (
+        1 + DEFAULT_TP / 100
+    )
+
+
+    sl = entry * (
+        1 - DEFAULT_SL / 100
+    )
+
+
+
+    trade = {
 
         "symbol": symbol,
 
         "side": side,
 
-        "entry": float(entry),
+        "entry": entry,
 
-        "tp": float(tp),
+        "tp": round(tp, 8),
 
-        "sl": float(sl),
+        "sl": round(sl, 8),
 
-        "quantity": float(quantity),
+        "quantity": quantity,
 
         "leverage": leverage,
 
@@ -151,22 +155,56 @@ def open_trade(
 
         "confidence": confidence,
 
-        "grade": grade,
-
         "order_id": order_id,
 
         "status": "OPEN",
 
-        "open_time": now(),
+        "open_time":
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
 
-        "updated_at": now()
+        "updated_at":
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
 
     }
 
 
-    save_trades(trades)
+
+    trades[symbol] = trade
 
 
+    save_trades(
+        trades
+    )
+
+
+    logger.info(
+        f"OPEN TRADE CALLED: {symbol}"
+    )
+
+
+    print(
+        "SAVED TRADES:",
+        trades
+    )
+
+
+    print(
+        "FILE PATH:",
+        os.path.abspath(TRADES_FILE)
+    )
+
+
+    return trade
+
+
+
+# =========================
+# Close Trade
+# =========================
 
 def close_trade(symbol):
 
@@ -175,85 +213,21 @@ def close_trade(symbol):
 
     if symbol in trades:
 
-        del trades[symbol]
+        trades[symbol]["status"] = "CLOSED"
+
+        trades[symbol]["updated_at"] = (
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        )
 
 
-    save_trades(trades)
+        save_trades(
+            trades
+        )
 
 
-
-def update_trade(
-    symbol,
-    **kwargs
-):
-
-    trades = load_trades()
+        return True
 
 
-    if symbol in trades:
-
-        for key,value in kwargs.items():
-
-            trades[symbol][key] = value
-
-
-        trades[symbol]["updated_at"] = now()
-
-
-        save_trades(trades)
-
-
-
-def update_stop_loss(
-    symbol,
-    new_sl
-):
-
-    update_trade(
-        symbol,
-        sl=new_sl
-    )
-
-
-
-def update_take_profit(
-    symbol,
-    new_tp
-):
-
-    update_trade(
-        symbol,
-        tp=new_tp
-    )
-
-
-
-def trade_exists(symbol):
-
-    return symbol in load_trades()
-
-
-
-def get_trade(symbol):
-
-    return load_trades().get(symbol)
-
-
-
-def get_all_trades():
-
-    return load_trades()
-
-
-
-def count_open_trades():
-
-    trades = load_trades()
-
-    return len(trades)
-
-
-
-def clear_all_trades():
-
-    save_trades({})
+    return False
