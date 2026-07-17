@@ -11,7 +11,21 @@ from config import (
 from core.logger import logger
 
 
-TRADES_FILE = "data/open_trades.json"
+# =========================
+# File
+# =========================
+
+DATA_DIR = "data"
+
+FILE_PATH = os.path.join(
+    DATA_DIR,
+    "open_trades.json"
+)
+
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
 
 
 # =========================
@@ -20,12 +34,12 @@ TRADES_FILE = "data/open_trades.json"
 
 def load_trades():
 
-    if not os.path.exists(TRADES_FILE):
+    if not os.path.exists(FILE_PATH):
         return {}
 
     try:
         with open(
-            TRADES_FILE,
+            FILE_PATH,
             "r"
         ) as f:
 
@@ -43,13 +57,8 @@ def load_trades():
 
 def save_trades(trades):
 
-    os.makedirs(
-        "data",
-        exist_ok=True
-    )
-
     with open(
-        TRADES_FILE,
+        FILE_PATH,
         "w"
     ) as f:
 
@@ -62,12 +71,30 @@ def save_trades(trades):
 
 
 # =========================
-# Current Trades
+# Get Trades
 # =========================
 
 def get_all_trades():
 
+    return load_trades()
+
+
+
+# =========================
+# Check Permission
+# =========================
+
+def can_buy(
+    symbol,
+    side,
+    confidence,
+    quantity,
+    tp,
+    sl
+):
+
     trades = load_trades()
+
 
     print(
         "CURRENT TRADES:"
@@ -77,27 +104,29 @@ def get_all_trades():
         trades
     )
 
-    return trades
 
-
-
-# =========================
-# Check Capacity
-# =========================
-
-def can_buy(symbol):
-
-    trades = load_trades()
-
+    # جلوگیری از خرید تکراری
 
     if symbol in trades:
 
+        logger.info(
+            f"{symbol} already opened"
+        )
+
         return False
 
+
+
+    # محدودیت تعداد معاملات
 
     if len(trades) >= MAX_OPEN_TRADES:
 
+        logger.info(
+            "MAX OPEN TRADES REACHED"
+        )
+
         return False
+
 
 
     return True
@@ -113,9 +142,7 @@ def open_trade(
     side,
     entry,
     quantity,
-    confidence=0,
-    signal="BUY",
-    leverage=1,
+    confidence,
     order_id=None
 ):
 
@@ -123,15 +150,26 @@ def open_trade(
     trades = load_trades()
 
 
-    # TP / SL
-    tp = entry * (
-        1 + DEFAULT_TP / 100
-    )
 
+    if side.upper() == "LONG":
 
-    sl = entry * (
-        1 - DEFAULT_SL / 100
-    )
+        tp = entry * (
+            1 + DEFAULT_TP / 100
+        )
+
+        sl = entry * (
+            1 - DEFAULT_SL / 100
+        )
+
+    else:
+
+        tp = entry * (
+            1 - DEFAULT_TP / 100
+        )
+
+        sl = entry * (
+            1 + DEFAULT_SL / 100
+        )
 
 
 
@@ -143,15 +181,15 @@ def open_trade(
 
         "entry": entry,
 
-        "tp": round(tp, 8),
+        "tp": round(tp, 6),
 
-        "sl": round(sl, 8),
+        "sl": round(sl, 6),
 
         "quantity": quantity,
 
-        "leverage": leverage,
+        "leverage": 10,
 
-        "signal": signal,
+        "signal": "BUY",
 
         "confidence": confidence,
 
@@ -181,11 +219,6 @@ def open_trade(
     )
 
 
-    logger.info(
-        f"OPEN TRADE CALLED: {symbol}"
-    )
-
-
     print(
         "SAVED TRADES:",
         trades
@@ -194,7 +227,7 @@ def open_trade(
 
     print(
         "FILE PATH:",
-        os.path.abspath(TRADES_FILE)
+        FILE_PATH
     )
 
 
@@ -231,3 +264,15 @@ def close_trade(symbol):
 
 
     return False
+
+
+
+# =========================
+# Open Count
+# =========================
+
+def get_open_count():
+
+    trades = load_trades()
+
+    return len(trades)
