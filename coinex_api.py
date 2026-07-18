@@ -281,7 +281,7 @@ class CoinExTrade:
         )
 
 
-coinex_trade = CoinExTrade()   
+coinex = CoinExAPI()
 
 
             
