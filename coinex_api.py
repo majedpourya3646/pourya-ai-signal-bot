@@ -3,7 +3,6 @@ import json
 import time
 import hmac
 import hashlib
-from urllib.parse import urlencode
 
 from config import (
     BASE_URL,
@@ -33,28 +32,19 @@ class CoinExAPI:
         self,
         method,
         path,
-        query="",
         body=""
     ):
 
+
         timestamp = str(
-            int(time.time() * 1000)
+            int(time.time()*1000)
         )
-
-
-        request_path = path
-
-
-        if query:
-
-            request_path += "?" + query
-
 
 
         sign_string = (
             method.upper()
             +
-            request_path
+            path
             +
             body
             +
@@ -79,7 +69,7 @@ class CoinExAPI:
         )
 
 
-        return sign, timestamp
+        return sign,timestamp
 
 
 
@@ -95,10 +85,6 @@ class CoinExAPI:
 
         params = params or {}
 
-        query = urlencode(
-            sorted(params.items())
-        )
-
 
         body = ""
 
@@ -112,16 +98,23 @@ class CoinExAPI:
 
 
 
+        if method.upper() != "GET":
+
+            body = json.dumps(
+                params,
+                separators=(",",":")
+            )
+
+
+
         if private:
 
 
-            sign, timestamp = self._sign(
+            sign,timestamp = self._sign(
 
                 method,
 
                 "/v2" + path,
-
-                query,
 
                 body
 
@@ -152,7 +145,7 @@ class CoinExAPI:
         try:
 
 
-            if method.upper() == "GET":
+            if method.upper()=="GET":
 
 
                 response = session.get(
@@ -175,7 +168,7 @@ class CoinExAPI:
 
                     url,
 
-                    json=params,
+                    data=body,
 
                     headers=headers,
 
@@ -196,9 +189,8 @@ class CoinExAPI:
 
 
             logger.info(
-                response.text[:500]
+                response.text
             )
-
 
 
             return response.json()
@@ -222,10 +214,7 @@ class CoinExAPI:
 
 
 
-
-    # ===========================
     # Balance
-    # ===========================
 
     def get_futures_balance(self):
 
@@ -241,15 +230,8 @@ class CoinExAPI:
 
 
 
-    def get_balance(self):
 
-        return self.get_futures_balance()
-
-
-
-    # ===========================
     # Futures Order
-    # ===========================
 
     def create_futures_order(
         self,
@@ -261,7 +243,7 @@ class CoinExAPI:
     ):
 
 
-        data = {
+        data={
 
             "market":market,
 
@@ -279,7 +261,7 @@ class CoinExAPI:
 
         if price:
 
-            data["price"] = str(price)
+            data["price"]=str(price)
 
 
 
