@@ -3,10 +3,6 @@ import json
 import hmac
 import hashlib
 
-import config
-
-logger.info(f"CONFIG FILE = {config.__file__}")
-logger.info(f"PAPER = {config.PAPER_TRADING}")
 
 from config import (
     BASE_URL,
@@ -17,6 +13,10 @@ from config import (
 
 from core.session import session
 from core.logger import logger
+import config
+
+logger.info(f"CONFIG FILE = {config.__file__}")
+logger.info(f"PAPER_TRADING = {config.PAPER_TRADING}")
 
 
 class CoinExTrade:
