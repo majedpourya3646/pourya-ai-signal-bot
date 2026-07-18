@@ -250,7 +250,146 @@ class CoinExAPI:
     def get_balance(self):
 
         return self.get_futures_balance()
+    # ===========================
+    # Set Futures Leverage
+    # ===========================
 
+    def set_leverage(self, market, leverage):
+
+        return self._request(
+            "POST",
+            "/futures/set-leverage",
+            params={
+                "market": market,
+                "leverage": leverage
+            },
+            private=True
+        )
+
+
+    # ===========================
+    # Open Futures Order
+    # ===========================
+
+    def create_futures_order(
+        self,
+        market,
+        side,
+        amount,
+        order_type="market",
+        price=None
+    ):
+
+        data = {
+            "market": market,
+            "market_type": "FUTURES",
+            "side": side,
+            "type": order_type,
+            "amount": str(amount)
+        }
+
+        if price is not None:
+            data["price"] = str(price)
+
+        return self._request(
+            "POST",
+            "/futures/order",
+            params=data,
+            private=True
+        )
+
+
+    # ===========================
+    # Close Position
+    # ===========================
+
+    def close_position(
+        self,
+        market,
+        side,
+        amount
+    ):
+
+        return self.create_futures_order(
+            market=market,
+            side=side,
+            amount=amount,
+            order_type="market"
+        )
+
+
+    # ===========================
+    # Open Positions
+    # ===========================
+
+    def get_positions(self):
+
+        return self._request(
+            "GET",
+            "/futures/pending-position",
+            private=True
+        )
+
+
+    # ===========================
+    # Open Orders
+    # ===========================
+
+    def get_open_orders(
+        self,
+        market=None
+    ):
+
+        params = {}
+
+        if market:
+            params["market"] = market
+
+        return self._request(
+            "GET",
+            "/futures/pending-order",
+            params=params,
+            private=True
+        )
+
+
+    # ===========================
+    # Cancel Order
+    # ===========================
+
+    def cancel_order(
+        self,
+        market,
+        order_id
+    ):
+
+        return self._request(
+            "POST",
+            "/futures/cancel-order",
+            params={
+                "market": market,
+                "order_id": order_id
+            },
+            private=True
+        )
+
+
+    # ===========================
+    # Market Information
+    # ===========================
+
+    def get_market_info(
+        self,
+        market
+    ):
+
+        return self._request(
+            "GET",
+            "/futures/market",
+            params={
+                "market": market
+            }
+        )
 
 
 
