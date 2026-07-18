@@ -5,6 +5,7 @@ import hmac
 import hashlib
 from urllib.parse import urlencode
 
+
 from config import (
     BASE_URL,
     COINEX_API_KEY,
@@ -12,11 +13,15 @@ from config import (
     REQUEST_TIMEOUT
 )
 
+
 from core.session import session
 from core.logger import logger
 
 
+
+
 class CoinExAPI:
+
 
 
     def __init__(self):
@@ -29,19 +34,31 @@ class CoinExAPI:
 
 
 
+
+
     def _signature(
         self,
         method,
-        request_path,
-        body="",
-        timestamp=None
+        path,
+        query="",
+        body=""
     ):
 
-        if timestamp is None:
 
-            timestamp = str(
-                int(time.time()*1000)
-            )
+        timestamp = str(
+            int(time.time()*1000)
+        )
+
+
+
+        request_path = path
+
+
+        if query:
+
+            request_path += "?" + query
+
+
 
 
         sign_string = (
@@ -63,6 +80,7 @@ class CoinExAPI:
         )
 
 
+
         sign = hmac.new(
 
             self.secret_key.encode("utf-8"),
@@ -71,24 +89,29 @@ class CoinExAPI:
 
             hashlib.sha256
 
-        ).hexdigest()
+        ).hexdigest().lower()
+
 
 
         logger.info(
             f"SIGN STRING: {sign_string}"
         )
 
+
         logger.info(
             f"SIGN: {sign}"
         )
 
 
-        return sign,timestamp
+
+        return sign, timestamp
 
 
 
 
-    def request(
+
+
+    def _request(
         self,
         method,
         path,
@@ -97,13 +120,17 @@ class CoinExAPI:
     ):
 
 
+
         params = params or {}
+
 
 
         url = self.base_url + path
 
 
+
         body = ""
+
 
 
         headers = {
@@ -115,39 +142,58 @@ class CoinExAPI:
 
 
 
+
+
         if method.upper() == "POST":
 
+
             body = json.dumps(
+
                 params,
-                separators=(",",":")
+
+                separators=(",", ":")
+
             )
+
+
+
 
 
 
         if private:
 
 
+
             query = ""
+
+
 
             if method.upper()=="GET" and params:
 
-                query = "?" + urlencode(
+
+                query = urlencode(
+
                     sorted(params.items())
+
                 )
 
 
-            sign_path = "/v2" + path + query
 
 
-            sign,timestamp = self._signature(
+
+            sign, timestamp = self._signature(
 
                 method,
 
-                sign_path,
+                "/v2"+path,
+
+                query,
 
                 body
 
             )
+
+
 
 
             headers.update({
@@ -167,13 +213,19 @@ class CoinExAPI:
 
 
 
+
+
+
+
         try:
+
 
 
             if method.upper()=="GET":
 
 
-                r=session.get(
+
+                response = session.get(
 
                     url,
 
@@ -186,10 +238,13 @@ class CoinExAPI:
                 )
 
 
+
+
             else:
 
 
-                r=session.post(
+
+                response = session.post(
 
                     url,
 
@@ -203,41 +258,61 @@ class CoinExAPI:
 
 
 
+
+
             logger.info(
-                f"URL: {r.url}"
+                f"URL: {response.url}"
             )
 
 
             logger.info(
-                f"STATUS: {r.status_code}"
+                f"STATUS: {response.status_code}"
             )
 
 
             logger.info(
-                r.text
+                response.text[:500]
             )
 
 
 
-            return r.json()
+            return response.json()
+
+
 
 
 
         except Exception as e:
 
 
+
             logger.exception(e)
 
-            return None
+
+
+            return {
+
+                "code":-1,
+
+                "message":str(e)
+
+            }
 
 
 
+
+
+
+
+    # ==========================
+    # Balance
+    # ==========================
 
 
     def get_balance(self):
 
 
-        return self.request(
+        return self._request(
 
             "GET",
 
@@ -250,38 +325,137 @@ class CoinExAPI:
 
 
 
+
+
+
+    # ==========================
+    # Futures Order
+    # ==========================
+
+
     def create_futures_order(
         self,
         market,
         side,
         amount,
-        order_type="market"
+        order_type="market",
+        price=None
     ):
 
 
-        return self.request(
+
+        data = {
+
+
+            "market":
+            market,
+
+
+            "market_type":
+            "FUTURES",
+
+
+            "side":
+            side,
+
+
+            "type":
+            order_type,
+
+
+            "amount":
+            str(amount)
+
+        }
+
+
+
+
+
+        if price is not None:
+
+
+            data["price"] = str(price)
+
+
+
+
+
+
+        return self._request(
 
             "POST",
 
             "/futures/order",
 
-            {
+            params=data,
+
+            private=True
+
+        )
+
+
+
+
+
+
+
+
+    # ==========================
+    # Positions
+    # ==========================
+
+
+    def get_positions(self):
+
+
+        return self._request(
+
+            "GET",
+
+            "/futures/pending-position",
+
+            private=True
+
+        )
+
+
+
+
+
+
+    # ==========================
+    # Cancel Order
+    # ==========================
+
+
+    def cancel_order(
+        self,
+        market,
+        order_id
+    ):
+
+
+        return self._request(
+
+            "POST",
+
+            "/futures/cancel-order",
+
+            params={
 
                 "market":market,
 
-                "market_type":"FUTURES",
-
-                "side":side,
-
-                "type":order_type,
-
-                "amount":str(amount)
+                "order_id":order_id
 
             },
 
             private=True
 
         )
+
+
+
 
 
 
