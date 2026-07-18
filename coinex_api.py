@@ -18,6 +18,7 @@ from core.logger import logger
 
 class CoinExAPI:
 
+
     def __init__(self):
 
         self.base_url = BASE_URL.rstrip("/")
@@ -25,6 +26,7 @@ class CoinExAPI:
         self.api_key = COINEX_API_KEY
 
         self.secret_key = COINEX_SECRET_KEY
+
 
 
     def _sign(
@@ -39,23 +41,34 @@ class CoinExAPI:
             int(time.time() * 1000)
         )
 
+
         request_path = path
 
+
         if query:
+
             request_path += "?" + query
+
+
 
         sign_string = (
             method.upper()
-            + request_path
-            + body
-            + timestamp
+            +
+            request_path
+            +
+            body
+            +
+            timestamp
         )
+
 
         sign = hmac.new(
             self.secret_key.encode("utf-8"),
             sign_string.encode("utf-8"),
             hashlib.sha256
         ).hexdigest().lower()
+
+
 
         logger.info(
             f"SIGN STRING: {sign_string}"
@@ -65,7 +78,10 @@ class CoinExAPI:
             f"SIGN: {sign}"
         )
 
+
         return sign, timestamp
+
+
 
 
     def _request(
@@ -73,215 +89,212 @@ class CoinExAPI:
         method,
         path,
         params=None,
-        body=None,
         private=False
     ):
 
-        params = params or {}
 
-        body = body or {}
+        params = params or {}
 
         query = urlencode(
             sorted(params.items())
         )
 
-        json_body = ""
 
-        if method.upper() != "GET":
-            json_body = json.dumps(
-                body,
-                separators=(",", ":")
-            )
+        body = ""
+
 
         headers = {
-            "Content-Type": "application/json"
+
+            "Content-Type":
+            "application/json"
+
         }
+
+
 
         if private:
 
+
             sign, timestamp = self._sign(
+
                 method,
+
                 "/v2" + path,
+
                 query,
-                json_body
+
+                body
+
             )
+
 
             headers.update({
 
-                "X-COINEX-KEY": self.api_key,
+                "X-COINEX-KEY":
+                self.api_key,
 
-                "X-COINEX-SIGN": sign,
 
-                "X-COINEX-TIMESTAMP": timestamp
+                "X-COINEX-SIGN":
+                sign,
+
+
+                "X-COINEX-TIMESTAMP":
+                timestamp
 
             })
 
+
+
         url = self.base_url + path
+
+
 
         try:
 
+
             if method.upper() == "GET":
 
+
                 response = session.get(
+
                     url,
+
                     params=params,
+
                     headers=headers,
+
                     timeout=REQUEST_TIMEOUT
+
                 )
+
 
             else:
 
+
                 response = session.post(
+
                     url,
-                    data=json_body,
+
+                    json=params,
+
                     headers=headers,
+
                     timeout=REQUEST_TIMEOUT
+
                 )
+
+
 
             logger.info(
                 f"URL: {response.url}"
             )
 
+
             logger.info(
                 f"STATUS: {response.status_code}"
             )
 
+
             logger.info(
-                response.text
+                response.text[:500]
             )
 
-            if response.status_code != 200:
 
-                return {
-                    "code": response.status_code,
-                    "message": response.text
-                }
 
             return response.json()
 
+
+
         except Exception as e:
+
 
             logger.exception(e)
 
+
             return {
-                "code": -1,
-                "message": str(e)
+
+                "code":-1,
+
+                "message":str(e)
+
             }
-            
-    import json
-
-from config import (
-    PAPER_TRADING,
-    ORDER_TYPE,
-)
-
-from coinex_api import coinex
-from core.logger import logger
 
 
-class CoinExTrade:
 
-    def create_order(
+
+
+    # ===========================
+    # Balance
+    # ===========================
+
+    def get_futures_balance(self):
+
+        return self._request(
+
+            "GET",
+
+            "/assets/futures/balance",
+
+            private=True
+
+        )
+
+
+
+    def get_balance(self):
+
+        return self.get_futures_balance()
+
+
+
+    # ===========================
+    # Futures Order
+    # ===========================
+
+    def create_futures_order(
         self,
         market,
         side,
         amount,
+        order_type="market",
         price=None
     ):
 
-        logger.info(f"PAPER_TRADING = {PAPER_TRADING}")
 
-        if PAPER_TRADING:
+        data = {
 
-            logger.info(
-                f"PAPER ORDER {side} {market} qty={amount}"
-            )
+            "market":market,
 
-            return {
-                "code": 0,
-                "message": "Paper Trading",
-                "data": {
-                    "market": market,
-                    "side": side,
-                    "amount": amount,
-                    "order_id": "PAPER"
-                }
-            }
+            "market_type":"FUTURES",
 
-        logger.info(
-            f"REAL ORDER {side} {market} qty={amount}"
+            "side":side,
+
+            "type":order_type,
+
+            "amount":str(amount)
+
+        }
+
+
+
+        if price:
+
+            data["price"] = str(price)
+
+
+
+        return self._request(
+
+            "POST",
+
+            "/futures/order",
+
+            params=data,
+
+            private=True
+
         )
 
-        result = coinex.create_futures_order(
-            market=market,
-            side=side,
-            amount=amount,
-            order_type=ORDER_TYPE,
-            price=price
-        )
-
-        logger.info(
-            "ORDER RESULT:"
-        )
-
-        logger.info(
-            json.dumps(
-                result,
-                ensure_ascii=False,
-                indent=2
-            )
-        )
-
-        return result
-
-
-    def open_long(
-        self,
-        symbol,
-        quantity
-    ):
-
-        return self.create_order(
-            market=symbol,
-            side="buy",
-            amount=quantity
-        )
-
-
-    def open_short(
-        self,
-        symbol,
-        quantity
-    ):
-
-        return self.create_order(
-            market=symbol,
-            side="sell",
-            amount=quantity
-        )
-
-
-    def close_position(
-        self,
-        symbol,
-        side,
-        quantity
-    ):
-
-        close_side = (
-            "sell"
-            if side.lower() == "buy"
-            else "buy"
-        )
-
-        return self.create_order(
-            market=symbol,
-            side=close_side,
-            amount=quantity
-        )
 
 
 coinex = CoinExAPI()
-
-
-            
