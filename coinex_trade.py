@@ -1,65 +1,19 @@
-import time
 import json
-import hmac
-import hashlib
 
 
 from config import (
-    BASE_URL,
-    COINEX_API_KEY,
-    COINEX_SECRET_KEY,
-    PAPER_TRADING
+    PAPER_TRADING,
+    ORDER_TYPE
 )
 
-from core.session import session
-from core.logger import logger
-import config
 
-logger.info(f"CONFIG FILE = {config.__file__}")
-logger.info(f"PAPER_TRADING = {config.PAPER_TRADING}")
+from coinex_api import coinex
+
+from core.logger import logger
+
 
 
 class CoinExTrade:
-
-
-    def __init__(self):
-
-        self.base_url = BASE_URL
-        self.api_key = COINEX_API_KEY
-        self.secret_key = COINEX_SECRET_KEY
-
-
-
-    def sign(
-        self,
-        method,
-        path,
-        body=""
-    ):
-
-        timestamp = str(
-            int(time.time()*1000)
-        )
-
-        message = (
-            method.upper()
-            +
-            path
-            +
-            body
-            +
-            timestamp
-        )
-
-
-        signature = hmac.new(
-            self.secret_key.encode(),
-            message.encode(),
-            hashlib.sha256
-        ).hexdigest()
-
-
-        return signature,timestamp
 
 
 
@@ -67,17 +21,24 @@ class CoinExTrade:
         self,
         market,
         side,
-        amount
+        amount,
+        price=None
     ):
-        logger.info(f"PAPER_TRADING = {PAPER_TRADING}")
-        logger.info(f"BASE_URL = {self.base_url}")
-        logger.info("ENTER create_order()")
+
+
+        logger.info(
+            f"PAPER_TRADING = {PAPER_TRADING}"
+        )
+
+
 
         if PAPER_TRADING:
+
 
             logger.info(
                 f"PAPER ORDER {side} {market} qty={amount}"
             )
+
 
             return {
 
@@ -101,86 +62,44 @@ class CoinExTrade:
 
 
 
-        path="/v2/futures/order"
-
-        url=self.base_url+path
-
-
-        payload={
-
-            "market":market,
-
-            "side":side,
-
-            "type":"market",
-
-            "amount":str(amount)
-
-        }
-
-
-        body=json.dumps(
-            payload,
-            separators=(",",":")
+        logger.info(
+            f"REAL ORDER {side} {market} qty={amount}"
         )
 
 
-        sign,timestamp=self.sign(
-            "POST",
-            path,
-            body
+
+        result = coinex.create_futures_order(
+
+            market=market,
+
+            side=side,
+
+            amount=amount,
+
+            order_type=ORDER_TYPE,
+
+            price=price
+
         )
 
 
-        headers={
 
-            "X-COINEX-KEY":
-            self.api_key,
-
-
-            "X-COINEX-SIGN":
-            sign,
+        logger.info(
+            "ORDER RESULT:"
+        )
 
 
-            "X-COINEX-TIMESTAMP":
-            timestamp,
-
-
-            "Content-Type":
-            "application/json"
-
-        }
-
-
-
-        try:
-
-            r=session.post(
-                url,
-                data=body,
-                headers=headers,
-                timeout=10
+        logger.info(
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                indent=2
             )
+        )
 
 
-            logger.info(
-                "ORDER RESPONSE:"
-            )
+        return result
 
-            logger.info(
-                r.text
-            )
-
-
-            return r.json()
-
-
-
-        except Exception as e:
-
-            logger.exception(e)
-
-            return None
 
 
 
@@ -191,11 +110,17 @@ class CoinExTrade:
         quantity
     ):
 
+
         return self.create_order(
-            symbol,
-            "buy",
-            quantity
+
+            market=symbol,
+
+            side="buy",
+
+            amount=quantity
+
         )
+
 
 
 
@@ -206,25 +131,17 @@ class CoinExTrade:
         quantity
     ):
 
+
         return self.create_order(
-            symbol,
-            "sell",
-            quantity
+
+            market=symbol,
+
+            side="sell",
+
+            amount=quantity
+
         )
 
-
-
-
-    def close_position(
-        self,
-        symbol
-    ):
-
-        logger.info(
-            f"CLOSE REQUEST {symbol}"
-        )
-
-        return True
 
 
 
