@@ -64,9 +64,9 @@ class CoinExTrade:
         side,
         amount
     ):
-logger.info(f"PAPER_TRADING = {PAPER_TRADING}")
-logger.info(f"BASE_URL = {self.base_url}")
-logger.info("ENTER create_order()")
+        logger.info(f"PAPER_TRADING = {PAPER_TRADING}")
+        logger.info(f"BASE_URL = {self.base_url}")
+        logger.info("ENTER create_order()")
 
         if PAPER_TRADING:
 
