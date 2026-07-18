@@ -1,11 +1,19 @@
 import os
+
+# ...
+# همه تنظیمات
+
+INITIAL_BALANCE = 1000.0
+
+# ===========================
+# Paper Trading
+# ===========================
+
+PAPER_TRADING = False
+AUTO_CLOSE = True
+
 print("CONFIG FILE LOADED")
 print("PAPER_TRADING =", PAPER_TRADING)
-
-
-# ===========================
-# Bot
-# ===========================
 
 BOT_NAME = "Pourya Trader AI"
 
