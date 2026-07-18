@@ -167,40 +167,65 @@ f"""
 
 
 def run_bot():
+
     print("RUN BOT STARTED")
-    
+
+
     try:
 
+        print("BEFORE BALANCE")
+
+
         api = coinex.get_balance()
-        
-        print("BALANCE RESULT:", api)
+
+
+        print("AFTER BALANCE")
+
+
+        print(
+            "BALANCE RESULT:",
+            api
+        )
+
 
         if not api or api.get("code") != 0:
 
             send_message(
-                "❌ اتصال CoinEx ناموفق بود"
+                "❌ اتصال به CoinEx ناموفق بود"
             )
 
             return
 
 
 
+        print("BALANCE OK")
+
+
         send_message(
 """
-✅ <b>Pourya Trader AI فعال شد</b>
+✅ <b>ربات هوشمند پوریا تریدر AI فعال شد</b>
 
-🟢 اتصال CoinEx برقرار است
+🟢 اتصال به CoinEx برقرار است
 """
         )
 
 
     except Exception as e:
 
+
+        print(
+            "BALANCE ERROR:",
+            e
+        )
+
+
         send_message(
             f"❌ خطای CoinEx\n{e}"
         )
 
+
         return
+
 
 
 
@@ -228,6 +253,7 @@ def run_bot():
 
 
             if result["signal"] == "WAIT":
+
                 continue
 
 
@@ -236,6 +262,7 @@ def run_bot():
 
 
             if entry is None:
+
                 continue
 
 
@@ -244,17 +271,17 @@ def run_bot():
 
                 f"🪙 <b>{symbol}</b>\n"
 
-                f"📌 {signal_text.get(result['signal'])}\n"
+                f"📌 وضعیت: {signal_text.get(result['signal'])}\n"
 
-                f"⭐ قدرت: {result['confidence']}٪\n\n"
+                f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
 
             )
 
 
 
             if not can_buy(symbol):
-                continue
 
+                continue
 
 
 
@@ -276,8 +303,8 @@ def run_bot():
 
 
             if not valid:
-                continue
 
+                continue
 
 
 
@@ -307,6 +334,7 @@ def run_bot():
             )
 
 
+
             print(
                 "ORDER RESULT:",
                 order
@@ -327,11 +355,12 @@ def run_bot():
 
                 order_id = (
 
-                    order
-                    .get("data", {})
+                    order.get("data", {})
+
                     .get("order_id")
 
                 )
+
 
 
                 open_trade(
@@ -374,10 +403,7 @@ def run_bot():
 
                     result["confidence"],
 
-                    result.get(
-                        "grade",
-                        ""
-                    )
+                    result.get("grade","")
 
                 )
 
@@ -388,30 +414,29 @@ def run_bot():
 
                 send_message(
 f"""
-🚨 <b>معامله جدید ثبت شد</b>
+🚨 <b>سیگنال معاملاتی جدید</b>
 
-🪙 ارز:
-{symbol}
+🪙 ارز: {symbol}
 
 📊 وضعیت:
 {signal_text.get(result['signal'])}
 
-💰 ورود:
+💰 قیمت ورود:
 {entry}
 
-🎯 TP:
+🎯 حد سود:
 {result['tp']}
 
-🛑 SL:
+🛑 حد ضرر:
 {result['sl']}
 
 📦 حجم:
 {qty}
 
-🆔 سفارش:
+🆔 شماره سفارش:
 {order_id}
 
-⭐ قدرت:
+⭐ قدرت سیگنال:
 {result['confidence']}٪
 """
                 )
@@ -429,12 +454,12 @@ f"""
 
                 send_message(
 f"""
-❌ <b>ثبت سفارش ناموفق</b>
+❌ <b>ثبت سفارش ناموفق بود</b>
 
 🪙 ارز:
 {symbol}
 
-📄 پاسخ:
+📄 پاسخ CoinEx:
 
 {order}
 """
@@ -456,7 +481,7 @@ f"""
 
     report += (
 
-        f"📈 تعداد معاملات جدید: {signals}\n\n"
+        f"📈 تعداد سیگنال‌ها: {signals}\n\n"
 
         "🤖 Pourya Trader AI"
 
@@ -469,10 +494,3 @@ f"""
     send_message(
         performance_report()
     )
-
-
-
-
-if __name__ == "__main__":
-
-    run_bot()
