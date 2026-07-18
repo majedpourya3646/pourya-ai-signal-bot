@@ -2,7 +2,7 @@ import json
 
 from config import (
     PAPER_TRADING,
-    ORDER_TYPE,
+    ORDER_TYPE
 )
 
 from coinex_api import coinex
@@ -18,7 +18,9 @@ class CoinExTrade:
         amount
     ):
 
-        logger.info(f"PAPER_TRADING = {PAPER_TRADING}")
+        logger.info(
+            f"PAPER_TRADING = {PAPER_TRADING}"
+        )
 
         if PAPER_TRADING:
 
@@ -27,14 +29,23 @@ class CoinExTrade:
             )
 
             return {
+
                 "code": 0,
+
                 "message": "Paper Trading",
+
                 "data": {
+
                     "market": market,
+
                     "side": side,
+
                     "amount": amount,
-                    "order_id": "PAPER_ORDER"
+
+                    "order_id": "PAPER"
+
                 }
+
             }
 
         logger.info(
@@ -42,20 +53,31 @@ class CoinExTrade:
         )
 
         result = coinex.create_futures_order(
+
             market=market,
+
             side=side,
+
             amount=amount,
+
             order_type=ORDER_TYPE
+
         )
 
         logger.info("ORDER RESULT:")
 
         logger.info(
+
             json.dumps(
+
                 result,
+
                 ensure_ascii=False,
+
                 indent=2
+
             )
+
         )
 
         return result
@@ -68,9 +90,13 @@ class CoinExTrade:
     ):
 
         return self.create_order(
+
             market=symbol,
+
             side="buy",
+
             amount=quantity
+
         )
 
 
@@ -81,9 +107,13 @@ class CoinExTrade:
     ):
 
         return self.create_order(
+
             market=symbol,
+
             side="sell",
+
             amount=quantity
+
         )
 
 
@@ -96,14 +126,18 @@ class CoinExTrade:
 
         close_side = (
             "sell"
-            if side.lower() == "buy"
+            if side.upper() == "BUY"
             else "buy"
         )
 
         return self.create_order(
+
             market=symbol,
+
             side=close_side,
+
             amount=quantity
+
         )
 
 
