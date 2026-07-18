@@ -1,3 +1,4 @@
+
 from coinex_api import coinex
 from coinex_trade import coinex_trade
 
@@ -35,23 +36,15 @@ SYMBOLS = [
     "DOGEUSDT"
 ]
 
-
 START_BALANCE = INITIAL_BALANCE
 
-
 signal_text = {
-
     "BUY": "🟢 خرید",
-
     "STRONG BUY": "🚀 خرید قوی",
-
     "SELL": "🔴 فروش",
-
     "STRONG SELL": "⚠️ فروش قوی",
-
     "WAIT": "⏳ انتظار"
 }
-
 
 
 def check_open_trades():
@@ -60,7 +53,6 @@ def check_open_trades():
 
     if not trades:
         return
-
 
     for symbol, trade in list(trades.items()):
 
@@ -71,26 +63,18 @@ def check_open_trades():
                 interval="15"
             )
 
-
             if df.empty:
                 continue
-
 
             high = float(df["high"].iloc[-1])
             low = float(df["low"].iloc[-1])
 
-
             if high >= trade["tp"]:
 
                 profit = round(
-                    (
-                        (trade["tp"] - trade["entry"])
-                        /
-                        trade["entry"]
-                    ) * 100,
+                    ((trade["tp"] - trade["entry"]) / trade["entry"]) * 100,
                     2
                 )
-
 
                 send_message(
 f"""
@@ -105,8 +89,11 @@ f"""
 """
                 )
 
-
-                close_trade(symbol)
+                close_trade(
+                    symbol,
+                    trade["tp"],
+                    "TP"
+                )
 
                 update_trade(
                     symbol,
@@ -116,20 +103,12 @@ f"""
 
                 continue
 
-
-
             if low <= trade["sl"]:
 
-
                 loss = round(
-                    (
-                        (trade["entry"] - trade["sl"])
-                        /
-                        trade["entry"]
-                    ) * 100,
+                    ((trade["entry"] - trade["sl"]) / trade["entry"]) * 100,
                     2
                 )
-
 
                 send_message(
 f"""
@@ -144,15 +123,17 @@ f"""
 """
                 )
 
-
-                close_trade(symbol)
+                close_trade(
+                    symbol,
+                    trade["sl"],
+                    "SL"
+                )
 
                 update_trade(
                     symbol,
                     "LOSS",
                     -loss
                 )
-
 
         except Exception as e:
 
@@ -162,31 +143,19 @@ f"""
                 e
             )
 
-
-
-
-
 def run_bot():
 
     print("RUN BOT STARTED")
-
 
     try:
 
         print("BEFORE BALANCE")
 
-
         api = coinex.get_balance()
-
 
         print("AFTER BALANCE")
 
-
-        print(
-            "BALANCE RESULT:",
-            api
-        )
-
+        print("BALANCE RESULT:", api)
 
         if not api or api.get("code") != 0:
 
@@ -196,10 +165,7 @@ def run_bot():
 
             return
 
-
-
         print("BALANCE OK")
-
 
         send_message(
 """
@@ -209,208 +175,117 @@ def run_bot():
 """
         )
 
-
     except Exception as e:
-
 
         print(
             "BALANCE ERROR:",
             e
         )
 
-
         send_message(
             f"❌ خطای CoinEx\n{e}"
         )
 
-
         return
 
-
-
-
     check_open_trades()
-
-
 
     report = """
 📊 <b>گزارش تحلیل بازار</b>
 
 """
 
-
     signals = 0
-
-
 
     for symbol in SYMBOLS:
 
-
         try:
-
 
             result = analyze_symbol(symbol)
 
-
             if result["signal"] == "WAIT":
-
                 continue
-
-
 
             entry = result.get("entry")
 
-
             if entry is None:
-
                 continue
-
-
 
             report += (
-
                 f"🪙 <b>{symbol}</b>\n"
-
                 f"📌 وضعیت: {signal_text.get(result['signal'])}\n"
-
                 f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
-
             )
-
-
 
             if not can_buy(symbol):
-
                 continue
 
-
-
-            valid, position = validate_trade(
-
+            valid, position_size = validate_trade(
                 INITIAL_BALANCE,
-
                 START_BALANCE,
-
                 get_all_trades(),
-
                 entry,
-
                 result["tp"],
-
                 result["sl"]
-
             )
-
 
             if not valid:
-
                 continue
 
-
-
             summary = get_trade_summary(
-
                 INITIAL_BALANCE,
-
                 entry,
-
                 result["tp"],
-
                 result["sl"]
-
             )
-
 
             qty = summary["quantity"]
 
-
-
             order = coinex_trade.open_long(
-
                 symbol,
-
                 qty
-
             )
-
-
 
             print(
                 "ORDER RESULT:",
                 order
             )
 
-
-
             if (
-
                 order
-
                 and isinstance(order, dict)
-
                 and order.get("code") == 0
-
             ):
 
-
                 order_id = (
-
                     order.get("data", {})
-
                     .get("order_id")
-
                 )
-
-
 
                 open_trade(
-
                     symbol,
-
-                    result["signal"],
-
+                    "buy",
                     entry,
-
                     qty,
-
                     result["confidence"],
-
                     result["signal"],
-
                     order_id
-
                 )
-
-
 
                 add_trade(
-
                     symbol,
-
                     result["signal"],
-
                     entry,
-
                     result["tp"],
-
                     result["sl"],
-
                     None,
-
                     0,
-
                     qty,
-
                     result["confidence"],
-
-                    result.get("grade","")
-
+                    result.get("grade", "")
                 )
 
-
                 signals += 1
-
-
 
                 send_message(
 f"""
@@ -419,16 +294,16 @@ f"""
 🪙 ارز: {symbol}
 
 📊 وضعیت:
-{signal_text.get(result['signal'])}
+{signal_text.get(result["signal"])}
 
 💰 قیمت ورود:
 {entry}
 
 🎯 حد سود:
-{result['tp']}
+{result["tp"]}
 
 🛑 حد ضرر:
-{result['sl']}
+{result["sl"]}
 
 📦 حجم:
 {qty}
@@ -437,20 +312,16 @@ f"""
 {order_id}
 
 ⭐ قدرت سیگنال:
-{result['confidence']}٪
+{result["confidence"]}٪
 """
                 )
 
-
-
             else:
-
 
                 print(
                     "ORDER FAILED",
                     order
                 )
-
 
                 send_message(
 f"""
@@ -465,19 +336,13 @@ f"""
 """
                 )
 
-
-
         except Exception as e:
-
 
             print(
                 "BOT ERROR",
                 symbol,
                 e
             )
-
-
-
 
     report += (
 
@@ -488,13 +353,17 @@ f"""
     )
 
 
-    send_message(report)
+    send_message(
+        report
+    )
 
 
     send_message(
         performance_report()
     )
 
+
+
 if __name__ == "__main__":
+
     run_bot()
-    
