@@ -312,87 +312,49 @@ def run_bot():
 
 
             order = coinex_trade.open_long(
+    symbol,
+    qty
+)
 
-                symbol,
+print("ORDER RESULT:", order)
 
-                qty
+if (
+    order
+    and isinstance(order, dict)
+    and order.get("code") == 0
+):
 
-            )
+    order_id = (
+        order.get("data", {})
+        .get("order_id")
+    )
 
+    open_trade(
+        symbol,
+        result["signal"],
+        entry,
+        qty,
+        result["confidence"],
+        result["signal"],
+        order_id
+    )
 
-            print(
-                "ORDER RESULT:",
-                order
-            )
+    add_trade(
+        symbol,
+        result["signal"],
+        entry,
+        result["tp"],
+        result["sl"],
+        None,
+        0,
+        qty,
+        result["confidence"],
+        result.get("grade", "")
+    )
 
+    signals += 1
 
-
-            order_id = None
-
-
-            if isinstance(order, dict):
-
-                order_id = (
-                    order
-                    .get("data", {})
-                    .get("order_id")
-                )
-
-
-
-
-            open_trade(
-
-                symbol,
-
-                result["signal"],
-
-                entry,
-
-                qty,
-
-                result["confidence"],
-
-                result["signal"],
-
-                order_id
-
-            )
-
-
-
-            add_trade(
-
-                symbol,
-
-                result["signal"],
-
-                entry,
-
-                result["tp"],
-
-                result["sl"],
-
-                None,
-
-                0,
-
-                qty,
-
-                result["confidence"],
-
-                result.get("grade","")
-
-            )
-
-
-
-            signals += 1
-
-
-
-
-            send_message(
+    send_message(
 f"""
 🚨 <b>سیگنال معاملاتی جدید</b>
 
@@ -413,11 +375,30 @@ f"""
 📦 حجم:
 {qty}
 
+🆔 شماره سفارش:
+{order_id}
+
 ⭐ قدرت سیگنال:
 {result['confidence']}٪
 """
-            )
+    )
 
+else:
+
+    print("ORDER FAILED")
+
+    send_message(
+f"""
+❌ <b>ثبت سفارش ناموفق بود</b>
+
+🪙 ارز:
+{symbol}
+
+📄 پاسخ CoinEx:
+
+{order}
+"""
+    )
 
 
         except Exception as e:
