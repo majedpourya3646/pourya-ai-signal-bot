@@ -351,3 +351,62 @@ def close_trade(
     conn.close()
 
     return updated
+
+def get_trade(symbol):
+
+    trades = get_all_trades()
+
+    return trades.get(symbol)
+
+
+def has_open_trade(symbol):
+
+    return symbol in get_all_trades()
+
+
+def get_open_trade_count():
+
+    return len(get_all_trades())
+
+
+def delete_trade(symbol):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        DELETE FROM trades
+        WHERE symbol=?
+        """,
+        (symbol,)
+    )
+
+    conn.commit()
+
+    deleted = cursor.rowcount > 0
+
+    conn.close()
+
+    return deleted
+
+
+def clear_closed_trades():
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        DELETE FROM trades
+        WHERE status='CLOSED'
+        """
+    )
+
+    conn.commit()
+
+    deleted = cursor.rowcount
+
+    conn.close()
+
+    return deleted
