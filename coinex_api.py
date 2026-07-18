@@ -3,6 +3,7 @@ import json
 import time
 import hmac
 import hashlib
+from urllib.parse import urlencode
 
 from config import (
     BASE_URL,
@@ -28,36 +29,49 @@ class CoinExAPI:
 
 
 
-    def _sign(
+    def _signature(
         self,
         method,
-        path,
-        body=""
+        request_path,
+        body="",
+        timestamp=None
     ):
 
+        if timestamp is None:
 
-        timestamp = str(
-            int(time.time()*1000)
-        )
+            timestamp = str(
+                int(time.time()*1000)
+            )
 
 
         sign_string = (
+
             method.upper()
+
             +
-            path
+
+            request_path
+
             +
+
             body
+
             +
+
             timestamp
+
         )
 
 
         sign = hmac.new(
-            self.secret_key.encode("utf-8"),
-            sign_string.encode("utf-8"),
-            hashlib.sha256
-        ).hexdigest().lower()
 
+            self.secret_key.encode("utf-8"),
+
+            sign_string.encode("utf-8"),
+
+            hashlib.sha256
+
+        ).hexdigest()
 
 
         logger.info(
@@ -74,7 +88,7 @@ class CoinExAPI:
 
 
 
-    def _request(
+    def request(
         self,
         method,
         path,
@@ -84,6 +98,9 @@ class CoinExAPI:
 
 
         params = params or {}
+
+
+        url = self.base_url + path
 
 
         body = ""
@@ -98,7 +115,7 @@ class CoinExAPI:
 
 
 
-        if method.upper() != "GET":
+        if method.upper() == "POST":
 
             body = json.dumps(
                 params,
@@ -110,11 +127,23 @@ class CoinExAPI:
         if private:
 
 
-            sign,timestamp = self._sign(
+            query = ""
+
+            if method.upper()=="GET" and params:
+
+                query = "?" + urlencode(
+                    sorted(params.items())
+                )
+
+
+            sign_path = "/v2" + path + query
+
+
+            sign,timestamp = self._signature(
 
                 method,
 
-                "/v2" + path,
+                sign_path,
 
                 body
 
@@ -138,17 +167,13 @@ class CoinExAPI:
 
 
 
-        url = self.base_url + path
-
-
-
         try:
 
 
             if method.upper()=="GET":
 
 
-                response = session.get(
+                r=session.get(
 
                     url,
 
@@ -164,7 +189,7 @@ class CoinExAPI:
             else:
 
 
-                response = session.post(
+                r=session.post(
 
                     url,
 
@@ -179,21 +204,22 @@ class CoinExAPI:
 
 
             logger.info(
-                f"URL: {response.url}"
+                f"URL: {r.url}"
             )
 
 
             logger.info(
-                f"STATUS: {response.status_code}"
+                f"STATUS: {r.status_code}"
             )
 
 
             logger.info(
-                response.text
+                r.text
             )
 
 
-            return response.json()
+
+            return r.json()
 
 
 
@@ -202,23 +228,16 @@ class CoinExAPI:
 
             logger.exception(e)
 
-
-            return {
-
-                "code":-1,
-
-                "message":str(e)
-
-            }
+            return None
 
 
 
 
-    # Balance
 
-    def get_futures_balance(self):
+    def get_balance(self):
 
-        return self._request(
+
+        return self.request(
 
             "GET",
 
@@ -231,51 +250,39 @@ class CoinExAPI:
 
 
 
-    # Futures Order
-
     def create_futures_order(
         self,
         market,
         side,
         amount,
-        order_type="market",
-        price=None
+        order_type="market"
     ):
 
 
-        data={
-
-            "market":market,
-
-            "market_type":"FUTURES",
-
-            "side":side,
-
-            "type":order_type,
-
-            "amount":str(amount)
-
-        }
-
-
-
-        if price:
-
-            data["price"]=str(price)
-
-
-
-        return self._request(
+        return self.request(
 
             "POST",
 
             "/futures/order",
 
-            params=data,
+            {
+
+                "market":market,
+
+                "market_type":"FUTURES",
+
+                "side":side,
+
+                "type":order_type,
+
+                "amount":str(amount)
+
+            },
 
             private=True
 
         )
+
 
 
 
