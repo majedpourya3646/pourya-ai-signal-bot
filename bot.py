@@ -167,10 +167,12 @@ f"""
 
 
 def run_bot():
-print("RUN BOT STARTED")
+    print("RUN BOT STARTED")
+    
     try:
 
         api = coinex.get_balance()
+        
         print("BALANCE RESULT:", api)
 
         if not api or api.get("code") != 0:
