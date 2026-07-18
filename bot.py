@@ -494,3 +494,7 @@ f"""
     send_message(
         performance_report()
     )
+
+if __name__ == "__main__":
+    run_bot()
+    
