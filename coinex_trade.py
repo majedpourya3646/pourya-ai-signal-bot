@@ -3,6 +3,11 @@ import json
 import hmac
 import hashlib
 
+import config
+
+logger.info(f"CONFIG FILE = {config.__file__}")
+logger.info(f"PAPER = {config.PAPER_TRADING}")
+
 from config import (
     BASE_URL,
     COINEX_API_KEY,
