@@ -13,44 +13,43 @@ def calculate_risk_amount(balance):
     )
 
 
-
 def calculate_position(
     balance,
     entry,
     stop_loss
 ):
 
-    if balance <= 0 or entry <= 0:
+    if balance <= 0:
         return 0
 
+    if entry <= 0:
+        return 0
 
     risk_amount = calculate_risk_amount(
         balance
     )
 
-
-    loss_per_unit = abs(
+    stop_distance = abs(
         entry - stop_loss
     )
 
-
-    if loss_per_unit <= 0:
+    if stop_distance <= 0:
         return 0
 
-
     quantity = (
-        risk_amount / loss_per_unit
+        risk_amount /
+        stop_distance
     )
-
 
     quantity *= LEVERAGE
 
+    if quantity < 0.0001:
+        quantity = 0.0001
 
     return round(
         quantity,
         6
     )
-
 
 
 def calculate_trade_value(
@@ -64,7 +63,6 @@ def calculate_trade_value(
     )
 
 
-
 def calculate_profit(
     entry,
     exit_price,
@@ -72,10 +70,10 @@ def calculate_profit(
 ):
 
     return round(
-        (exit_price - entry) * quantity,
+        (exit_price - entry)
+        * quantity,
         2
     )
-
 
 
 def calculate_profit_percent(
@@ -86,16 +84,13 @@ def calculate_profit_percent(
     if entry == 0:
         return 0
 
-
     return round(
         (
             (exit_price - entry)
-            /
-            entry
+            / entry
         ) * 100,
         2
     )
-
 
 
 def update_balance(
@@ -107,7 +102,6 @@ def update_balance(
         balance + profit,
         2
     )
-
 
 
 def get_trade_summary(
@@ -123,17 +117,14 @@ def get_trade_summary(
         sl
     )
 
-
     trade_value = calculate_trade_value(
         entry,
         quantity
     )
 
-
     risk_amount = calculate_risk_amount(
         balance
     )
-
 
     expected_profit = calculate_profit(
         entry,
@@ -141,25 +132,20 @@ def get_trade_summary(
         quantity
     )
 
-
     expected_profit_percent = calculate_profit_percent(
         entry,
         tp
     )
 
-
     risk = abs(
         entry - sl
     )
-
 
     reward = abs(
         tp - entry
     )
 
-
     rr = 0
-
 
     if risk > 0:
 
@@ -167,7 +153,6 @@ def get_trade_summary(
             reward / risk,
             2
         )
-
 
     return {
 
@@ -184,3 +169,8 @@ def get_trade_summary(
         "risk_reward": rr
 
     }
+
+
+def get_balance():
+
+    return INITIAL_BALANCE
