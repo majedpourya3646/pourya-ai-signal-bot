@@ -1,4 +1,6 @@
 import os
+print("CONFIG FILE LOADED")
+print("PAPER_TRADING =", PAPER_TRADING)
 
 
 # ===========================
