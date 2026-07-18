@@ -111,7 +111,7 @@ INITIAL_BALANCE = 1000.0
 # Paper Trading
 # ===========================
 
-PAPER_TRADING = True
+PAPER_TRADING = false
 
 AUTO_CLOSE = True
 
