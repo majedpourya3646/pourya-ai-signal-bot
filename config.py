@@ -1,148 +1,93 @@
 import os
+from dotenv import load_dotenv
 
-# ...
-# همه تنظیمات
+load_dotenv()
 
-INITIAL_BALANCE = 1000.0
 
 # ===========================
-# Paper Trading
+# CoinEx
 # ===========================
 
-PAPER_TRADING = False
-AUTO_CLOSE = True
+BASE_URL = "https://api.coinex.com/v2"
 
-print("CONFIG FILE LOADED")
-print("PAPER_TRADING =", PAPER_TRADING)
-
-BOT_NAME = "Pourya Trader AI"
-
-TIMEFRAME = "15m"
-
-
-SYMBOLS = [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT",
-    "XRPUSDT",
-    "DOGEUSDT"
-]
-
-
-MIN_CONFIDENCE = 65
-
+COINEX_API_KEY = os.getenv("COINEX_API_KEY", "")
+COINEX_SECRET_KEY = os.getenv("COINEX_SECRET_KEY", "")
 
 
 # ===========================
 # Telegram
 # ===========================
 
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN"
-)
-
-CHAT_ID = os.getenv(
-    "CHAT_ID"
-)
-
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+CHAT_ID = os.getenv("CHAT_ID", "")
 
 
 # ===========================
-# CoinEx API
+# Request
 # ===========================
 
-BASE_URL = "https://api.coinex.com/v2"
-
-COINEX_API_KEY = os.getenv(
-    "COINEX_API_KEY"
-)
-
-COINEX_SECRET_KEY = os.getenv(
-    "COINEX_SECRET_KEY"
-)
-
-
-MARKET_TYPE = "FUTURES"
-
-
-
-# ===========================
-# Request Settings
-# ===========================
-
-REQUEST_TIMEOUT = 15
-
+REQUEST_TIMEOUT = 20
 MAX_RETRIES = 3
-
 
 
 # ===========================
 # Trading
 # ===========================
 
+PAPER_TRADING = True
+
+MARKET_TYPE = "FUTURES"
+
+ORDER_TYPE = "market"
+
 LEVERAGE = 10
 
-RISK_REWARD = 2.0
-
+RISK_PER_TRADE = 1
 
 MAX_OPEN_TRADES = 3
 
+MIN_CONFIDENCE = 60
 
-RISK_PER_TRADE = 1.0
 
+# ===========================
+# TP / SL
+# ===========================
 
 DEFAULT_TP = 5.0
 
 DEFAULT_SL = 2.0
 
 
-
 # ===========================
-# Trailing Stop
-# ===========================
-
-TRAILING_TRIGGER = 2.0
-
-TRAILING_DISTANCE = 1.0
-
-BREAK_EVEN_TRIGGER = 2.0
-
-
-
-# ===========================
-# Portfolio
+# Balance
 # ===========================
 
 INITIAL_BALANCE = 1000.0
 
 
-
 # ===========================
-# Paper Trading
-# ===========================
-
-PAPER_TRADING = False
-
-print("CONFIG FILE LOADED")
-print("PAPER_TRADING =", PAPER_TRADING)
-
-
-AUTO_CLOSE = True
-
-
-
-# ===========================
-# AI Filters
+# Symbols
 # ===========================
 
-USE_MULTI_TIMEFRAME = True
+SYMBOLS = [
 
-USE_VOLUME_FILTER = True
+    "BTCUSDT",
 
-USE_ADX_FILTER = True
+    "ETHUSDT",
 
-USE_RSI_FILTER = True
+    "SOLUSDT",
 
-USE_MACD_FILTER = True
+    "XRPUSDT",
 
-USE_ATR_FILTER = True
+    "DOGEUSDT"
+
+]
+
+
+# ===========================
+# TimeFrame
+# ===========================
+
+TIMEFRAME = "15"
+
+BOT_NAME = "Pourya Trader AI"
