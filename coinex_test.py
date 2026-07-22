@@ -1,5 +1,4 @@
 from coinex_api import coinex
-from core.logger import logger
 
 
 def main():
@@ -8,46 +7,34 @@ def main():
     print("COINEX PRIVATE API TEST")
     print("=" * 60)
 
-
     print("\n1) Testing Futures Balance...\n")
 
-    balance = coinex.get_futures_balance()
-
+    balance = coinex.get_balance()
 
     if balance is None:
         print("❌ No response from CoinEx")
         return
 
-
     print(balance)
 
-
     print("\n" + "=" * 60)
-
 
     if balance.get("code") == 0:
 
         print("✅ CoinEx Private API Connected")
 
-        data = balance.get("data")
+        print("\nMessage:")
+        print(balance.get("message"))
 
-        print("\nBalance Data:")
-        print(data)
-
+        print("\nData:")
+        print(balance.get("data"))
 
     else:
 
         print("❌ CoinEx API Error")
 
-        print(
-            "Code:",
-            balance.get("code")
-        )
-
-        print(
-            "Message:",
-            balance.get("message")
-        )
+        print("Code:", balance.get("code"))
+        print("Message:", balance.get("message"))
 
 
 if __name__ == "__main__":
