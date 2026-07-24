@@ -29,6 +29,8 @@ from trade_manager import (
 )
 
 from market_scanner import get_top_symbols
+from core.pump_detector import scan_pumps
+
 
 
 SYMBOLS = [
@@ -43,33 +45,52 @@ SYMBOLS = [
 START_BALANCE = INITIAL_BALANCE
 
 
+
 signal_text = {
+
     "BUY": "🟢 خرید",
+
     "STRONG BUY": "🚀 خرید قوی",
+
     "SELL": "🔴 فروش",
+
     "STRONG SELL": "⚠️ فروش قوی",
+
     "WAIT": "⏳ انتظار"
+
 }
+
 
 
 def check_open_trades():
 
     trades = get_all_trades()
 
+
     if not trades:
+
         return
+
 
     for symbol, trade in list(trades.items()):
 
+
         try:
 
+
             df = get_market_data(
+
                 symbol,
+
                 interval="15"
+
             )
 
+
             if df.empty:
+
                 continue
+
 
 
             high = float(
@@ -81,15 +102,29 @@ def check_open_trades():
             )
 
 
+
             if high >= trade["tp"]:
 
+
                 profit = round(
-                    ((trade["tp"] - trade["entry"]) / trade["entry"]) * 100,
+
+                    (
+
+                        (trade["tp"] - trade["entry"])
+
+                        /
+
+                        trade["entry"]
+
+                    ) * 100,
+
                     2
+
                 )
 
 
                 send_message(
+
 f"""
 🎉 <b>حد سود فعال شد</b>
 
@@ -97,23 +132,30 @@ f"""
 
 📈 سود:
 +{profit}٪
-
-✅ معامله بسته شد
 """
+
                 )
 
 
                 close_trade(
+
                     symbol,
+
                     trade["tp"],
+
                     "TP"
+
                 )
 
 
                 update_trade(
+
                     symbol,
+
                     "WIN",
+
                     profit
+
                 )
 
 
@@ -125,12 +167,24 @@ f"""
 
 
                 loss = round(
-                    ((trade["entry"] - trade["sl"]) / trade["entry"]) * 100,
+
+                    (
+
+                        (trade["entry"] - trade["sl"])
+
+                        /
+
+                        trade["entry"]
+
+                    ) * 100,
+
                     2
+
                 )
 
 
                 send_message(
+
 f"""
 ❌ <b>حد ضرر فعال شد</b>
 
@@ -138,104 +192,89 @@ f"""
 
 📉 ضرر:
 -{loss}٪
-
-⚠️ معامله بسته شد
 """
+
                 )
 
 
                 close_trade(
+
                     symbol,
+
                     trade["sl"],
+
                     "SL"
+
                 )
 
 
                 update_trade(
+
                     symbol,
+
                     "LOSS",
+
                     -loss
+
                 )
 
 
         except Exception as e:
 
+
             print(
+
                 "CHECK ERROR",
+
                 symbol,
+
                 e
+
             )
 
 
 
+
 def run_bot():
+
 
     print(
         "RUN BOT STARTED"
     )
 
 
-    try:
 
-        print(
-            "BEFORE BALANCE"
-        )
+    try:
 
 
         api = coinex.get_balance()
 
-
-        print(
-            "AFTER BALANCE"
-        )
-
-
-        print(
-            "BALANCE RESULT:",
-            api
-        )
 
 
         if not api or api.get("code") != 0:
 
 
             send_message(
-                "❌ اتصال به CoinEx ناموفق بود"
+
+                "❌ اتصال CoinEx ناموفق بود"
+
             )
 
             return
 
 
 
-        print(
-            "BALANCE OK"
-        )
-
-
-        send_message(
-"""
-✅ <b>ربات هوشمند پوریا تریدر AI فعال شد</b>
-
-🟢 اتصال به CoinEx برقرار است
-"""
-        )
-
-
     except Exception as e:
 
 
-        print(
-            "BALANCE ERROR:",
-            e
-        )
-
-
         send_message(
-            f"❌ خطای CoinEx\n{e}"
-        )
 
+            f"❌ خطای CoinEx\n{e}"
+
+        )
 
         return
+
 
 
 
@@ -247,39 +286,63 @@ def run_bot():
 
 
 
-    if dynamic_symbols:
+    for symbol in dynamic_symbols:
 
 
-        for symbol in dynamic_symbols:
-
-            if symbol not in SYMBOLS:
-
-                SYMBOLS.append(
-                    symbol
-                )
+        if symbol not in SYMBOLS:
 
 
+            SYMBOLS.append(
+                symbol
+            )
 
-    send_message(
-f"""
-🔎 <b>Market Scanner فعال شد</b>
 
-تعداد ارزهای بررسی شده:
-{len(SYMBOLS)}
 
-🪙 لیست:
-
-{', '.join(SYMBOLS)}
-"""
+    pump_results = scan_pumps(
+        SYMBOLS
     )
 
 
 
-    report = """
-📊 <b>گزارش تحلیل بازار</b>
+    if pump_results:
+
+
+        message = """
+
+🚀 <b>PUMP ALERT</b>
 
 """
 
+
+        for item in pump_results[:5]:
+
+
+            message += (
+
+                f"🪙 {item['symbol']}\n"
+
+                f"⭐ قدرت: {item['score']}٪\n"
+
+                f"📈 رشد: {item['change']}٪\n"
+
+                f"🔥 حجم: x{item['volume_power']}\n\n"
+
+            )
+
+
+        send_message(
+            message
+        )
+
+
+
+
+    report = """
+
+📊 <b>گزارش تحلیل بازار</b>
+
+
+"""
 
 
     signals = 0
@@ -297,20 +360,7 @@ f"""
             )
 
 
-
             if result["signal"] == "WAIT":
-
-                continue
-
-
-
-            entry = result.get(
-                "entry"
-            )
-
-
-
-            if entry is None:
 
                 continue
 
@@ -318,182 +368,13 @@ f"""
 
             report += (
 
-                f"🪙 <b>{symbol}</b>\n"
+                f"🪙 {symbol}\n"
 
-                f"📌 وضعیت: {signal_text.get(result['signal'])}\n"
+                f"📌 {signal_text.get(result['signal'])}\n"
 
-                f"⭐ قدرت سیگنال: {result['confidence']}٪\n\n"
-
-            )
-
-
-
-            if not can_buy(symbol):
-
-                continue
-
-
-
-            valid, position_size = validate_trade(
-
-                INITIAL_BALANCE,
-
-                START_BALANCE,
-
-                get_all_trades(),
-
-                entry,
-
-                result["tp"],
-
-                result["sl"]
+                f"⭐ {result['confidence']}٪\n\n"
 
             )
-
-
-
-            if not valid:
-
-                continue
-
-
-
-            summary = get_trade_summary(
-
-                INITIAL_BALANCE,
-
-                entry,
-
-                result["tp"],
-
-                result["sl"]
-
-            )
-
-
-            qty = summary["quantity"]
-
-
-
-            order = coinex_trade.open_long(
-
-                symbol,
-
-                qty
-
-            )
-
-
-
-            print(
-
-                "ORDER RESULT:",
-
-                order
-
-            )
-
-
-
-            if (
-
-                order
-
-                and isinstance(order, dict)
-
-                and order.get("code") == 0
-
-            ):
-
-
-
-                order_id = (
-
-                    order.get("data", {})
-
-                    .get("order_id")
-
-                )
-
-
-
-                open_trade(
-
-                    symbol,
-
-                    "buy",
-
-                    entry,
-
-                    qty,
-
-                    result["confidence"],
-
-                    result["signal"],
-
-                    order_id
-
-                )
-
-
-
-                add_trade(
-
-                    symbol,
-
-                    result["signal"],
-
-                    entry,
-
-                    result["tp"],
-
-                    result["sl"],
-
-                    None,
-
-                    0,
-
-                    qty,
-
-                    result["confidence"],
-
-                    result.get("grade", "")
-
-                )
-
-
-
-                signals += 1
-
-
-
-                send_message(
-f"""
-🚨 <b>سیگنال معاملاتی جدید</b>
-
-🪙 ارز:
-{symbol}
-
-📊 وضعیت:
-{signal_text.get(result["signal"])}
-
-💰 ورود:
-{entry}
-
-🎯 حد سود:
-{result["tp"]}
-
-🛑 حد ضرر:
-{result["sl"]}
-
-📦 حجم:
-{qty}
-
-⭐ قدرت:
-{result["confidence"]}٪
-"""
-                )
-
 
 
         except Exception as e:
@@ -513,7 +394,7 @@ f"""
 
     report += (
 
-        f"📈 تعداد سیگنال‌ها: {signals}\n\n"
+        f"📈 تعداد ارزها: {len(SYMBOLS)}\n\n"
 
         "🤖 Pourya Trader AI"
 
@@ -530,6 +411,7 @@ f"""
     send_message(
         performance_report()
     )
+
 
 
 
