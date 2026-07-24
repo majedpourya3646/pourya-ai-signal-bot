@@ -1,3 +1,5 @@
+# coinex_futures_api.py
+
 import json
 
 from coinex_api import coinex
@@ -13,7 +15,9 @@ class CoinExFuturesAPI:
         self,
         method,
         endpoint,
-        params=None
+        params=None,
+        body=None,
+        private=True
     ):
 
         try:
@@ -24,7 +28,11 @@ class CoinExFuturesAPI:
 
                 endpoint,
 
-                params
+                params=params,
+
+                body=body,
+
+                private=private
 
             )
 
@@ -57,33 +65,39 @@ class CoinExFuturesAPI:
 
             logger.exception(e)
 
-            return None
+            return {
+
+                "code": -1,
+
+                "message": str(e)
+
+            }
 
 
 
-    def get_futures_balance(
-        self
-    ):
+    def get_futures_balance(self):
 
         return self._request(
 
             "GET",
 
-            "/assets/futures/balance"
+            "/assets/futures/balance",
+
+            private=True
 
         )
 
 
 
-    def get_futures_positions(
-        self
-    ):
+    def get_futures_positions(self):
 
         return self._request(
 
             "GET",
 
-            "/futures/pending-position"
+            "/futures/pending-position",
+
+            private=True
 
         )
 
@@ -120,4 +134,74 @@ class CoinExFuturesAPI:
 
 
 
+    def close_position(
+        self,
+        market,
+        side,
+        amount
+    ):
+
+        close_side = (
+
+            "sell"
+
+            if side.upper() == "LONG"
+
+            else "buy"
+
+        )
+
+
+        return self.create_order(
+
+            market,
+
+            close_side,
+
+            amount
+
+        )
+
+
+
 coinex_futures = CoinExFuturesAPI()
+
+
+
+# =====================================
+# Compatibility functions
+# برای فایل‌های قدیمی پروژه
+# =====================================
+
+
+def get_positions():
+
+    result = coinex_futures.get_futures_positions()
+
+
+    if not result:
+
+        return []
+
+
+    data = result.get(
+        "data",
+        []
+    )
+
+
+    if isinstance(data, dict):
+
+        return data.get(
+            "positions",
+            []
+        )
+
+
+    return data
+
+
+
+def get_balance():
+
+    return coinex_futures.get_futures_balance()
