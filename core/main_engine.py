@@ -36,15 +36,12 @@ def run_main_engine():
 
     try:
 
-
         logger.info(
             "MAIN ENGINE STARTED"
         )
 
 
-
         if not initialize_system():
-
 
             return False
 
@@ -54,10 +51,18 @@ def run_main_engine():
             10
         )
 
-logger.info(f"FOUND OPPORTUNITIES: {len(opportunities)}")
 
-for item in opportunities:
-    logger.info(item)
+        logger.info(
+            f"FOUND OPPORTUNITIES: {len(opportunities)}"
+        )
+
+
+        for item in opportunities:
+
+            logger.info(
+                item
+            )
+
 
         executed = []
 
@@ -76,7 +81,6 @@ for item in opportunities:
                 65
 
             ):
-
 
                 continue
 
@@ -99,9 +103,7 @@ for item in opportunities:
                 )
 
 
-
                 if result:
-
 
                     executed.append(
                         result
@@ -120,7 +122,6 @@ for item in opportunities:
         send_message(
             report
         )
-
 
 
         return executed
