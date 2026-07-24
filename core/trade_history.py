@@ -1,83 +1,155 @@
 # core/trade_history.py
 
-from datetime import datetime
+import json
+import os
 
-from core.database_manager import (
-    execute_query
-)
+from datetime import datetime
 
 from core.logger import logger
 
 
 
-def save_trade_history(
-    symbol,
-    side,
-    entry,
-    tp,
-    sl,
-    quantity,
-    status="OPEN"
+TRADES_FILE = "data/trades.json"
+
+
+
+def load_trades():
+
+    try:
+
+
+        if not os.path.exists(
+            TRADES_FILE
+        ):
+
+
+            save_trades([])
+
+
+            return []
+
+
+
+        with open(
+
+            TRADES_FILE,
+
+            "r",
+
+            encoding="utf-8"
+
+        ) as file:
+
+
+            return json.load(
+                file
+            )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(
+            e
+        )
+
+
+        return []
+
+
+
+
+def save_trades(
+    trades
 ):
 
     try:
 
 
-        execute_query(
+        os.makedirs(
 
-            """
+            "data",
 
-            INSERT INTO trades
+            exist_ok=True
 
-            (
+        )
 
-                symbol,
 
-                side,
+        with open(
 
-                entry,
+            TRADES_FILE,
 
-                tp,
+            "w",
 
-                sl,
+            encoding="utf-8"
 
-                quantity,
+        ) as file:
 
-                status,
 
-                created_at
+            json.dump(
+
+                trades,
+
+                file,
+
+                ensure_ascii=False,
+
+                indent=4
 
             )
 
-            VALUES
 
-            (?, ?, ?, ?, ?, ?, ?, ?)
+        return True
 
-            """,
 
-            (
 
-                symbol,
+    except Exception as e:
 
-                side,
 
-                entry,
+        logger.exception(
+            e
+        )
 
-                tp,
 
-                sl,
+        return False
 
-                quantity,
 
-                status,
 
-                datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
+
+def add_trade_history(
+    trade
+):
+
+    try:
+
+
+        trades = load_trades()
+
+
+
+        trade["created_at"] = (
+
+            datetime.now().strftime(
+
+                "%Y-%m-%d %H:%M:%S"
 
             )
 
         )
+
+
+
+        trades.append(
+            trade
+        )
+
+
+
+        save_trades(
+            trades
+        )
+
 
 
         return True
@@ -98,42 +170,59 @@ def save_trade_history(
 
 
 def close_trade_history(
-    trade_id,
-    profit,
-    status="CLOSED"
+    symbol,
+    pnl
 ):
 
     try:
 
 
-        execute_query(
+        trades = load_trades()
 
-            """
 
-            UPDATE trades
 
-            SET
+        for trade in reversed(
+            trades
+        ):
 
-            status = ?,
 
-            profit = ?
+            if (
 
-            WHERE id = ?
+                trade.get(
+                    "symbol"
+                ) == symbol
 
-            """,
+                and
 
-            (
+                trade.get(
+                    "status",
+                    "OPEN"
+                ) == "OPEN"
 
-                status,
+            ):
 
-                profit,
 
-                trade_id
+                trade["status"] = "CLOSED"
 
-            )
+                trade["pnl"] = pnl
 
+                trade["closed_at"] = (
+
+                    datetime.now().strftime(
+
+                        "%Y-%m-%d %H:%M:%S"
+
+                    )
+
+                )
+
+                break
+
+
+
+        save_trades(
+            trades
         )
-
 
 
         return True
@@ -157,45 +246,11 @@ def get_trade_history(
     limit=50
 ):
 
-    try:
-
-
-        result = execute_query(
-
-            """
-
-            SELECT *
-
-            FROM trades
-
-            ORDER BY id DESC
-
-            LIMIT ?
-
-            """,
-
-            (
-
-                limit,
-
-            )
-
-        )
-
-
-        return result
+    trades = load_trades()
 
 
 
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return []
+    return trades[-limit:]
 
 
 
@@ -205,37 +260,32 @@ def get_total_profit():
     try:
 
 
-        result = execute_query(
-
-            """
-
-            SELECT
-
-            SUM(profit)
-
-            FROM trades
-
-            WHERE status='CLOSED'
-
-            """
-
-        )
+        trades = load_trades()
 
 
 
-        if result and result[0][0]:
+        total = 0
 
-            return round(
 
-                float(result[0][0]),
 
-                2
+        for trade in trades:
+
+
+            total += float(
+
+                trade.get(
+                    "pnl",
+                    0
+                )
 
             )
 
 
 
-        return 0
+        return round(
+            total,
+            2
+        )
 
 
 
