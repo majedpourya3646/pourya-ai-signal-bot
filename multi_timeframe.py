@@ -1,29 +1,21 @@
+# multi_timeframe.py
+
+from signal_engine import analyze_signal
 from market import get_market_data
-from signal_engine import analyze_market
+
 from core.logger import logger
 
 
-# وزن تایم‌فریم‌ها
-# تایم بالاتر اهمیت بیشتری دارد
-TIMEFRAME_WEIGHTS = {
-    "15m": 0.20,
-    "1h": 0.35,
-    "4h": 0.45
+
+TIMEFRAMES = {
+
+    "15": 0.25,
+
+    "60": 0.35,
+
+    "240": 0.40
+
 }
-
-
-
-def empty_result():
-
-    return {
-        "signal": "WAIT",
-        "entry": None,
-        "tp": None,
-        "sl": None,
-        "confidence": 0,
-        "reasons": [],
-        "detail": {}
-    }
 
 
 
@@ -31,134 +23,74 @@ def analyze_symbol(symbol):
 
     try:
 
-        # دریافت دیتا
+        results = []
 
-        tf15 = get_market_data(
-            symbol,
-            interval="15"
-        )
+        total_score = 0
 
 
-        tf1h = get_market_data(
-            symbol,
-            interval="60"
-        )
+        for timeframe, weight in TIMEFRAMES.items():
 
+            df = get_market_data(
 
-        tf4h = get_market_data(
-            symbol,
-            interval="240"
-        )
+                symbol,
 
+                interval=timeframe
 
-
-        if (
-            tf15.empty
-            or tf1h.empty
-            or tf4h.empty
-        ):
-
-            logger.warning(
-                f"{symbol} EMPTY DATA"
             )
 
-            return empty_result()
+
+            if df.empty:
+
+                continue
 
 
-
-        # تحلیل هر تایم فریم
-
-        r15 = analyze_market(tf15)
-
-        r1h = analyze_market(tf1h)
-
-        r4h = analyze_market(tf4h)
+            result = analyze_signal(
+                df
+            )
 
 
+            confidence = result.get(
+                "confidence",
+                0
+            )
 
-        # محاسبه امتیاز نهایی
 
-        score = round(
+            total_score += (
+                confidence * weight
+            )
 
-            r15["confidence"] *
-            TIMEFRAME_WEIGHTS["15m"]
 
-            +
+            results.append(
 
-            r1h["confidence"] *
-            TIMEFRAME_WEIGHTS["1h"]
+                {
 
-            +
+                    "timeframe": timeframe,
 
-            r4h["confidence"] *
-            TIMEFRAME_WEIGHTS["4h"]
+                    "signal": result.get(
+                        "signal",
+                        "WAIT"
+                    ),
 
+                    "confidence": confidence
+
+                }
+
+            )
+
+
+        confidence = round(
+            total_score,
+            2
         )
 
 
-
-        logger.info(
-
-            f"{symbol} | "
-            f"15M {r15['confidence']} {r15['signal']} | "
-            f"1H {r1h['confidence']} {r1h['signal']} | "
-            f"4H {r4h['confidence']} {r4h['signal']} | "
-            f"AVG {score}"
-
-        )
-
-
-
-        results = [
-            r15,
-            r1h,
-            r4h
-        ]
-
-
-
-        buy_count = sum(
-
-            x["signal"] in [
-                "BUY",
-                "STRONG BUY"
-            ]
-
-            for x in results
-
-        )
-
-
-
-        strong_count = sum(
-
-            x["signal"] == "STRONG BUY"
-
-            for x in results
-
-        )
-
-
-
-        # منطق ورود
-
-        if (
-            buy_count == 3
-            and score >= 70
-        ):
+        if confidence >= 75:
 
             signal = "STRONG BUY"
 
-
-
-        elif (
-            buy_count >= 2
-            and score >= 60
-        ):
+        elif confidence >= 60:
 
             signal = "BUY"
-
-
 
         else:
 
@@ -166,45 +98,21 @@ def analyze_symbol(symbol):
 
 
 
-
         return {
+
+            "symbol": symbol,
 
             "signal": signal,
 
-            "entry": r15.get(
-                "entry"
-            ),
+            "confidence": confidence,
 
-            "tp": r15.get(
-                "tp"
-            ),
+            "timeframes": results,
 
-            "sl": r15.get(
-                "sl"
-            ),
+            "entry": None,
 
+            "tp": None,
 
-            "confidence": score,
-
-
-            "reasons": (
-                r15.get(
-                    "reasons",
-                    []
-                )
-            ),
-
-
-
-            "detail": {
-
-                "15m": r15,
-
-                "1h": r1h,
-
-                "4h": r4h
-
-            }
+            "sl": None
 
         }
 
@@ -212,12 +120,17 @@ def analyze_symbol(symbol):
 
     except Exception as e:
 
-
         logger.exception(
-
-            f"MULTI ERROR {symbol}: {e}"
-
+            e
         )
 
 
-        return empty_result()
+        return {
+
+            "symbol": symbol,
+
+            "signal": "WAIT",
+
+            "confidence": 0
+
+        }
