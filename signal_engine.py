@@ -1,251 +1,239 @@
+# signal_engine.py
+
 import ta
 
+
 from config import (
-    DEFAULT_TP,
-    DEFAULT_SL,
-    USE_RSI_FILTER,
-    USE_MACD_FILTER,
-    USE_ADX_FILTER,
-    USE_VOLUME_FILTER
+    MIN_CONFIDENCE
 )
 
+from market import get_market_data
 
-def empty_result():
-
-    return {
-        "signal": "WAIT",
-        "entry": None,
-        "tp": None,
-        "sl": None,
-        "confidence": 0,
-        "reasons": []
-    }
+from core.logger import logger
 
 
 
-def analyze_market(df):
+def analyze_signal(
+    df
+):
 
-    if df is None or len(df) < 200:
-        return empty_result()
+    try:
 
+        if df.empty or len(df) < 200:
 
-    close = df["close"].astype(float)
-    high = df["high"].astype(float)
-    low = df["low"].astype(float)
+            return {
 
+                "signal": "WAIT",
 
-    if "volume" in df.columns:
-        volume = df["volume"].astype(float)
-    else:
-        volume = None
+                "confidence": 0
 
-
-    last_price = float(close.iloc[-1])
-
-
-    score = 0
-    reasons = []
-
-
-    rsi = ta.momentum.RSIIndicator(
-        close,
-        window=14
-    ).rsi()
-
-
-    ema20 = ta.trend.EMAIndicator(
-        close,
-        window=20
-    ).ema_indicator()
-
-
-    ema50 = ta.trend.EMAIndicator(
-        close,
-        window=50
-    ).ema_indicator()
-
-
-    ema200 = ta.trend.EMAIndicator(
-        close,
-        window=200
-    ).ema_indicator()
+            }
 
 
 
-    macd = ta.trend.MACD(
-        close
-    )
-
-    macd_line = macd.macd()
-
-    macd_signal = macd.macd_signal()
+        close = df["close"]
 
 
-
-    adx = ta.trend.ADXIndicator(
-        high,
-        low,
-        close,
-        window=14
-    ).adx()
+        df["ema20"] = ta.trend.EMAIndicator(
+            close,
+            window=20
+        ).ema_indicator()
 
 
-
-    indicators = [
-        rsi,
-        ema200,
-        macd_line,
-        macd_signal,
-        adx
-    ]
+        df["ema50"] = ta.trend.EMAIndicator(
+            close,
+            window=50
+        ).ema_indicator()
 
 
-    for indicator in indicators:
-
-        if indicator.isna().iloc[-1]:
-            return empty_result()
+        df["ema200"] = ta.trend.EMAIndicator(
+            close,
+            window=200
+        ).ema_indicator()
 
 
 
-    # EMA Trend
+        df["rsi"] = ta.momentum.RSIIndicator(
+            close,
+            window=14
+        ).rsi()
 
-    if last_price > ema20.iloc[-1]:
 
-        score += 10
-        reasons.append(
-            "Price above EMA20"
+
+        macd = ta.trend.MACD(
+            close
         )
 
 
-    if ema20.iloc[-1] > ema50.iloc[-1]:
+        df["macd"] = macd.macd()
 
-        score += 15
-        reasons.append(
-            "EMA20 > EMA50"
+        df["macd_signal"] = macd.macd_signal()
+
+
+
+        adx = ta.trend.ADXIndicator(
+
+            df["high"],
+
+            df["low"],
+
+            close
+
         )
 
 
-    if ema50.iloc[-1] > ema200.iloc[-1]:
-
-        score += 20
-        reasons.append(
-            "EMA50 > EMA200"
-        )
+        df["adx"] = adx.adx()
 
 
 
-    # MACD
+        score = 0
 
-    if USE_MACD_FILTER:
-
-        if macd_line.iloc[-1] > macd_signal.iloc[-1]:
-
-            score += 15
-            reasons.append(
-                "MACD Bullish"
-            )
+        reasons = []
 
 
 
-    # ADX
-
-    if USE_ADX_FILTER:
-
-        if adx.iloc[-1] > 25:
-
-            score += 15
-            reasons.append(
-                "Strong Trend"
-            )
+        last = df.iloc[-1]
 
 
 
-    # Volume
-
-    if USE_VOLUME_FILTER and volume is not None:
-
-        avg_volume = volume.tail(20).mean()
-
-        if volume.iloc[-1] > avg_volume:
-
-            score += 10
-
-            reasons.append(
-                "High Volume"
-            )
-
-
-
-    # RSI
-
-    if USE_RSI_FILTER:
-
-        last_rsi = float(
-            rsi.iloc[-1]
-        )
-
-        if 45 <= last_rsi <= 65:
+        if last["ema20"] > last["ema50"]:
 
             score += 15
 
             reasons.append(
-                "Healthy RSI"
+                "EMA20 بالاتر از EMA50"
+            )
+
+
+        if last["ema50"] > last["ema200"]:
+
+            score += 15
+
+            reasons.append(
+                "روند بلندمدت صعودی"
+            )
+
+
+        if 50 < last["rsi"] < 70:
+
+            score += 15
+
+            reasons.append(
+                "RSI مناسب"
+            )
+
+
+        if last["macd"] > last["macd_signal"]:
+
+            score += 15
+
+            reasons.append(
+                "MACD صعودی"
+            )
+
+
+        if last["adx"] > 25:
+
+            score += 15
+
+            reasons.append(
+                "قدرت روند مناسب"
+            )
+
+
+        avg_volume = (
+            df["volume"]
+            .rolling(20)
+            .mean()
+            .iloc[-1]
+        )
+
+
+        if last["volume"] > avg_volume:
+
+            score += 15
+
+            reasons.append(
+                "حجم افزایش یافته"
             )
 
 
 
-    score = min(
-        score,
-        100
-    )
+        if score >= MIN_CONFIDENCE:
+
+
+            return {
+
+                "signal": "BUY",
+
+                "confidence": score,
+
+                "reasons": reasons
+
+            }
 
 
 
-    entry = round(
-        last_price,
-        6
-    )
+        return {
 
+            "signal": "WAIT",
 
-    tp = round(
-        last_price * (1 + DEFAULT_TP / 100),
-        6
-    )
+            "confidence": score,
 
+            "reasons": reasons
 
-    sl = round(
-        last_price * (1 - DEFAULT_SL / 100),
-        6
-    )
+        }
 
 
 
-    if score >= 75:
-
-        signal = "STRONG BUY"
-
-    elif score >= 60:
-
-        signal = "BUY"
-
-    else:
-
-        signal = "WAIT"
+    except Exception as e:
 
 
+        logger.exception(
+            e
+        )
 
-    return {
 
-        "signal": signal,
+        return {
 
-        "entry": entry,
+            "signal": "WAIT",
 
-        "tp": tp,
+            "confidence": 0,
 
-        "sl": sl,
+            "reasons": []
 
-        "confidence": score,
+        }
 
-        "reasons": reasons
 
-    }
+
+
+def get_signal(symbol):
+
+    try:
+
+        df = get_market_data(
+            symbol,
+            interval="15"
+        )
+
+
+        return analyze_signal(
+            df
+        )
+
+
+    except Exception as e:
+
+
+        logger.exception(
+            e
+        )
+
+
+        return {
+
+            "signal": "WAIT",
+
+            "confidence": 0
+
+        }
