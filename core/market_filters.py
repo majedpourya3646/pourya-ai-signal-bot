@@ -3,89 +3,106 @@
 from core.logger import logger
 
 
+
 MIN_VOLUME = 100000
-MIN_CHANGE = 1
 
+MIN_PRICE_CHANGE = -10
 
-def is_valid_market(item):
-
-    try:
-
-        symbol = item.get(
-            "symbol",
-            ""
-        )
-
-        volume = float(
-            item.get(
-                "volume",
-                0
-            )
-        )
-
-        change = float(
-            item.get(
-                "change",
-                0
-            )
-        )
-
-
-        if not symbol.endswith(
-            "USDT"
-        ):
-
-            return False
-
-
-        if volume < MIN_VOLUME:
-
-            return False
-
-
-        if abs(change) < MIN_CHANGE:
-
-            return False
-
-
-        return True
-
-
-    except Exception as e:
-
-        logger.exception(
-            e
-        )
-
-        return False
+MAX_PRICE_CHANGE = 20
 
 
 
-def filter_markets(markets):
+def filter_markets(
+    markets
+):
 
     try:
 
-        results = []
+
+        result = []
 
 
-        for item in markets:
 
-            if is_valid_market(
-                item
-            ):
+        for market in markets:
 
-                results.append(
-                    item
+
+            try:
+
+
+                volume = float(
+
+                    market.get(
+                        "volume",
+                        0
+                    )
+
                 )
 
 
-        return results
+                change = float(
+
+                    market.get(
+                        "change",
+                        0
+                    )
+
+                )
+
+
+
+                if volume < MIN_VOLUME:
+
+                    continue
+
+
+
+                if change < MIN_PRICE_CHANGE:
+
+                    continue
+
+
+
+                if change > MAX_PRICE_CHANGE:
+
+                    continue
+
+
+
+                result.append(
+
+                    {
+
+                        "symbol": market.get(
+                            "market"
+                        ),
+
+                        "volume": volume,
+
+                        "change": change
+
+                    }
+
+                )
+
+
+
+            except Exception:
+
+
+                continue
+
+
+
+        return result
+
 
 
     except Exception as e:
 
+
         logger.exception(
             e
         )
+
 
         return []
