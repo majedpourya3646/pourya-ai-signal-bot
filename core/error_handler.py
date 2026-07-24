@@ -2,67 +2,65 @@
 
 import traceback
 
-from telegram_sender import send_message
-
 from core.logger import logger
+
+from telegram_sender import send_message
 
 
 
 def handle_error(
     error,
-    location=""
+    module="SYSTEM",
+    notify=False
 ):
 
     try:
 
 
-        error_text = str(
-            error
+        error_message = (
+
+            f"❌ Error in {module}\n\n"
+
+            f"{str(error)}"
+
+        )
+
+
+
+        logger.error(
+            error_message
         )
 
 
 
         logger.error(
 
-            f"ERROR {location}: {error_text}"
+            traceback.format_exc()
 
         )
 
 
 
-        details = traceback.format_exc()
+        if notify:
+
+
+            send_message(
+
+                error_message
+
+            )
 
 
 
-        message = f"""
+        return {
 
-🚨 <b>خطای سیستم Pourya Trader AI</b>
+            "status": False,
 
+            "module": module,
 
-📍 بخش:
-{location}
+            "error": str(error)
 
-
-❌ خطا:
-{error_text}
-
-
-⚙️ سیستم همچنان فعال است
-
-
-🤖 Pourya Trader AI
-
-"""
-
-
-
-        send_message(
-            message
-        )
-
-
-
-        return details
+        }
 
 
 
@@ -74,7 +72,13 @@ def handle_error(
         )
 
 
-        return None
+        return {
+
+            "status": False,
+
+            "error": str(e)
+
+        }
 
 
 
@@ -89,8 +93,11 @@ def safe_execute(
 
 
         return function(
+
             *args,
+
             **kwargs
+
         )
 
 
