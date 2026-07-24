@@ -1,5 +1,4 @@
-import threading
-import time
+# bot.py
 
 from core.main_engine import run_main_engine
 from core.market_monitor import run_market_monitor
@@ -10,54 +9,54 @@ from core.health_monitor import run_health_monitor
 from core.logger import logger
 
 
+
 def start_bot():
 
     try:
 
-        logger.info("STARTING POURYA TRADER AI BOT")
+        logger.info(
+            "STARTING POURYA TRADER AI TEST RUN"
+        )
 
-        workers = [
 
-            run_main_engine,
+        # اجرای موتور اصلی معامله
+        result = run_main_engine()
 
-            run_market_monitor,
 
-            run_report_scheduler,
+        logger.info(
+            f"MAIN ENGINE RESULT: {result}"
+        )
 
-            run_monthly_scheduler,
 
-            process_updates,
+        # بررسی بازار
+        run_market_monitor()
 
-            run_health_monitor,
 
-        ]
+        # گزارش روزانه
+        run_report_scheduler()
 
-        for worker in workers:
 
-            thread = threading.Thread(
-                target=worker,
-                name=worker.__name__,
-                daemon=True
-            )
+        # بررسی سلامت سیستم
+        run_health_monitor()
 
-            thread.start()
 
-            logger.info(f"{worker.__name__} STARTED")
+        logger.info(
+            "TEST RUN COMPLETED SUCCESSFULLY"
+        )
 
-        logger.info("ALL BOT SERVICES STARTED")
 
-        # زنده نگه داشتن Thread اصلی
-        while True:
-            time.sleep(60)
+        return True
 
-    except KeyboardInterrupt:
 
-        logger.info("BOT STOPPED")
 
     except Exception as e:
 
         logger.exception(e)
 
+        return False
+
+
 
 if __name__ == "__main__":
+
     start_bot()
