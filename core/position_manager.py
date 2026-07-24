@@ -1,9 +1,5 @@
 from coinex_futures_api import (
-    get_positions
-)
-
-from core.trade_history import (
-    close_trade_history
+    coinex_futures
 )
 
 from trade_manager import (
@@ -15,20 +11,61 @@ from core.logger import logger
 
 
 
+def get_positions():
+
+    try:
+
+        result = coinex_futures.get_futures_positions()
+
+
+        if not result:
+
+            return []
+
+
+        if result.get(
+            "code"
+        ) != 0:
+
+            logger.error(
+                result
+            )
+
+            return []
+
+
+        return result.get(
+            "data",
+            []
+        )
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return []
+
+
+
 def monitor_positions():
 
     closed_positions = []
 
+
     try:
 
         positions = get_positions()
+
 
         if not positions:
 
             return []
 
 
+
         for position in positions:
+
 
             symbol = position.get(
                 "market"
@@ -40,11 +77,14 @@ def monitor_positions():
                 continue
 
 
+
             unrealized = float(
+
                 position.get(
                     "unrealized_pnl",
                     0
                 )
+
             )
 
 
@@ -58,18 +98,19 @@ def monitor_positions():
                 continue
 
 
-            if unrealized == 0:
-
-                continue
-
 
             if unrealized > 0:
 
                 status = "PROFIT"
 
-            else:
+            elif unrealized < 0:
 
                 status = "LOSS"
+
+            else:
+
+                continue
+
 
 
             closed_positions.append(
@@ -106,6 +147,7 @@ def monitor_positions():
         return closed_positions
 
 
+
     except Exception as e:
 
         logger.exception(e)
@@ -118,26 +160,33 @@ def check_tp_sl():
 
     results = []
 
+
     try:
 
         positions = get_positions()
+
 
         if not positions:
 
             return []
 
 
+
         for position in positions:
+
 
             symbol = position.get(
                 "market"
             )
 
+
             price = float(
+
                 position.get(
                     "mark_price",
                     0
                 )
+
             )
 
 
@@ -151,18 +200,24 @@ def check_tp_sl():
                 continue
 
 
+
             tp = float(
+
                 trade.get(
                     "tp",
                     0
                 )
+
             )
 
+
             sl = float(
+
                 trade.get(
                     "sl",
                     0
                 )
+
             )
 
 
@@ -171,66 +226,87 @@ def check_tp_sl():
             )
 
 
+
             close = False
 
             reason = ""
 
 
+
             if side == "LONG":
+
 
                 if price >= tp:
 
                     close = True
+
                     reason = "TAKE_PROFIT"
+
 
 
                 elif price <= sl:
 
                     close = True
+
                     reason = "STOP_LOSS"
 
 
 
             elif side == "SHORT":
 
+
                 if price <= tp:
 
                     close = True
+
                     reason = "TAKE_PROFIT"
+
 
 
                 elif price >= sl:
 
                     close = True
+
                     reason = "STOP_LOSS"
+
 
 
 
             if close:
 
-                close_trade(
+
+                result = close_trade(
+
                     symbol,
+
                     price,
+
                     reason
-                )
-
-
-                results.append(
-
-                    {
-
-                        "symbol": symbol,
-
-                        "reason": reason,
-
-                        "price": price
-
-                    }
 
                 )
+
+
+                if result:
+
+
+                    results.append(
+
+                        {
+
+                            "symbol": symbol,
+
+                            "reason": reason,
+
+                            "price": price
+
+                        }
+
+                    )
+
 
 
         return results
+
 
 
     except Exception as e:
