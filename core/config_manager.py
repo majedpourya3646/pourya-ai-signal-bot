@@ -7,7 +7,7 @@ from core.logger import logger
 
 
 
-CONFIG_FILE = "data/runtime_config.json"
+CONFIG_FILE = "data/settings.json"
 
 
 
@@ -17,19 +17,19 @@ DEFAULT_CONFIG = {
 
     "auto_trade": False,
 
-    "paper_trading": True,
+    "telegram_alerts": True,
 
-    "max_positions": 3,
-
-    "risk_percent": 1,
+    "pump_scanner": True,
 
     "scan_interval": 300,
 
     "min_confidence": 65,
 
-    "pump_scanner": True,
+    "risk_percent": 1,
 
-    "telegram_alerts": True
+    "max_open_trades": 3,
+
+    "leverage": 10
 
 }
 
@@ -65,9 +65,23 @@ def load_config():
         ) as file:
 
 
-            return json.load(
+            config = json.load(
                 file
             )
+
+
+
+        merged = DEFAULT_CONFIG.copy()
+
+
+
+        merged.update(
+            config
+        )
+
+
+
+        return merged
 
 
 
@@ -124,7 +138,6 @@ def save_config(
             )
 
 
-
         return True
 
 
@@ -152,8 +165,11 @@ def get_setting(
 
 
     return config.get(
+
         key,
+
         default
+
     )
 
 
