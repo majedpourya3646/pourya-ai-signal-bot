@@ -1,15 +1,20 @@
 # core/profit_share.py
 
-from core.logger import logger
-
 from core.user_manager import (
     get_users
 )
 
+from core.logger import logger
+
+
+
+DEFAULT_COMMISSION = 20
+
 
 
 def calculate_profit_share(
-    profit
+    total_profit,
+    commission=DEFAULT_COMMISSION
 ):
 
     try:
@@ -18,7 +23,15 @@ def calculate_profit_share(
         users = get_users()
 
 
-        result = []
+
+        if not users:
+
+
+            return []
+
+
+
+        results = []
 
 
 
@@ -27,7 +40,7 @@ def calculate_profit_share(
 
             if not user.get(
                 "active",
-                False
+                True
             ):
 
 
@@ -35,30 +48,43 @@ def calculate_profit_share(
 
 
 
-            percentage = user.get(
-                "profit_share",
-                20
-            )
+            share = (
 
+                total_profit
 
+                *
 
-            share = round(
+                (
 
-                profit *
+                    100 - commission
 
-                percentage
+                )
 
                 /
 
-                100,
-
-                2
+                100
 
             )
 
 
 
-            result.append(
+            platform_fee = (
+
+                total_profit
+
+                *
+
+                commission
+
+                /
+
+                100
+
+            )
+
+
+
+            results.append(
 
                 {
 
@@ -70,11 +96,17 @@ def calculate_profit_share(
                         "username"
                     ),
 
-                    "profit": profit,
+                    "profit": total_profit,
 
-                    "percentage": percentage,
+                    "share": round(
+                        share,
+                        2
+                    ),
 
-                    "share": share
+                    "platform_fee": round(
+                        platform_fee,
+                        2
+                    )
 
                 }
 
@@ -82,7 +114,7 @@ def calculate_profit_share(
 
 
 
-        return result
+        return results
 
 
 
@@ -95,72 +127,3 @@ def calculate_profit_share(
 
 
         return []
-
-
-
-
-def create_profit_report(
-    profit
-):
-
-    try:
-
-
-        shares = calculate_profit_share(
-            profit
-        )
-
-
-
-        if not shares:
-
-
-            return "❌ کاربری برای تقسیم سود وجود ندارد"
-
-
-
-        message = """
-
-💰 <b>Profit Share Report</b>
-
-
-"""
-
-
-
-        for item in shares:
-
-
-            message += (
-
-                f"👤 {item.get('username')}\n"
-
-                f"📈 سود کل: {item.get('profit')} USDT\n"
-
-                f"💵 سهم: {item.get('share')} USDT\n\n"
-
-            )
-
-
-
-        message += (
-
-            "🤖 Pourya Trader AI"
-
-        )
-
-
-
-        return message
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در گزارش تقسیم سود"
