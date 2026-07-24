@@ -1,55 +1,33 @@
 # core/risk_engine.py
 
-from config import (
-    RISK_PER_TRADE,
-    MAX_OPEN_TRADES
+from risk_manager import (
+    calculate_position_size
 )
 
 from core.logger import logger
 
 
 
-def calculate_risk_amount(
-    balance
+def calculate_risk_trade(
+    balance,
+    entry,
+    stop_loss,
+    risk_percent=1
 ):
 
     try:
 
-        return round(
+
+        risk_amount = (
 
             balance *
 
-            (RISK_PER_TRADE / 100),
+            risk_percent
 
-            2
+            /
 
-        )
+            100
 
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return 0
-
-
-
-
-def calculate_position_size(
-    balance,
-    entry,
-    stop_loss
-):
-
-    try:
-
-
-        risk_amount = calculate_risk_amount(
-            balance
         )
 
 
@@ -63,6 +41,7 @@ def calculate_position_size(
 
 
         if distance == 0:
+
 
             return 0
 
@@ -103,14 +82,29 @@ def calculate_position_size(
 
 
 
-def allow_trade(
-    open_trades_count
+def validate_risk(
+    balance,
+    entry,
+    tp,
+    sl
 ):
 
     try:
 
 
-        if open_trades_count >= MAX_OPEN_TRADES:
+        if entry <= 0:
+
+            return False
+
+
+
+        if tp <= entry:
+
+            return False
+
+
+
+        if sl >= entry:
 
             return False
 
