@@ -54,7 +54,10 @@ def run_main_engine():
             10
         )
 
+logger.info(f"FOUND OPPORTUNITIES: {len(opportunities)}")
 
+for item in opportunities:
+    logger.info(item)
 
         executed = []
 
