@@ -2,9 +2,14 @@
 
 from datetime import datetime
 
-from performance import report as performance_report
+from core.trade_history import (
+    get_trade_history,
+    get_total_profit
+)
 
-from trade_manager import get_all_trades
+from core.performance import (
+    get_daily_performance
+)
 
 from core.logger import logger
 
@@ -15,40 +20,50 @@ def create_daily_report():
     try:
 
 
-        trades = get_all_trades()
-
-
-
-        open_count = len(
-            trades
+        trades = get_trade_history(
+            100
         )
+
+
+
+        profit = get_total_profit()
+
+
+
+        performance = get_daily_performance()
 
 
 
         message = f"""
 
-📊 <b>گزارش روزانه Pourya Trader AI</b>
+📅 <b>گزارش روزانه Pourya Trader AI</b>
 
 
-📅 تاریخ:
+🕒 تاریخ:
 {datetime.now().strftime('%Y-%m-%d')}
 
 
-📂 معاملات باز:
-{open_count}
+📊 تعداد معاملات:
+{len(trades)}
 
 
-"""
+✅ موفق:
+{performance.get('wins',0)}
 
 
-        message += performance_report()
+❌ ناموفق:
+{performance.get('losses',0)}
 
 
+🎯 درصد موفقیت:
+{performance.get('win_rate',0)}٪
 
-        message += """
 
-🤖 سیستم هوشمند تحلیل و ترید
+💰 سود امروز:
+{profit} USDT
 
+
+🤖 سیستم هوشمند ترید
 
 """
 
@@ -66,4 +81,4 @@ def create_daily_report():
         )
 
 
-        return "❌ خطا در ساخت گزارش روزانه"
+        return "❌ خطا در گزارش روزانه"
