@@ -16,7 +16,7 @@ def create_coin_report(
 
             return """
 
-🪙 <b>COIN SCANNER</b>
+📊 <b>Coin Scanner Report</b>
 
 
 ❌ ارز مناسبی پیدا نشد
@@ -30,7 +30,7 @@ def create_coin_report(
 
         message = """
 
-🪙 <b>TOP COINS SCANNER</b>
+📊 <b>Coin Scanner Report</b>
 
 
 """
@@ -50,13 +50,11 @@ def create_coin_report(
 
                 f"{index}️⃣ "
 
-                f"🪙 {coin.get('market')}\n"
+                f"🪙 {coin.get('symbol')}\n"
 
-                f"⭐ امتیاز: {coin.get('score')}٪\n"
+                f"📈 تغییر: {coin.get('change',0)}٪\n"
 
-                f"📈 تغییر: {coin.get('change')}٪\n"
-
-                f"📊 حجم: {coin.get('volume')}\n\n"
+                f"💰 حجم: {coin.get('volume',0)}\n\n"
 
             )
 
@@ -82,4 +80,4 @@ def create_coin_report(
         )
 
 
-        return "❌ خطا در ساخت Coin Report"
+        return "❌ خطا در گزارش ارزها"
