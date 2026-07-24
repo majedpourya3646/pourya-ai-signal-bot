@@ -5,11 +5,13 @@ from config import (
     ORDER_TYPE
 )
 
-from coinex_api import coinex
 from core.logger import logger
+from coinex_api import coinex
+
 
 
 class CoinExTrade:
+
 
     def create_order(
         self,
@@ -18,69 +20,91 @@ class CoinExTrade:
         amount
     ):
 
-        logger.info(
-            f"PAPER_TRADING = {PAPER_TRADING}"
-        )
-
-        if PAPER_TRADING:
+        try:
 
             logger.info(
-                f"PAPER ORDER {side} {market} qty={amount}"
+                f"PAPER_TRADING={PAPER_TRADING}"
             )
 
-            return {
 
-                "code": 0,
+            if PAPER_TRADING:
 
-                "message": "Paper Trading",
+                logger.info(
+                    f"PAPER ORDER {side} {market} qty={amount}"
+                )
 
-                "data": {
+                return {
 
-                    "market": market,
+                    "code": 0,
 
-                    "side": side,
+                    "message": "Paper Trading",
 
-                    "amount": amount,
+                    "data": {
 
-                    "order_id": "PAPER"
+                        "market": market,
+
+                        "side": side,
+
+                        "amount": amount,
+
+                        "order_id": "PAPER"
+
+                    }
 
                 }
 
-            }
 
-        logger.info(
-            f"REAL ORDER {side} {market} qty={amount}"
-        )
 
-        result = coinex.create_futures_order(
+            logger.info(
+                f"REAL ORDER {side} {market} qty={amount}"
+            )
 
-            market=market,
 
-            side=side,
+            result = coinex.create_futures_order(
 
-            amount=amount,
+                market=market,
 
-            order_type=ORDER_TYPE
+                side=side,
 
-        )
+                amount=amount,
 
-        logger.info("ORDER RESULT:")
-
-        logger.info(
-
-            json.dumps(
-
-                result,
-
-                ensure_ascii=False,
-
-                indent=2
+                order_type=ORDER_TYPE
 
             )
 
-        )
 
-        return result
+            logger.info(
+                "ORDER RESULT"
+            )
+
+
+            logger.info(
+
+                json.dumps(
+
+                    result,
+
+                    ensure_ascii=False,
+
+                    indent=2
+
+                )
+
+            )
+
+
+            return result
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+
+            return None
+
 
 
     def open_long(
@@ -88,6 +112,7 @@ class CoinExTrade:
         symbol,
         quantity
     ):
+
 
         return self.create_order(
 
@@ -100,11 +125,13 @@ class CoinExTrade:
         )
 
 
+
     def open_short(
         self,
         symbol,
         quantity
     ):
+
 
         return self.create_order(
 
@@ -117,6 +144,7 @@ class CoinExTrade:
         )
 
 
+
     def close_position(
         self,
         symbol,
@@ -124,11 +152,22 @@ class CoinExTrade:
         quantity
     ):
 
+
         close_side = (
+
             "sell"
-            if side.upper() == "BUY"
+
+            if side.upper() in (
+
+                "BUY",
+                "LONG"
+
+            )
+
             else "buy"
+
         )
+
 
         return self.create_order(
 
@@ -139,6 +178,7 @@ class CoinExTrade:
             amount=quantity
 
         )
+
 
 
 coinex_trade = CoinExTrade()
