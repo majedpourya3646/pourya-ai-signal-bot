@@ -151,3 +151,24 @@ def get_symbols(
 
 
     return symbols
+def scan_all_coins():
+
+    """
+    Compatibility function
+    Used by market_discovery
+    """
+
+    try:
+
+        return get_top_coins(
+            200
+        )
+
+
+    except Exception as e:
+
+        logger.exception(
+            e
+        )
+
+        return []
