@@ -2,38 +2,53 @@
 
 from coinex_trade import coinex_trade
 
-from portfolio import (
-    get_trade_summary,
-    INITIAL_BALANCE
-)
-
-from risk_manager import validate_trade
-
 from trade_manager import (
     can_buy,
-    open_trade,
-    get_all_trades
+    open_trade
 )
 
-from performance import add_trade
+from portfolio import (
+    INITIAL_BALANCE,
+    get_trade_summary
+)
 
-from core.signal_validator import validate_signal
+from risk_manager import (
+    validate_trade
+)
+
+from performance import (
+    add_trade
+)
 
 from core.logger import logger
 
 
 
-def execute_trade(
-    symbol,
-    analysis
+def execute_auto_trade(
+    opportunity
 ):
 
     try:
 
 
-        if not validate_signal(
-            analysis
-        ):
+        symbol = opportunity.get(
+            "symbol"
+        )
+
+
+        signal = opportunity.get(
+            "signal"
+        )
+
+
+
+        if signal not in [
+
+            "BUY",
+
+            "STRONG BUY"
+
+        ]:
 
             return None
 
@@ -47,17 +62,17 @@ def execute_trade(
 
 
 
-        entry = analysis.get(
+        entry = opportunity.get(
             "entry"
         )
 
 
-        tp = analysis.get(
+        tp = opportunity.get(
             "tp"
         )
 
 
-        sl = analysis.get(
+        sl = opportunity.get(
             "sl"
         )
 
@@ -69,13 +84,13 @@ def execute_trade(
 
 
 
-        valid, size = validate_trade(
+        valid, _ = validate_trade(
 
             INITIAL_BALANCE,
 
             INITIAL_BALANCE,
 
-            get_all_trades(),
+            {},
 
             entry,
 
@@ -114,12 +129,6 @@ def execute_trade(
 
 
 
-        if quantity <= 0:
-
-            return None
-
-
-
         order = coinex_trade.open_long(
 
             symbol,
@@ -130,13 +139,15 @@ def execute_trade(
 
 
 
-        if (
+        if not order:
 
-            not order
+            return None
 
-            or order.get("code") != 0
 
-        ):
+
+        if order.get(
+            "code"
+        ) != 0:
 
 
             logger.error(
@@ -173,14 +184,12 @@ def execute_trade(
 
             quantity,
 
-            analysis.get(
+            opportunity.get(
                 "confidence",
                 0
             ),
 
-            analysis.get(
-                "signal"
-            ),
+            signal,
 
             order_id
 
@@ -192,9 +201,7 @@ def execute_trade(
 
             symbol,
 
-            analysis.get(
-                "signal"
-            ),
+            signal,
 
             entry,
 
@@ -208,12 +215,12 @@ def execute_trade(
 
             quantity,
 
-            analysis.get(
+            opportunity.get(
                 "confidence",
                 0
             ),
 
-            analysis.get(
+            opportunity.get(
                 "grade",
                 ""
             )
