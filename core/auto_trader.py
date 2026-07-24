@@ -1,5 +1,3 @@
-# core/auto_trader.py
-
 from coinex_trade import coinex_trade
 
 from trade_manager import (
@@ -30,23 +28,22 @@ def execute_auto_trade(
 
     try:
 
-
         symbol = opportunity.get(
             "symbol"
         )
 
-
         signal = opportunity.get(
-            "signal"
+            "signal",
+            "WAIT"
         )
-
 
 
         if signal not in [
 
             "BUY",
-
-            "STRONG BUY"
+            "STRONG BUY",
+            "SELL",
+            "STRONG SELL"
 
         ]:
 
@@ -66,16 +63,13 @@ def execute_auto_trade(
             "entry"
         )
 
-
         tp = opportunity.get(
             "tp"
         )
 
-
         sl = opportunity.get(
             "sl"
         )
-
 
 
         if not entry or not tp or not sl:
@@ -84,7 +78,7 @@ def execute_auto_trade(
 
 
 
-        valid, _ = validate_trade(
+        valid, result = validate_trade(
 
             INITIAL_BALANCE,
 
@@ -101,8 +95,11 @@ def execute_auto_trade(
         )
 
 
-
         if not valid:
+
+            logger.info(
+                f"TRADE REJECTED {symbol}: {result}"
+            )
 
             return None
 
@@ -121,21 +118,47 @@ def execute_auto_trade(
         )
 
 
-
         quantity = summary.get(
             "quantity",
             0
         )
 
 
+        if quantity <= 0:
 
-        order = coinex_trade.open_long(
+            return None
 
-            symbol,
 
-            quantity
 
-        )
+        if signal in [
+
+            "BUY",
+            "STRONG BUY"
+
+        ]:
+
+            order = coinex_trade.open_long(
+
+                symbol,
+
+                quantity
+
+            )
+
+            side = "LONG"
+
+
+        else:
+
+            order = coinex_trade.open_short(
+
+                symbol,
+
+                quantity
+
+            )
+
+            side = "SHORT"
 
 
 
@@ -149,11 +172,9 @@ def execute_auto_trade(
             "code"
         ) != 0:
 
-
             logger.error(
                 order
             )
-
 
             return None
 
@@ -165,7 +186,6 @@ def execute_auto_trade(
                 "data",
                 {}
             )
-
             .get(
                 "order_id"
             )
@@ -174,11 +194,11 @@ def execute_auto_trade(
 
 
 
-        open_trade(
+        opened = open_trade(
 
             symbol,
 
-            "buy",
+            side,
 
             entry,
 
@@ -194,6 +214,11 @@ def execute_auto_trade(
             order_id
 
         )
+
+
+        if not opened:
+
+            return None
 
 
 
@@ -228,6 +253,10 @@ def execute_auto_trade(
         )
 
 
+        logger.info(
+            f"OPENED {side} {symbol} qty={quantity}"
+        )
+
 
         return order
 
@@ -235,10 +264,6 @@ def execute_auto_trade(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return None
