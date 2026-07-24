@@ -1,34 +1,40 @@
 # core/main_engine.py
 
-from core.startup import (
-    startup_check
+from core.startup_manager import (
+    initialize_system
 )
 
-from core.trading_engine import (
-    run_trading_engine
+from core.opportunity_engine import (
+    find_opportunities
+)
+
+from core.auto_trader import (
+    execute_auto_trade
 )
 
 from core.engine_report import (
     create_engine_report
 )
 
+from core.market_alerts import (
+    send_signal_alert
+)
+
 from telegram_sender import (
     send_message
+)
+
+from core.config_manager import (
+    get_setting
 )
 
 from core.logger import logger
 
 
 
-def start_engine():
+def run_main_engine():
 
     try:
-
-
-        if not startup_check():
-
-            return
-
 
 
         logger.info(
@@ -37,12 +43,73 @@ def start_engine():
 
 
 
-        results = run_trading_engine()
+        if not initialize_system():
+
+
+            return False
+
+
+
+        opportunities = find_opportunities(
+            10
+        )
+
+
+
+        executed = []
+
+
+
+        for opportunity in opportunities:
+
+
+            if opportunity.get(
+                "confidence",
+                0
+            ) < get_setting(
+
+                "min_confidence",
+
+                65
+
+            ):
+
+
+                continue
+
+
+
+            send_signal_alert(
+                opportunity
+            )
+
+
+
+            if get_setting(
+                "auto_trade",
+                False
+            ):
+
+
+                result = execute_auto_trade(
+                    opportunity
+                )
+
+
+
+                if result:
+
+
+                    executed.append(
+                        result
+                    )
 
 
 
         report = create_engine_report(
-            results
+
+            len(executed)
+
         )
 
 
@@ -53,7 +120,7 @@ def start_engine():
 
 
 
-        return results
+        return executed
 
 
 
@@ -65,17 +132,12 @@ def start_engine():
         )
 
 
-        send_message(
-
-            f"❌ Main Engine Error\n{e}"
-
-        )
-
-
         return []
+
 
 
 
 if __name__ == "__main__":
 
-    start_engine()
+
+    run_main_engine()
