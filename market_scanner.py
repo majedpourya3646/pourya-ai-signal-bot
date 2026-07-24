@@ -1,3 +1,5 @@
+# market_scanner.py
+
 import time
 
 from config import BASE_URL, MARKET_TYPE
@@ -110,11 +112,9 @@ def calculate_score(item):
         score = 0
 
 
-
         if volume >= MIN_VOLUME:
 
             score += 30
-
 
 
         if change > 0:
@@ -130,11 +130,9 @@ def calculate_score(item):
             score += 20
 
 
-
         if score > 100:
 
             score = 100
-
 
 
         return round(
@@ -163,7 +161,6 @@ def scan_market():
     results = []
 
 
-
     for item in markets:
 
         score = calculate_score(
@@ -174,7 +171,6 @@ def scan_market():
         if score <= 0:
 
             continue
-
 
 
         results.append(
@@ -200,7 +196,6 @@ def scan_market():
         )
 
 
-
     results.sort(
 
         key=lambda x: x["score"],
@@ -208,7 +203,6 @@ def scan_market():
         reverse=True
 
     )
-
 
 
     return results[:TOP_MARKETS]
