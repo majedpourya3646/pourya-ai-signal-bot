@@ -1,9 +1,5 @@
 from core.logger import logger
 
-from risk_manager import (
-    calculate_position_size
-)
-
 
 def calculate_risk_trade(
     balance,
@@ -20,50 +16,28 @@ def calculate_risk_trade(
         if entry <= 0:
             return 0
 
-        if stop_loss <= 0:
-            return 0
-
-
         risk_amount = (
-
             balance *
-
             risk_percent /
-
             100
-
         )
-
 
         distance = abs(
-
             entry - stop_loss
-
         )
 
-
-        if distance == 0:
-
+        if distance <= 0:
             return 0
 
-
         quantity = (
-
             risk_amount /
-
             distance
-
         )
-
 
         return round(
-
             quantity,
-
             6
-
         )
-
 
     except Exception as e:
 
@@ -82,32 +56,36 @@ def validate_risk(
 
     try:
 
-        if entry <= 0:
-
+        if balance <= 0:
             return False
 
+        if entry <= 0:
+            return False
+
+        if tp is None or sl is None:
+            return False
 
         if tp <= entry:
-
             return False
-
 
         if sl >= entry:
-
             return False
 
-
-        rr = abs(
+        reward = abs(
             tp - entry
-        ) / abs(
+        )
+
+        risk = abs(
             entry - sl
         )
 
-
-        if rr < 2:
-
+        if risk == 0:
             return False
 
+        risk_reward = reward / risk
+
+        if risk_reward < 2:
+            return False
 
         return True
 
