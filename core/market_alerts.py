@@ -7,7 +7,7 @@ from core.logger import logger
 
 
 def send_signal_alert(
-    opportunity
+    signal
 ):
 
     try:
@@ -15,34 +15,34 @@ def send_signal_alert(
 
         message = f"""
 
-🚨 <b>سیگنال جدید Pourya Trader AI</b>
+🚨 <b>سیگنال جدید بازار</b>
 
 
 🪙 ارز:
-{opportunity.get('symbol')}
+{signal.get('symbol')}
 
 
-📊 وضعیت:
-{opportunity.get('signal')}
+📌 تصمیم:
+{signal.get('decision')}
 
 
 ⭐ قدرت:
-{opportunity.get('confidence')}٪
+{signal.get('confidence')}٪
 
 
 💰 ورود:
-{opportunity.get('entry')}
+{signal.get('entry')}
 
 
 🎯 حد سود:
-{opportunity.get('tp')}
+{signal.get('tp')}
 
 
 🛑 حد ضرر:
-{opportunity.get('sl')}
+{signal.get('sl')}
 
 
-🤖 سیستم هوشمند ترید
+🤖 Pourya Trader AI
 
 """
 
@@ -53,6 +53,9 @@ def send_signal_alert(
         )
 
 
+        return True
+
+
 
     except Exception as e:
 
@@ -60,6 +63,9 @@ def send_signal_alert(
         logger.exception(
             e
         )
+
+
+        return False
 
 
 
@@ -73,23 +79,26 @@ def send_pump_alert(
 
         message = f"""
 
-🚀 <b>PUMP ALERT</b>
+🔥 <b>هشدار پامپ احتمالی</b>
 
 
 🪙 ارز:
 {pump.get('symbol')}
 
 
-⭐ قدرت پامپ:
-{pump.get('score')}٪
-
-
-📈 تغییر:
+📈 تغییر قیمت:
 {pump.get('change')}٪
 
 
-🔥 افزایش حجم:
-x{pump.get('volume_power')}
+📊 قدرت حجم:
+{pump.get('volume_power')}x
+
+
+⭐ امتیاز:
+{pump.get('score')}
+
+
+⚠️ بررسی قبل از ورود
 
 
 🤖 Pourya Trader AI
@@ -103,6 +112,9 @@ x{pump.get('volume_power')}
         )
 
 
+        return True
+
+
 
     except Exception as e:
 
@@ -112,36 +124,4 @@ x{pump.get('volume_power')}
         )
 
 
-
-
-def send_system_alert(
-    title,
-    text
-):
-
-    try:
-
-
-        send_message(
-
-f"""
-
-⚠️ <b>{title}</b>
-
-
-{text}
-
-
-🤖 Pourya Trader AI
-
-"""
-
-        )
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
+        return False
