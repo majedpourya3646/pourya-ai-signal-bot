@@ -1,11 +1,12 @@
 # core/position_manager.py
 
-from trade_manager import (
-    get_all_trades,
-    close_trade
+from coinex_futures_api import (
+    get_positions
 )
 
-from market import get_market_data
+from core.trade_history import (
+    close_trade_history
+)
 
 from core.logger import logger
 
@@ -13,123 +14,80 @@ from core.logger import logger
 
 def monitor_positions():
 
+    closed_positions = []
+
+
+
     try:
 
 
-        trades = get_all_trades()
+        positions = get_positions()
 
 
 
-        if not trades:
+        if not positions:
 
             return []
 
 
 
-        closed = []
+        for position in positions:
 
 
-
-        for symbol, trade in list(trades.items()):
-
-
-            try:
+            symbol = position.get(
+                "market"
+            )
 
 
-                df = get_market_data(
+            unrealized = float(
 
-                    symbol,
-
-                    interval="15"
-
+                position.get(
+                    "unrealized_pnl",
+                    0
                 )
 
-
-
-                if df.empty:
-
-                    continue
+            )
 
 
 
-                current_price = float(
-
-                    df["close"].iloc[-1]
-
-                )
+            if unrealized == 0:
 
 
-
-                if current_price >= trade["tp"]:
-
-
-                    close_trade(
-
-                        symbol,
-
-                        current_price,
-
-                        "TP"
-
-                    )
-
-
-                    closed.append(
-
-                        {
-
-                            "symbol": symbol,
-
-                            "reason": "TP",
-
-                            "price": current_price
-
-                        }
-
-                    )
+                continue
 
 
 
-                elif current_price <= trade["sl"]:
+            if unrealized > 0:
 
 
-                    close_trade(
-
-                        symbol,
-
-                        current_price,
-
-                        "SL"
-
-                    )
-
-
-                    closed.append(
-
-                        {
-
-                            "symbol": symbol,
-
-                            "reason": "SL",
-
-                            "price": current_price
-
-                        }
-
-                    )
+                status = "PROFIT"
 
 
 
-            except Exception as e:
+            else:
 
 
-                logger.exception(
-                    e
-                )
+                status = "LOSS"
 
 
 
-        return closed
+            closed_positions.append(
+
+                {
+
+                    "symbol": symbol,
+
+                    "pnl": unrealized,
+
+                    "status": status
+
+                }
+
+            )
+
+
+
+        return closed_positions
 
 
 
