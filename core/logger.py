@@ -1,58 +1,94 @@
+# core/logger.py
+
 import logging
 import os
 
-
-os.makedirs(
-    "logs",
-    exist_ok=True
-)
-
-
-LOG_FILE = "logs/bot.log"
+from datetime import datetime
 
 
 
-logger = logging.getLogger(
-    "PouryaTraderAI"
-)
-
-
-logger.setLevel(
-    logging.INFO
-)
+LOG_FOLDER = "logs"
 
 
 
-formatter = logging.Formatter(
-    "%(asctime)s | %(levelname)s | %(message)s"
-)
+def setup_logger():
 
+    os.makedirs(
 
+        LOG_FOLDER,
 
-if not logger.handlers:
+        exist_ok=True
 
-
-    file_handler = logging.FileHandler(
-        LOG_FILE,
-        encoding="utf-8"
-    )
-
-    file_handler.setFormatter(
-        formatter
     )
 
 
-    console_handler = logging.StreamHandler()
-
-    console_handler.setFormatter(
-        formatter
+    logger = logging.getLogger(
+        "PouryaTraderAI"
     )
 
 
-    logger.addHandler(
-        file_handler
+    logger.setLevel(
+        logging.INFO
     )
 
-    logger.addHandler(
-        console_handler
-    )
+
+
+    if not logger.handlers:
+
+
+        file_handler = logging.FileHandler(
+
+            os.path.join(
+
+                LOG_FOLDER,
+
+                f"bot_{datetime.now().strftime('%Y%m%d')}.log"
+
+            ),
+
+            encoding="utf-8"
+
+        )
+
+
+
+        console_handler = logging.StreamHandler()
+
+
+
+        formatter = logging.Formatter(
+
+            "%(asctime)s | %(levelname)s | %(message)s"
+
+        )
+
+
+
+        file_handler.setFormatter(
+            formatter
+        )
+
+
+        console_handler.setFormatter(
+            formatter
+        )
+
+
+
+        logger.addHandler(
+            file_handler
+        )
+
+
+        logger.addHandler(
+            console_handler
+        )
+
+
+
+    return logger
+
+
+
+
+logger = setup_logger()
