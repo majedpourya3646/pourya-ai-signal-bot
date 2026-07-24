@@ -1,100 +1,169 @@
 # core/opportunity_engine.py
 
-from core.scanner_service import (
-    get_top_opportunities
+from core.market_signal_bridge import (
+    analyze_market_symbols
 )
 
-from multi_timeframe import analyze_symbol
+from core.coin_scanner import (
+    get_symbols
+)
 
-from core.signal_validator import (
-    validate_signal
+from core.pump_scanner_advanced import (
+    scan_advanced_pumps
 )
 
 from core.logger import logger
 
 
 
-def find_opportunities(
-    limit=10
+def calculate_opportunity_score(
+    item
 ):
-
-    opportunities = []
-
 
     try:
 
 
-        markets = get_top_opportunities(
-            limit
+        score = 0
+
+
+
+        confidence = item.get(
+            "confidence",
+            0
         )
 
 
-        for market in markets:
+
+        if confidence >= 80:
+
+            score += 50
 
 
-            symbol = market.get(
-                "symbol"
+        elif confidence >= 65:
+
+            score += 35
+
+
+
+        signal = item.get(
+            "signal",
+            ""
+        )
+
+
+
+        if signal == "STRONG BUY":
+
+            score += 30
+
+
+        elif signal == "BUY":
+
+            score += 20
+
+
+
+        return score
+
+
+
+    except Exception:
+
+
+        return 0
+
+
+
+
+def find_opportunities(
+    limit=20
+):
+
+    try:
+
+
+        symbols = get_symbols(
+            100
+        )
+
+
+
+        signals = analyze_market_symbols(
+            symbols
+        )
+
+
+
+        pumps = scan_advanced_pumps(
+            symbols
+        )
+
+
+
+        opportunities = []
+
+
+
+        for signal in signals:
+
+
+            score = calculate_opportunity_score(
+                signal
             )
 
 
-            if not symbol:
 
-                continue
-
+            signal["opportunity_score"] = score
 
 
-            analysis = analyze_symbol(
-                symbol
+
+            opportunities.append(
+                signal
             )
 
 
 
-            if validate_signal(
-                analysis
-            ):
+        for pump in pumps:
 
 
-                opportunities.append(
+            opportunities.append(
 
-                    {
+                {
 
-                        "symbol": symbol,
+                    "symbol": pump.get(
+                        "symbol"
+                    ),
 
-                        "market_score": market.get(
-                            "score",
-                            0
-                        ),
+                    "signal": "PUMP WATCH",
 
-                        "signal": analysis.get(
-                            "signal"
-                        ),
+                    "confidence": pump.get(
+                        "score",
+                        0
+                    ),
 
-                        "confidence": analysis.get(
-                            "confidence"
-                        ),
+                    "entry": None,
 
-                        "entry": analysis.get(
-                            "entry"
-                        ),
+                    "tp": None,
 
-                        "tp": analysis.get(
-                            "tp"
-                        ),
+                    "sl": None,
 
-                        "sl": analysis.get(
-                            "sl"
-                        )
+                    "opportunity_score": pump.get(
+                        "score",
+                        0
+                    )
 
-                    }
+                }
 
-                )
+            )
 
 
 
         opportunities.sort(
 
-            key=lambda x: x.get(
-                "confidence",
+            key=lambda x:
+
+            x.get(
+                "opportunity_score",
                 0
             ),
 
@@ -103,7 +172,8 @@ def find_opportunities(
         )
 
 
-        return opportunities
+
+        return opportunities[:limit]
 
 
 
