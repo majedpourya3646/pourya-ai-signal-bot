@@ -2,16 +2,24 @@
 
 from telegram_sender import send_message
 
-from core.admin_panel import (
-    list_users,
-    create_user,
-    delete_user,
-    enable_user,
-    disable_user
+from core.system_health import (
+    create_health_report
 )
 
-from core.daily_report import (
-    create_daily_report
+from core.final_report import (
+    create_final_report
+)
+
+from core.coin_scanner import (
+    get_top_coins
+)
+
+from core.coinex_connector import (
+    get_available_usdt
+)
+
+from core.trade_history import (
+    get_trade_history
 )
 
 from core.logger import logger
@@ -26,81 +34,33 @@ def handle_command(
     try:
 
 
-        if command == "/report":
+        command = command.lower()
+
+
+
+        if command == "/start":
 
 
             send_message(
 
-                create_daily_report()
+"""
 
-            )
-
-            return True
+🤖 <b>Pourya Trader AI</b>
 
 
-
-        if command == "/users":
-
-
-            send_message(
-
-                list_users()
-
-            )
-
-            return True
+✅ ربات فعال شد
 
 
+دستورات:
 
-        if command.startswith(
-            "/add_user"
-        ):
-
-
-            parts = command.split()
-
-
-            if len(parts) < 2:
-
-                return False
+/status
+/report
+/balance
+/signals
+/trades
 
 
-
-            new_user_id = int(
-                parts[1]
-            )
-
-
-            username = (
-
-                parts[2]
-
-                if len(parts) > 2
-
-                else ""
-
-            )
-
-
-            result = create_user(
-
-                new_user_id,
-
-                username
-
-            )
-
-
-
-            send_message(
-
-                "✅ کاربر اضافه شد"
-
-                if result
-
-                else
-
-                "❌ کاربر وجود دارد"
+"""
 
             )
 
@@ -110,37 +70,12 @@ def handle_command(
 
 
 
-        if command.startswith(
-            "/remove_user"
-        ):
-
-
-            parts = command.split()
-
-
-
-            if len(parts) < 2:
-
-                return False
-
-
-
-            result = delete_user(
-
-                int(parts[1])
-
-            )
+        elif command == "/status":
 
 
             send_message(
 
-                "✅ کاربر حذف شد"
-
-                if result
-
-                else
-
-                "❌ کاربر پیدا نشد"
+                create_health_report()
 
             )
 
@@ -150,30 +85,12 @@ def handle_command(
 
 
 
-        if command.startswith(
-            "/active_user"
-        ):
-
-
-            parts = command.split()
-
-
-            if len(parts) < 2:
-
-                return False
-
-
-
-            enable_user(
-
-                int(parts[1])
-
-            )
+        elif command == "/report":
 
 
             send_message(
 
-                "🟢 کاربر فعال شد"
+                create_final_report()
 
             )
 
@@ -183,30 +100,27 @@ def handle_command(
 
 
 
-        if command.startswith(
-            "/disable_user"
-        ):
+        elif command == "/balance":
 
 
-            parts = command.split()
+            balance = get_available_usdt()
 
-
-            if len(parts) < 2:
-
-                return False
-
-
-
-            disable_user(
-
-                int(parts[1])
-
-            )
 
 
             send_message(
 
-                "🔴 کاربر غیرفعال شد"
+                f"""
+
+💰 <b>CoinEx Balance</b>
+
+
+USDT:
+{balance}
+
+
+🤖 Pourya Trader AI
+
+"""
 
             )
 
@@ -216,7 +130,73 @@ def handle_command(
 
 
 
-        return False
+        elif command == "/signals":
+
+
+            coins = get_top_coins(
+                10
+            )
+
+
+            message = "📊 <b>Top Market Coins</b>\n\n"
+
+
+
+            for coin in coins:
+
+
+                message += (
+
+                    f"🪙 {coin.get('symbol')}\n"
+
+                    f"📈 {coin.get('change')}%\n\n"
+
+                )
+
+
+
+            send_message(
+                message
+            )
+
+
+            return True
+
+
+
+
+        elif command == "/trades":
+
+
+            trades = get_trade_history(
+                10
+            )
+
+
+
+            send_message(
+
+                f"📈 Trades:\n\n{trades}"
+
+            )
+
+
+            return True
+
+
+
+
+        else:
+
+
+            send_message(
+
+                "❓ دستور ناشناخته است"
+
+            )
+
+
+            return False
 
 
 
