@@ -1,112 +1,155 @@
-import pandas as pd
+# core/pump_detector.py
 
 from core.logger import logger
+
 from market import get_market_data
 
 
-VOLUME_MULTIPLIER = 3
-MIN_CHANGE_PERCENT = 5
-MAX_RSI = 75
+
+MIN_VOLUME_POWER = 3
+MIN_PRICE_CHANGE = 5
+MAX_RESULTS = 10
 
 
-def calculate_volume_strength(df):
+
+def calculate_volume_power(df):
 
     try:
 
-        if len(df) < 30:
+        if len(df) < 20:
+
             return 0
 
 
-        avg_volume = (
+
+        average_volume = (
+
             df["volume"]
+
             .rolling(20)
+
             .mean()
+
             .iloc[-1]
+
         )
 
 
         current_volume = (
+
             df["volume"]
+
             .iloc[-1]
+
         )
 
 
-        if avg_volume == 0:
+
+        if average_volume == 0:
 
             return 0
 
 
+
         return round(
-            current_volume / avg_volume,
+
+            current_volume / average_volume,
+
             2
+
         )
+
 
 
     except Exception as e:
 
-        logger.exception(e)
+
+        logger.exception(
+            e
+        )
+
 
         return 0
 
 
 
-def calculate_price_change(df):
+
+def calculate_change(df):
 
     try:
 
-        old_price = float(
-            df["close"].iloc[-2]
+
+        previous = float(
+
+            df["close"]
+
+            .iloc[-2]
+
         )
 
-        current_price = float(
-            df["close"].iloc[-1]
+
+        current = float(
+
+            df["close"]
+
+            .iloc[-1]
+
         )
-
-
-        change = (
-            (current_price - old_price)
-            /
-            old_price
-        ) * 100
 
 
         return round(
-            change,
+
+            (
+
+                (current - previous)
+
+                /
+
+                previous
+
+            ) * 100,
+
             2
+
         )
+
 
 
     except Exception:
 
+
         return 0
 
 
 
-def calculate_pump_score(
+
+def calculate_score(
     volume_power,
-    price_change
+    change
 ):
+
 
     score = 0
 
 
-    if volume_power >= 3:
+
+    if volume_power >= 5:
+
+        score += 50
+
+
+    elif volume_power >= 3:
+
+        score += 35
+
+
+
+    if change >= 10:
 
         score += 40
 
 
-    elif volume_power >= 2:
-
-        score += 25
-
-
-
-    if price_change >= 10:
-
-        score += 40
-
-
-    elif price_change >= 5:
+    elif change >= 5:
 
         score += 25
 
@@ -117,7 +160,9 @@ def calculate_pump_score(
         score = 100
 
 
+
     return score
+
 
 
 
@@ -125,9 +170,13 @@ def detect_pump(symbol):
 
     try:
 
+
         df = get_market_data(
+
             symbol,
+
             interval="15"
+
         )
 
 
@@ -137,31 +186,34 @@ def detect_pump(symbol):
 
 
 
-        volume_power = calculate_volume_strength(
+        volume_power = calculate_volume_power(
             df
         )
 
 
-        price_change = calculate_price_change(
+        change = calculate_change(
             df
         )
 
 
 
-        score = calculate_pump_score(
+        score = calculate_score(
+
             volume_power,
-            price_change
+
+            change
+
         )
 
 
 
         if (
 
-            volume_power >= VOLUME_MULTIPLIER
+            volume_power >= MIN_VOLUME_POWER
 
             and
 
-            price_change >= MIN_CHANGE_PERCENT
+            change >= MIN_PRICE_CHANGE
 
         ):
 
@@ -174,9 +226,7 @@ def detect_pump(symbol):
 
                 "volume_power": volume_power,
 
-                "change": price_change,
-
-                "status": "PUMP"
+                "change": change
 
             }
 
@@ -188,15 +238,22 @@ def detect_pump(symbol):
 
     except Exception as e:
 
-        logger.exception(e)
+
+        logger.exception(
+            e
+        )
+
 
         return None
 
 
 
+
 def scan_pumps(symbols):
 
+
     results = []
+
 
 
     for symbol in symbols:
@@ -207,7 +264,9 @@ def scan_pumps(symbols):
         )
 
 
+
         if result:
+
 
             results.append(
                 result
@@ -224,24 +283,5 @@ def scan_pumps(symbols):
     )
 
 
-    return results
 
-
-
-if __name__ == "__main__":
-
-
-    test_symbols = [
-
-        "BTCUSDT",
-
-        "ETHUSDT",
-
-        "SOLUSDT"
-
-    ]
-
-
-    print(
-        scan_pumps(test_symbols)
-    )
+    return results[:MAX_RESULTS]
