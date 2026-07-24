@@ -1,3 +1,5 @@
+# coinex_trade.py
+
 import json
 
 from config import (
@@ -17,10 +19,16 @@ class CoinExTrade:
         self,
         market,
         side,
-        amount
+        amount,
+        order_type=None
     ):
 
         try:
+
+            if order_type is None:
+
+                order_type = ORDER_TYPE
+
 
             logger.info(
                 f"PAPER_TRADING={PAPER_TRADING}"
@@ -29,9 +37,11 @@ class CoinExTrade:
 
             if PAPER_TRADING:
 
+
                 logger.info(
-                    f"PAPER ORDER {side} {market} qty={amount}"
+                    f"PAPER ORDER | {side} | {market} | qty={amount}"
                 )
+
 
                 return {
 
@@ -56,7 +66,7 @@ class CoinExTrade:
 
 
             logger.info(
-                f"REAL ORDER {side} {market} qty={amount}"
+                f"REAL ORDER | {side} | {market} | qty={amount}"
             )
 
 
@@ -68,7 +78,7 @@ class CoinExTrade:
 
                 amount=amount,
 
-                order_type=ORDER_TYPE
+                order_type=order_type
 
             )
 
@@ -93,6 +103,20 @@ class CoinExTrade:
             )
 
 
+            if not result:
+
+                return None
+
+
+            if result.get("code") != 0:
+
+                logger.error(
+                    result
+                )
+
+                return None
+
+
             return result
 
 
@@ -107,12 +131,12 @@ class CoinExTrade:
 
 
 
+
     def open_long(
         self,
         symbol,
         quantity
     ):
-
 
         return self.create_order(
 
@@ -126,12 +150,12 @@ class CoinExTrade:
 
 
 
+
     def open_short(
         self,
         symbol,
         quantity
     ):
-
 
         return self.create_order(
 
@@ -145,6 +169,7 @@ class CoinExTrade:
 
 
 
+
     def close_position(
         self,
         symbol,
@@ -153,20 +178,20 @@ class CoinExTrade:
     ):
 
 
-        close_side = (
+        if side.upper() in (
 
-            "sell"
+            "BUY",
 
-            if side.upper() in (
+            "LONG"
 
-                "BUY",
-                "LONG"
+        ):
 
-            )
+            close_side = "sell"
 
-            else "buy"
+        else:
 
-        )
+            close_side = "buy"
+
 
 
         return self.create_order(
@@ -178,6 +203,7 @@ class CoinExTrade:
             amount=quantity
 
         )
+
 
 
 
