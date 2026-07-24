@@ -3,6 +3,8 @@
 import json
 import os
 
+from datetime import datetime
+
 from core.logger import logger
 
 
@@ -19,6 +21,9 @@ def load_users():
         if not os.path.exists(
             USERS_FILE
         ):
+
+
+            save_users([])
 
 
             return []
@@ -96,12 +101,19 @@ def save_users(
 
 
 
+        return True
+
+
+
     except Exception as e:
 
 
         logger.exception(
             e
         )
+
+
+        return False
 
 
 
@@ -111,92 +123,66 @@ def add_user(
     username=""
 ):
 
-    users = load_users()
+    try:
+
+
+        users = load_users()
 
 
 
-    for user in users:
+        for user in users:
 
 
-        if user.get(
-            "id"
-        ) == user_id:
+            if user["id"] == user_id:
 
 
-            return False
-
-
-
-    users.append(
-
-        {
-
-            "id": user_id,
-
-            "username": username,
-
-            "active": True,
-
-            "profit_share": 20
-
-        }
-
-    )
+                return False
 
 
 
-    save_users(
-        users
-    )
+        users.append(
+
+            {
+
+                "id": user_id,
+
+                "username": username,
+
+                "active": True,
+
+                "created_at":
+
+                    datetime.now().strftime(
+
+                        "%Y-%m-%d %H:%M:%S"
+
+                    )
+
+            }
+
+        )
 
 
 
-    return True
+        save_users(
+            users
+        )
 
 
 
-
-def remove_user(
-    user_id
-):
-
-    users = load_users()
+        return True
 
 
 
-    updated = []
+    except Exception as e:
 
 
-    removed = False
+        logger.exception(
+            e
+        )
 
 
-
-    for user in users:
-
-
-        if user.get(
-            "id"
-        ) == user_id:
-
-
-            removed = True
-
-
-        else:
-
-
-            updated.append(
-                user
-            )
-
-
-
-    save_users(
-        updated
-    )
-
-
-    return removed
+        return False
 
 
 
@@ -208,52 +194,43 @@ def get_users():
 
 
 
-def activate_user(
+def remove_user(
     user_id
 ):
 
-    users = load_users()
+    try:
+
+
+        users = load_users()
 
 
 
-    for user in users:
+        users = [
 
+            u for u in users
 
-        if user.get(
-            "id"
-        ) == user_id:
+            if u["id"] != user_id
 
-
-            user["active"] = True
-
-
-
-    save_users(
-        users
-    )
+        ]
 
 
 
-def deactivate_user(
-    user_id
-):
-
-    users = load_users()
+        save_users(
+            users
+        )
 
 
 
-    for user in users:
-
-
-        if user.get(
-            "id"
-        ) == user_id:
-
-
-            user["active"] = False
+        return True
 
 
 
-    save_users(
-        users
-    )
+    except Exception as e:
+
+
+        logger.exception(
+            e
+        )
+
+
+        return False
