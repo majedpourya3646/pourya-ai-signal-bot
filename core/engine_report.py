@@ -2,67 +2,49 @@
 
 from core.logger import logger
 
+from trade_manager import (
+    get_all_trades
+)
+
+from performance import (
+    report as performance_report
+)
+
 
 
 def create_engine_report(
-    trades
+    executed_trades=0
 ):
 
     try:
 
 
-        if not trades:
+        trades = get_all_trades()
 
 
-            return """
 
-⚙️ <b>TRADING ENGINE</b>
+        message = f"""
 
-
-⏳ امروز معامله‌ای اجرا نشد
+⚙️ <b>Pourya Trader AI Engine Report</b>
 
 
-🤖 Pourya Trader AI
+🚀 معاملات اجرا شده:
+{executed_trades}
+
+
+📂 معاملات باز:
+{len(trades)}
+
+
+📈 عملکرد:
+
+{performance_report()}
+
+
+🤖 سیستم هوشمند ترید
 
 """
 
-
-
-        message = """
-
-⚙️ <b>AUTO TRADING ENGINE</b>
-
-
-"""
-
-
-
-        for index, trade in enumerate(
-
-            trades,
-
-            start=1
-
-        ):
-
-
-            message += (
-
-                f"{index}️⃣\n"
-
-                f"🪙 ارز: {trade.get('symbol')}\n"
-
-                f"✅ سفارش اجرا شد\n\n"
-
-            )
-
-
-
-        message += (
-
-            "🤖 Pourya Trader AI"
-
-        )
 
 
         return message
@@ -77,4 +59,4 @@ def create_engine_report(
         )
 
 
-        return "❌ خطا در ساخت Engine Report"
+        return "❌ خطا در گزارش Engine"
