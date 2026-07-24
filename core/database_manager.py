@@ -11,7 +11,7 @@ DATABASE_PATH = "data/pourya_trader.db"
 
 
 
-def create_connection():
+def get_connection():
 
     try:
 
@@ -25,14 +25,9 @@ def create_connection():
         )
 
 
-        connection = sqlite3.connect(
-
+        return sqlite3.connect(
             DATABASE_PATH
-
         )
-
-
-        return connection
 
 
 
@@ -54,7 +49,7 @@ def init_database():
     try:
 
 
-        connection = create_connection()
+        connection = get_connection()
 
 
 
@@ -65,28 +60,6 @@ def init_database():
 
 
         cursor = connection.cursor()
-
-
-
-        cursor.execute(
-            """
-
-            CREATE TABLE IF NOT EXISTS users (
-
-                id INTEGER PRIMARY KEY,
-
-                username TEXT,
-
-                active INTEGER DEFAULT 1,
-
-                profit_share REAL DEFAULT 20,
-
-                created_at TEXT
-
-            )
-
-            """
-        )
 
 
 
@@ -109,11 +82,13 @@ def init_database():
 
                 quantity REAL,
 
-                status TEXT,
+                confidence REAL,
 
-                profit REAL DEFAULT 0,
+                status TEXT DEFAULT 'OPEN',
 
-                created_at TEXT
+                pnl REAL DEFAULT 0,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
 
@@ -125,17 +100,35 @@ def init_database():
         cursor.execute(
             """
 
-            CREATE TABLE IF NOT EXISTS payments (
+            CREATE TABLE IF NOT EXISTS users (
+
+                id INTEGER PRIMARY KEY,
+
+                username TEXT,
+
+                active INTEGER DEFAULT 1,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+            )
+
+            """
+        )
+
+
+
+        cursor.execute(
+            """
+
+            CREATE TABLE IF NOT EXISTS reports (
 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-                user_id INTEGER,
-
-                amount REAL,
-
                 type TEXT,
 
-                created_at TEXT
+                content TEXT,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
 
@@ -145,6 +138,7 @@ def init_database():
 
 
         connection.commit()
+
 
 
         connection.close()
@@ -176,7 +170,7 @@ def execute_query(
     try:
 
 
-        connection = create_connection()
+        connection = get_connection()
 
 
 
@@ -191,6 +185,7 @@ def execute_query(
             params
 
         )
+
 
 
         connection.commit()
