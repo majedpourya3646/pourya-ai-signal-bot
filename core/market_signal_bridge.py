@@ -29,7 +29,7 @@ def analyze_market_symbols(
                     symbol
                 )
 
-
+    logger.info(f"{symbol} RESULT: {result}")
 
                 if not result:
 
