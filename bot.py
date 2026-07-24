@@ -1,4 +1,4 @@
-
+from market_scanner import scan_market
 from coinex_api import coinex
 from coinex_trade import coinex_trade
 
@@ -196,7 +196,10 @@ def run_bot():
 """
 
     signals = 0
+dynamic_symbols = scan_market()
 
+if dynamic_symbols:
+    SYMBOLS.extend(dynamic_symbols)
     for symbol in SYMBOLS:
 
         try:
