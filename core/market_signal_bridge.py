@@ -1,9 +1,7 @@
 # core/market_signal_bridge.py
 
-from multi_timeframe import analyze_symbol
-
-from core.signal_validator import (
-    validate_signal
+from multi_timeframe import (
+    analyze_symbol
 )
 
 from core.logger import logger
@@ -27,74 +25,65 @@ def analyze_market_symbols(
             try:
 
 
-                analysis = analyze_symbol(
+                result = analyze_symbol(
                     symbol
                 )
 
 
 
-                if not analysis:
+                if not result:
 
                     continue
 
 
 
-                if validate_signal(
-                    analysis
-                ):
+                results.append(
 
+                    {
 
-                    results.append(
+                        "symbol": symbol,
 
-                        {
+                        "signal": result.get(
+                            "signal",
+                            "WAIT"
+                        ),
 
-                            "symbol": symbol,
+                        "confidence": result.get(
+                            "confidence",
+                            0
+                        ),
 
-                            "signal": analysis.get(
-                                "signal"
-                            ),
+                        "entry": result.get(
+                            "entry"
+                        ),
 
-                            "confidence": analysis.get(
-                                "confidence"
-                            ),
+                        "tp": result.get(
+                            "tp"
+                        ),
 
-                            "entry": analysis.get(
-                                "entry"
-                            ),
+                        "sl": result.get(
+                            "sl"
+                        ),
 
-                            "tp": analysis.get(
-                                "tp"
-                            ),
+                        "grade": result.get(
+                            "grade",
+                            ""
+                        )
 
-                            "sl": analysis.get(
-                                "sl"
-                            )
+                    }
 
-                        }
-
-                    )
+                )
 
 
 
             except Exception as e:
 
 
-                logger.exception(
-                    e
+                logger.error(
+
+                    f"{symbol} ERROR {e}"
+
                 )
-
-
-
-        results.sort(
-
-            key=lambda x: x.get(
-                "confidence",
-                0
-            ),
-
-            reverse=True
-
-        )
 
 
 
