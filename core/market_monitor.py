@@ -2,54 +2,35 @@
 
 import time
 
-from core.scanner_service import (
-    get_market_opportunities
+from core.market_intelligence import (
+    run_market_intelligence
 )
 
-from core.pump_detector import (
-    scan_pumps
+from core.market_alerts import (
+    send_pump_alert,
+    send_signal_alert
 )
 
-from core.pump_report import (
-    create_pump_report
+from core.config_manager import (
+    get_setting
 )
-
-from core.scanner_report import (
-    create_scanner_report
-)
-
-from telegram_sender import send_message
 
 from core.logger import logger
 
 
 
-MONITOR_INTERVAL = 300
-
-
-
-DEFAULT_SYMBOLS = [
-
-    "BTCUSDT",
-
-    "ETHUSDT",
-
-    "SOLUSDT",
-
-    "XRPUSDT",
-
-    "DOGEUSDT"
-
-]
-
-
-
 def run_market_monitor():
+
+    interval = get_setting(
+        "scan_interval",
+        300
+    )
 
 
     logger.info(
         "MARKET MONITOR STARTED"
     )
+
 
 
     while True:
@@ -58,54 +39,63 @@ def run_market_monitor():
         try:
 
 
-            markets = get_market_opportunities(
-                force_refresh=True
+            if not get_setting(
+                "trading_enabled",
+                True
+            ):
+
+
+                time.sleep(
+                    interval
+                )
+
+                continue
+
+
+
+            data = run_market_intelligence()
+
+
+
+            signals = data.get(
+                "analysis",
+                []
             )
 
 
-            if markets:
-
-
-                send_message(
-
-                    create_scanner_report(
-
-                        markets
-
-                    )
-
-                )
-
-
-
-            pumps = scan_pumps(
-
-                [
-
-                    item.get("symbol")
-
-                    for item in markets[:20]
-
-                    if item.get("symbol")
-
-                ]
-
+            pumps = data.get(
+                "pumps",
+                []
             )
 
 
 
-            if pumps:
+            for signal in signals:
 
 
-                send_message(
+                if signal.get(
+                    "decision"
+                ) != "WAIT":
 
-                    create_pump_report(
 
-                        pumps
-
+                    send_signal_alert(
+                        signal
                     )
 
-                )
+
+
+            if get_setting(
+                "pump_scanner",
+                True
+            ):
+
+
+                for pump in pumps:
+
+
+                    send_pump_alert(
+                        pump
+                    )
 
 
 
@@ -119,7 +109,7 @@ def run_market_monitor():
 
 
         time.sleep(
-            MONITOR_INTERVAL
+            interval
         )
 
 
