@@ -8,15 +8,11 @@ from core.market_filters import (
     filter_markets
 )
 
-from core.market_ranker import (
-    rank_markets
-)
-
 from core.logger import logger
 
 
 
-def scan_all_coins():
+def scan_market():
 
     try:
 
@@ -36,12 +32,8 @@ def scan_all_coins():
         )
 
 
-        ranked = rank_markets(
-            filtered
-        )
 
-
-        return ranked
+        return filtered
 
 
 
@@ -58,24 +50,71 @@ def scan_all_coins():
 
 
 
-def get_best_coins(
-    limit=20
+def rank_by_volume(
+    markets
 ):
 
-    markets = scan_all_coins()
+    try:
+
+
+        return sorted(
+
+            markets,
+
+            key=lambda x:
+
+            float(
+
+                x.get(
+                    "volume",
+                    0
+                )
+
+            ),
+
+            reverse=True
+
+        )
 
 
 
-    return markets[:limit]
+    except Exception as e:
+
+
+        logger.exception(
+            e
+        )
+
+
+        return []
 
 
 
 
-def get_coin_symbols(
-    limit=20
+def get_top_coins(
+    limit=50
 ):
 
-    coins = get_best_coins(
+    markets = scan_market()
+
+
+
+    ranked = rank_by_volume(
+        markets
+    )
+
+
+
+    return ranked[:limit]
+
+
+
+
+def get_symbols(
+    limit=50
+):
+
+    coins = get_top_coins(
         limit
     )
 
@@ -87,9 +126,20 @@ def get_coin_symbols(
     for coin in coins:
 
 
-        symbol = coin.get(
-            "market"
+        symbol = (
+
+            coin.get(
+                "market"
+            )
+
+            or
+
+            coin.get(
+                "symbol"
+            )
+
         )
+
 
 
         if symbol:
