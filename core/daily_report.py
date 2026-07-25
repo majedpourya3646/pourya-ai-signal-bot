@@ -1,84 +1,79 @@
 # core/daily_report.py
 
-from datetime import datetime
-
-from core.trade_history import (
-    get_trade_history,
-    get_total_profit
-)
-
-from core.performance import (
-    get_daily_performance
-)
-
 from core.logger import logger
 
 
 
-def create_daily_report():
+def create_daily_report(
+    data
+):
 
     try:
 
+        if not data:
 
-        trades = get_trade_history(
-            100
+            return (
+                "📅 DAILY REPORT\n\n"
+                "No daily data available."
+            )
+
+
+
+        total_trades = data.get(
+            "total_trades",
+            0
+        )
+
+
+        successful = data.get(
+            "successful",
+            0
+        )
+
+
+        failed = data.get(
+            "failed",
+            0
+        )
+
+
+        profit = data.get(
+            "profit",
+            0
+        )
+
+
+        balance = data.get(
+            "balance",
+            0
         )
 
 
 
-        profit = get_total_profit()
+        report = (
+
+            "📅 POURYA TRADER AI DAILY REPORT\n\n"
+
+            f"🔄 Total Trades: {total_trades}\n"
+
+            f"✅ Successful: {successful}\n"
+
+            f"❌ Failed: {failed}\n"
+
+            f"💰 Daily PNL: {profit}\n"
+
+            f"💼 Balance: {balance}\n"
+
+        )
 
 
 
-        performance = get_daily_performance()
-
-
-
-        message = f"""
-
-📅 <b>گزارش روزانه Pourya Trader AI</b>
-
-
-🕒 تاریخ:
-{datetime.now().strftime('%Y-%m-%d')}
-
-
-📊 تعداد معاملات:
-{len(trades)}
-
-
-✅ موفق:
-{performance.get('wins',0)}
-
-
-❌ ناموفق:
-{performance.get('losses',0)}
-
-
-🎯 درصد موفقیت:
-{performance.get('win_rate',0)}٪
-
-
-💰 سود امروز:
-{profit} USDT
-
-
-🤖 سیستم هوشمند ترید
-
-"""
-
-
-
-        return message
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در گزارش روزانه"
+        return "Daily report error."
