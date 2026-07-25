@@ -4,71 +4,68 @@ from core.logger import logger
 
 
 
-def create_scanner_report(markets):
+def create_scanner_report(
+    opportunities
+):
 
     try:
 
-        if not markets:
+        if not opportunities:
 
             return (
-                "🔎 <b>Market Scanner</b>\n\n"
-                "❌ فرصت مناسبی پیدا نشد"
+                "SCANNER REPORT\n\n"
+                "No opportunities found."
             )
 
 
-        text = """
 
-🔎 <b>Market Scanner</b>
+        message = (
 
-
-"""
-
-
-        for index, item in enumerate(
-
-            markets[:10],
-
-            start=1
-
-        ):
-
-
-            text += (
-
-                f"{index}️⃣ "
-
-                f"🪙 {item.get('symbol')}\n"
-
-                f"⭐ امتیاز: {item.get('score')}٪\n"
-
-                f"📈 تغییر: {item.get('change')}٪\n"
-
-                f"📊 حجم: {item.get('volume')}\n\n"
-
-            )
-
-
-        text += (
-
-            "🤖 Pourya Trader AI"
+            "📊 POURYA TRADER AI SCANNER REPORT\n\n"
 
         )
 
 
-        return text
+
+        for item in opportunities:
+
+
+            symbol = item.get(
+                "symbol",
+                "UNKNOWN"
+            )
+
+
+            signal = item.get(
+                "signal",
+                "WAIT"
+            )
+
+
+            confidence = item.get(
+                "confidence",
+                0
+            )
+
+
+            message += (
+
+                f"🔹 {symbol}\n"
+
+                f"Signal: {signal}\n"
+
+                f"Confidence: {confidence}%\n\n"
+
+            )
+
+
+
+        return message
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return (
-
-            "❌ خطا در ساخت گزارش Scanner"
-
-        )
+        return "Scanner report error."
