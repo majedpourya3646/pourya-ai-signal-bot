@@ -1,51 +1,114 @@
 # core/market_intelligence.py
 
-from core.ai_analyzer import (
-    analyze_multiple_symbols
-)
-
-from core.market_discovery import (
-    get_new_symbols
-)
-
-from core.pump_scanner_advanced import (
-    scan_advanced_pumps
-)
-
 from core.logger import logger
 
 
 
-def run_market_intelligence():
+def analyze_market_intelligence(
+    opportunities
+):
 
     try:
 
+        if not opportunities:
 
-        symbols = get_new_symbols(
-            50
+            return {
+
+                "trend": "UNKNOWN",
+
+                "strength": 0,
+
+                "count": 0
+
+            }
+
+
+
+        total_confidence = 0
+
+        buy_count = 0
+
+        sell_count = 0
+
+
+
+        for item in opportunities:
+
+
+            confidence = float(
+                item.get(
+                    "confidence",
+                    0
+                )
+            )
+
+
+            total_confidence += confidence
+
+
+
+            signal = item.get(
+                "signal",
+                ""
+            )
+
+
+            if "BUY" in signal:
+
+                buy_count += 1
+
+
+
+            elif "SELL" in signal:
+
+                sell_count += 1
+
+
+
+
+        average = (
+
+            total_confidence
+            /
+            len(opportunities)
+
         )
 
 
 
-        analysis = analyze_multiple_symbols(
-            symbols
-        )
+        if buy_count > sell_count:
+
+            trend = "BULLISH"
 
 
+        elif sell_count > buy_count:
 
-        pumps = scan_advanced_pumps(
-            symbols
-        )
+            trend = "BEARISH"
+
+
+        else:
+
+            trend = "NEUTRAL"
+
 
 
 
         return {
 
-            "symbols": symbols,
+            "trend": trend,
 
-            "analysis": analysis,
+            "strength": round(
+                average,
+                2
+            ),
 
-            "pumps": pumps
+            "count": len(
+                opportunities
+            ),
+
+            "buy_signals": buy_count,
+
+            "sell_signals": sell_count
 
         }
 
@@ -53,52 +116,14 @@ def run_market_intelligence():
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return {
 
-            "symbols": [],
+            "trend": "ERROR",
 
-            "analysis": [],
+            "strength": 0,
 
-            "pumps": []
+            "count": 0
 
         }
-
-
-
-
-def get_best_signals(
-    limit=10
-):
-
-    data = run_market_intelligence()
-
-
-
-    signals = []
-
-
-
-    for item in data.get(
-        "analysis",
-        []
-    ):
-
-
-        if item.get(
-            "decision"
-        ) != "WAIT":
-
-
-            signals.append(
-                item
-            )
-
-
-
-    return signals[:limit]
