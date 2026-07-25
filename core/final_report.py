@@ -1,91 +1,71 @@
 # core/final_report.py
 
-from core.performance_tracker import (
-    get_summary
-)
-
-from core.system_health import (
-    system_status
-)
-
-from core.trade_history import (
-    get_total_profit,
-    get_trade_history
-)
-
 from core.logger import logger
 
 
 
-def create_final_report():
+def create_final_report(
+    data
+):
 
     try:
 
+        if not data:
 
-        performance = get_summary()
+            return (
+                "📋 FINAL REPORT\n\n"
+                "No data available."
+            )
 
 
-        health = system_status()
 
-
-        trades = get_trade_history(
-            50
+        executed = data.get(
+            "executed",
+            0
         )
 
 
-        profit = get_total_profit()
+        closed = data.get(
+            "closed",
+            0
+        )
+
+
+        opportunities = data.get(
+            "opportunities",
+            0
+        )
+
+
+        profit = data.get(
+            "profit",
+            0
+        )
 
 
 
-        message = f"""
+        report = (
 
-📊 <b>گزارش جامع Pourya Trader AI</b>
+            "🤖 POURYA TRADER AI FINAL REPORT\n\n"
 
+            f"🔎 Opportunities: {opportunities}\n"
 
-🩺 وضعیت سیستم:
-{health.get('status')}
+            f"✅ Executed Trades: {executed}\n"
 
+            f"🔒 Closed Trades: {closed}\n"
 
-📡 اتصال CoinEx:
-{"🟢 فعال" if health.get('coinex') else "🔴 قطع"}
+            f"💰 Profit/Loss: {profit}\n"
 
-
-📈 تعداد معاملات:
-{len(trades)}
-
-
-✅ معاملات موفق:
-{performance.get('wins')}
-
-
-❌ معاملات ناموفق:
-{performance.get('losses')}
-
-
-🎯 درصد موفقیت:
-{performance.get('win_rate')}٪
-
-
-💰 سود کل:
-{profit} USDT
-
-
-🤖 سیستم هوشمند تحلیل، اسکن و ترید
-
-"""
+        )
 
 
 
-        return message
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در ساخت گزارش جامع"
+        return "Final report error."
