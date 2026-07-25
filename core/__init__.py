@@ -4,5 +4,4 @@
 Pourya Trader AI Core Package
 """
 
-__version__ = "2.0.0"
-__author__ = "Pourya Majed"
+__version__ = "1.0.0"
