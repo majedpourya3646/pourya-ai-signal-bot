@@ -1,161 +1,254 @@
-from signal_engine import analyze_signal
-from market import get_market_data
+# core/multi_timeframe.py
 
+from config import (
+    DEFAULT_TP,
+    DEFAULT_SL
+)
+
+from core.market import get_market_data
 from core.logger import logger
 
+from core.signal_engine import analyze_signal
 
-TIMEFRAMES = {
+
+TIMEFRAMES = [
+    "15",
+    "60",
+    "240"
+]
+
+
+TIMEFRAME_WEIGHTS = {
     "15": 0.25,
     "60": 0.35,
     "240": 0.40
 }
 
 
-def analyze_symbol(symbol):
 
-    try:
+def calculate_trade_levels(
+    entry,
+    side
+):
+    """
+    Calculate TP and SL based on trade direction
+    """
 
-        results = []
+    if side == "BUY":
 
-        total_score = 0
-        total_weight = 0
+        tp = entry * (
+            1 + DEFAULT_TP / 100
+        )
+
+        sl = entry * (
+            1 - DEFAULT_SL / 100
+        )
 
 
-        for timeframe, weight in TIMEFRAMES.items():
+    elif side == "SELL":
 
-            df = get_market_data(
-                symbol,
-                interval=timeframe
+        tp = entry * (
+            1 - DEFAULT_TP / 100
+        )
+
+        sl = entry * (
+            1 + DEFAULT_SL / 100
+        )
+
+
+    else:
+
+        tp = None
+        sl = None
+
+
+    return (
+        round(tp, 8),
+        round(sl, 8)
+    )
+
+
+
+def analyze_symbol(
+    symbol
+):
+
+    results = []
+
+    total_score = 0
+
+
+    last_price = None
+
+
+    for timeframe in TIMEFRAMES:
+
+
+        df = get_market_data(
+            symbol,
+            timeframe
+        )
+
+
+        if df.empty:
+
+            logger.warning(
+                f"{symbol} {timeframe} DATA EMPTY"
             )
 
-
-            if df.empty:
-                continue
+            continue
 
 
-            result = analyze_signal(df)
+
+        last_price = float(
+            df.iloc[-1]["close"]
+        )
 
 
-            confidence = result.get(
-                "confidence",
-                0
-            )
+
+        signal = analyze_signal(
+            df
+        )
 
 
-            signal = result.get(
-                "signal",
-                "WAIT"
-            )
+        score = signal.get(
+            "score",
+            0
+        )
 
 
-            total_score += confidence * weight
-            total_weight += weight
+        direction = signal.get(
+            "signal",
+            "WAIT"
+        )
 
 
-            results.append(
-                {
-                    "timeframe": timeframe,
-                    "signal": signal,
-                    "confidence": confidence
-                }
-            )
+        weight = TIMEFRAME_WEIGHTS.get(
+            timeframe,
+            0
+        )
 
 
-        if total_weight == 0:
+        total_score += (
+            score * weight
+        )
 
-            return {
-                "symbol": symbol,
-                "signal": "WAIT",
-                "confidence": 0,
-                "timeframes": []
+
+        results.append(
+            {
+                "timeframe": timeframe,
+                "signal": direction,
+                "score": score
             }
-
-
-        confidence = round(
-            total_score / total_weight,
-            2
         )
 
 
-        tf15 = next(
-            (
-                x for x in results
-                if x["timeframe"] == "15"
-            ),
-            None
-        )
 
-
-        tf60 = next(
-            (
-                x for x in results
-                if x["timeframe"] == "60"
-            ),
-            None
-        )
-
-
-        tf240 = next(
-            (
-                x for x in results
-                if x["timeframe"] == "240"
-            ),
-            None
-        )
-
-
-        signal = "WAIT"
-
-
-        if (
-            tf240
-            and tf60
-            and tf15
-            and tf240["signal"] in ["BUY", "STRONG BUY"]
-            and tf60["signal"] in ["BUY", "STRONG BUY"]
-            and tf15["signal"] in ["BUY", "STRONG BUY"]
-            and confidence >= 70
-        ):
-
-            signal = "STRONG BUY"
-
-
-        elif confidence >= 60:
-
-            signal = "BUY"
-
-
+    if not results:
 
         return {
-
             "symbol": symbol,
-
-            "signal": signal,
-
-            "confidence": confidence,
-
-            "timeframes": results,
-
-            "entry": None,
-
-            "tp": None,
-
-            "sl": None
-
-        }
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-
-        return {
-
-            "symbol": symbol,
-
             "signal": "WAIT",
-
-            "confidence": 0
-
+            "score": 0
         }
+
+
+
+    avg_score = round(
+        total_score,
+        2
+    )
+
+
+    buy_count = sum(
+        1 for x in results
+        if x["signal"] in [
+            "BUY",
+            "STRONG BUY"
+        ]
+    )
+
+
+    sell_count = sum(
+        1 for x in results
+        if x["signal"] in [
+            "SELL",
+            "STRONG SELL"
+        ]
+    )
+
+
+
+    if buy_count == len(results):
+
+        final_signal = "BUY"
+
+
+
+    elif sell_count == len(results):
+
+        final_signal = "SELL"
+
+
+
+    elif avg_score >= 60:
+
+        final_signal = "BUY"
+
+
+
+    elif avg_score <= 40:
+
+        final_signal = "SELL"
+
+
+
+    else:
+
+        final_signal = "WAIT"
+
+
+
+    result = {
+
+        "symbol": symbol,
+
+        "signal": final_signal,
+
+        "score": avg_score,
+
+        "price": last_price,
+
+        "timeframes": results
+
+    }
+
+
+
+    if final_signal in [
+        "BUY",
+        "SELL"
+    ] and last_price:
+
+
+        tp, sl = calculate_trade_levels(
+            last_price,
+            final_signal
+        )
+
+
+        result.update(
+            {
+                "entry": last_price,
+                "take_profit": tp,
+                "stop_loss": sl
+            }
+        )
+
+
+    logger.info(
+        f"{symbol} | {final_signal} | SCORE {avg_score} | PRICE {last_price}"
+    )
+
+
+    return result
