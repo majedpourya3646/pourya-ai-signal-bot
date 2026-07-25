@@ -1,128 +1,137 @@
 # core/market_cache.py
 
-import json
-import os
 import time
 
 from core.logger import logger
 
 
-CACHE_FILE = "data/market_cache.json"
 
-CACHE_TIME = 300
-
+CACHE = {}
 
 
-def save_cache(data):
+DEFAULT_CACHE_TIME = 60
+
+
+
+
+
+def set_cache(
+    key,
+    value,
+    expire=DEFAULT_CACHE_TIME
+):
 
     try:
 
-        os.makedirs(
-            "data",
-            exist_ok=True
-        )
+        CACHE[key] = {
 
+            "value": value,
 
-        payload = {
+            "time": time.time(),
 
-            "timestamp": time.time(),
-
-            "data": data
+            "expire": expire
 
         }
 
 
-        with open(
-            CACHE_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
+        return True
 
-
-            json.dump(
-
-                payload,
-
-                file,
-
-                ensure_ascii=False,
-
-                indent=4
-
-            )
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
+        return False
 
 
 
-def load_cache():
+
+
+def get_cache(
+    key
+):
 
     try:
 
+        item = CACHE.get(
+            key
+        )
 
-        if not os.path.exists(
-            CACHE_FILE
-        ):
+
+        if not item:
 
             return None
-
-
-
-        with open(
-
-            CACHE_FILE,
-
-            "r",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            payload = json.load(
-                file
-            )
-
-
-
-        timestamp = payload.get(
-            "timestamp",
-            0
-        )
 
 
 
         if (
+            time.time()
+            -
+            item["time"]
+        ) > item["expire"]:
 
-            time.time() - timestamp
 
-        ) > CACHE_TIME:
+            delete_cache(
+                key
+            )
 
 
             return None
 
 
 
-        return payload.get(
-            "data",
-            []
-        )
+        return item["value"]
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return None
+
+
+
+
+
+def delete_cache(
+    key
+):
+
+    try:
+
+        if key in CACHE:
+
+            del CACHE[key]
+
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def clear_cache():
+
+    try:
+
+        CACHE.clear()
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
