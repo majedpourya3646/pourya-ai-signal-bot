@@ -10,77 +10,71 @@ def create_pump_report(
 
     try:
 
-
         if not pumps:
 
-
-            return """
-
-🚀 <b>PUMP SCANNER</b>
-
-
-❌ هیچ پامپی پیدا نشد
-
-
-🤖 Pourya Trader AI
-
-"""
+            return (
+                "🚀 PUMP DETECTOR REPORT\n\n"
+                "No pump signals detected."
+            )
 
 
 
-        message = """
+        report = (
 
-🚀 <b>PUMP ALERT</b>
+            "🚀 POURYA TRADER AI PUMP REPORT\n\n"
 
-
-"""
-
-
-
-        for index, item in enumerate(
-
-            pumps,
-
-            start=1
-
-        ):
+        )
 
 
 
-            message += (
+        for item in pumps:
 
-                f"{index}️⃣ "
 
-                f"🪙 {item.get('symbol')}\n"
+            symbol = item.get(
+                "symbol",
+                "UNKNOWN"
+            )
 
-                f"⭐ قدرت: {item.get('score')}٪\n"
 
-                f"📈 تغییر: {item.get('change')}٪\n"
+            change = item.get(
+                "change",
+                0
+            )
 
-                f"🔥 حجم: x{item.get('volume_power')}\n\n"
+
+            volume = item.get(
+                "volume",
+                0
+            )
+
+
+            confidence = item.get(
+                "confidence",
+                0
+            )
+
+
+
+            report += (
+
+                f"🪙 {symbol}\n"
+
+                f"📈 Change: {change}%\n"
+
+                f"📊 Volume: {volume}\n"
+
+                f"🎯 Confidence: {confidence}%\n\n"
 
             )
 
 
 
-        message += (
-
-            "🤖 Pourya Trader AI"
-
-        )
-
-
-
-        return message
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در ساخت گزارش پامپ"
+        return "Pump report error."
