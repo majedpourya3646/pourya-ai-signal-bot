@@ -1,102 +1,17 @@
+# core/risk_engine.py
+
 from core.logger import logger
 
 
-
 MIN_RISK_REWARD = 2.0
-
-MIN_POSITION_SIZE = 0.0001
-
+MAX_RISK_PERCENT = 2.0
 
 
-def calculate_risk_trade(
+
+def validate_trade(
     balance,
-    entry,
-    stop_loss,
-    risk_percent=1
-):
-
-    try:
-
-        if balance <= 0:
-
-            return 0
-
-
-        if entry <= 0:
-
-            return 0
-
-
-        if stop_loss <= 0:
-
-            return 0
-
-
-
-        risk_amount = (
-
-            balance *
-
-            risk_percent /
-
-            100
-
-        )
-
-
-
-        distance = abs(
-
-            entry - stop_loss
-
-        )
-
-
-
-        if distance == 0:
-
-            return 0
-
-
-
-        quantity = (
-
-            risk_amount /
-
-            distance
-
-        )
-
-
-
-        if quantity < MIN_POSITION_SIZE:
-
-            quantity = MIN_POSITION_SIZE
-
-
-
-        return round(
-
-            quantity,
-
-            6
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return 0
-
-
-
-
-def calculate_risk_reward(
+    available_balance,
+    position,
     entry,
     tp,
     sl
@@ -104,40 +19,80 @@ def calculate_risk_reward(
 
     try:
 
-        if not entry or not tp or not sl:
+        if not all(
+            [
+                entry,
+                tp,
+                sl
+            ]
+        ):
 
-            return 0
+            return False, "Missing parameters"
 
 
 
         risk = abs(
-
             entry - sl
-
         )
 
 
         reward = abs(
-
             tp - entry
-
         )
 
 
 
-        if risk == 0:
+        if risk <= 0:
 
-            return 0
+            return False, "Invalid stop loss"
 
 
 
-        return round(
-
-            reward / risk,
-
-            2
-
+        risk_reward = (
+            reward / risk
         )
+
+
+
+        if risk_reward < MIN_RISK_REWARD:
+
+            return False, (
+                f"Risk reward too low: {risk_reward}"
+            )
+
+
+
+        risk_percent = (
+
+            risk
+            /
+            entry
+
+        ) * 100
+
+
+
+        if risk_percent > MAX_RISK_PERCENT:
+
+            return False, (
+                f"Risk too high: {risk_percent}%"
+            )
+
+
+
+        return True, {
+
+            "risk_reward": round(
+                risk_reward,
+                2
+            ),
+
+            "risk_percent": round(
+                risk_percent,
+                2
+            )
+
+        }
 
 
 
@@ -145,56 +100,4 @@ def calculate_risk_reward(
 
         logger.exception(e)
 
-        return 0
-
-
-
-
-def validate_risk(
-    balance,
-    entry,
-    tp,
-    sl
-):
-
-    try:
-
-        if balance <= 0:
-
-            return False
-
-
-
-        if entry <= 0:
-
-            return False
-
-
-
-        rr = calculate_risk_reward(
-
-            entry,
-
-            tp,
-
-            sl
-
-        )
-
-
-
-        if rr < MIN_RISK_REWARD:
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
+        return False, str(e)
