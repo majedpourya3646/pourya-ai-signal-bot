@@ -89,7 +89,7 @@ def calculate_trade_levels(
 def analyze_symbol(
     symbol
 ):
-
+logger.info("NEW MULTI TIMEFRAME VERSION LOADED")
     results = []
 
     weighted_score = 0
