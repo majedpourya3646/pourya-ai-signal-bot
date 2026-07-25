@@ -1,87 +1,71 @@
 # core/portfolio_report.py
 
-from core.trade_history import (
-    get_trade_history,
-    get_total_profit
-)
-
 from core.logger import logger
 
 
 
-def create_portfolio_report():
+def create_portfolio_report(
+    summary
+):
 
     try:
 
+        if not summary:
 
-        trades = get_trade_history(
-            20
+            return (
+                "💼 PORTFOLIO REPORT\n\n"
+                "No portfolio data available."
+            )
+
+
+
+        balance = summary.get(
+            "balance",
+            0
         )
 
 
-        total_profit = get_total_profit()
+        equity = summary.get(
+            "equity",
+            0
+        )
+
+
+        profit = summary.get(
+            "profit",
+            0
+        )
+
+
+        trades = summary.get(
+            "trades",
+            0
+        )
 
 
 
-        open_trades = 0
+        report = (
 
-        closed_trades = 0
+            "💼 POURYA TRADER AI PORTFOLIO\n\n"
 
+            f"💰 Balance: {balance}\n"
 
+            f"📊 Equity: {equity}\n"
 
-        for trade in trades:
+            f"📈 Profit/Loss: {profit}\n"
 
+            f"🔄 Total Trades: {trades}\n"
 
-            if trade[7] == "OPEN":
-
-
-                open_trades += 1
-
-
-            else:
-
-
-                closed_trades += 1
+        )
 
 
 
-        message = f"""
-
-💼 <b>Portfolio Report</b>
-
-
-📊 معاملات بررسی شده:
-{len(trades)}
-
-
-🟢 معاملات باز:
-{open_trades}
-
-
-🔴 معاملات بسته:
-{closed_trades}
-
-
-💰 سود کل:
-{total_profit} USDT
-
-
-🤖 Pourya Trader AI
-
-"""
-
-
-
-        return message
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در گزارش پرتفوی"
+        return "Portfolio report error."
