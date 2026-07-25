@@ -1,142 +1,55 @@
 # core/maintenance.py
 
 import os
-import json
-
-from datetime import datetime
+import shutil
 
 from core.logger import logger
 
 
 
-DATA_PATH = "data"
+BACKUP_FOLDER = "data/backups"
 
 
 
-def cleanup_old_files():
-
-    try:
-
-
-        removed = []
-
-
-
-        if not os.path.exists(
-            DATA_PATH
-        ):
-
-
-            return removed
-
-
-
-        for file in os.listdir(
-            DATA_PATH
-        ):
-
-
-            if file.endswith(
-                ".tmp"
-            ):
-
-
-                path = os.path.join(
-
-                    DATA_PATH,
-
-                    file
-
-                )
-
-
-                os.remove(
-                    path
-                )
-
-
-                removed.append(
-                    file
-                )
-
-
-
-        return removed
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return []
-
-
-
-
-def backup_database():
+def create_backup():
 
     try:
 
-
-        source = os.path.join(
-
-            DATA_PATH,
-
-            "pourya_trader.db"
-
+        os.makedirs(
+            BACKUP_FOLDER,
+            exist_ok=True
         )
 
+
+        source = "data/pourya_trader.db"
 
 
         if not os.path.exists(
             source
         ):
 
-
             return False
 
 
 
-        backup = os.path.join(
+        destination = (
 
-            DATA_PATH,
-
-            f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            f"{BACKUP_FOLDER}/"
+            "pourya_trader_backup.db"
 
         )
 
 
 
-        with open(
-
+        shutil.copy(
             source,
-
-            "rb"
-
-        ) as original:
+            destination
+        )
 
 
-
-            with open(
-
-                backup,
-
-                "wb"
-
-            ) as copy:
-
-
-                copy.write(
-
-                    original.read()
-
-                )
-
+        logger.info(
+            "DATABASE BACKUP CREATED"
+        )
 
 
         return True
@@ -145,85 +58,61 @@ def backup_database():
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
 
 
 
 
-def create_system_snapshot():
+
+def clean_old_backups():
 
     try:
 
+        if not os.path.exists(
+            BACKUP_FOLDER
+        ):
 
-        snapshot = {
-
-
-            "time":
-
-            datetime.now().strftime(
-
-                "%Y-%m-%d %H:%M:%S"
-
-            ),
-
-
-            "files":
-
-            os.listdir(
-                DATA_PATH
-            )
-
-            if os.path.exists(
-                DATA_PATH
-            )
-
-            else []
-
-        }
+            return True
 
 
 
-        with open(
-
-            "data/system_snapshot.json",
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
+        files = os.listdir(
+            BACKUP_FOLDER
+        )
 
 
-            json.dump(
 
-                snapshot,
+        for file in files:
 
-                file,
-
-                ensure_ascii=False,
-
-                indent=4
-
+            path = os.path.join(
+                BACKUP_FOLDER,
+                file
             )
 
 
+            if os.path.isfile(
+                path
+            ):
 
-        return snapshot
+                os.remove(
+                    path
+                )
+
+
+
+        logger.info(
+            "OLD BACKUPS CLEANED"
+        )
+
+
+        return True
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return {}
+        return False
