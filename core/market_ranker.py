@@ -4,105 +4,69 @@ from core.logger import logger
 
 
 
-def normalize(value, minimum, maximum):
+def calculate_rank(
+    opportunity
+):
 
     try:
 
-        if maximum == minimum:
+        if not opportunity:
 
             return 0
 
 
-        result = (
 
-            (value - minimum)
-
-            /
-
-            (maximum - minimum)
-
-        ) * 100
-
-
-        return round(
-            result,
-            2
-        )
-
-
-    except Exception:
-
-        return 0
-
-
-
-
-def calculate_market_score(item):
-
-    try:
-
-
-        change = float(
-
-            item.get(
-                "change",
+        confidence = float(
+            opportunity.get(
+                "confidence",
                 0
             )
-
         )
 
 
-        volume = float(
+        signal = opportunity.get(
+            "signal",
+            "WAIT"
+        )
 
-            item.get(
-                "volume",
+
+        volume_score = float(
+            opportunity.get(
+                "volume_score",
                 0
             )
-
         )
+
+
+        trend_score = float(
+            opportunity.get(
+                "trend_score",
+                0
+            )
+        )
+
 
 
         score = 0
 
 
 
-        if change > 0:
+        score += confidence * 0.5
 
-            score += min(
 
-                change * 4,
+        score += volume_score * 0.25
 
-                40
 
-            )
+        score += trend_score * 0.25
 
 
 
-        if volume > 100000:
-
-            score += 30
-
-
-        elif volume > 50000:
-
-            score += 20
-
-
-
-        if item.get(
-            "market",
-            ""
-        ).endswith(
-            "USDT"
+        if signal in (
+            "STRONG BUY",
+            "STRONG SELL"
         ):
 
-            score += 20
-
-
-
-        if score > 100:
-
-            score = 100
+            score += 10
 
 
 
@@ -115,58 +79,50 @@ def calculate_market_score(item):
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return 0
 
 
 
 
-def rank_markets(markets):
+
+def rank_opportunities(
+    opportunities
+):
 
     try:
+
+        if not opportunities:
+
+            return []
+
 
 
         ranked = []
 
 
 
-        for item in markets:
+        for item in opportunities:
 
 
-            score = calculate_market_score(
+            item["rank"] = calculate_rank(
+                item
+            )
+
+
+            ranked.append(
                 item
             )
 
 
 
-            ranked.append(
-
-                {
-
-                    **item,
-
-                    "score": score
-
-                }
-
-            )
-
-
-
         ranked.sort(
-
             key=lambda x: x.get(
-                "score",
+                "rank",
                 0
             ),
-
             reverse=True
-
         )
 
 
@@ -177,10 +133,6 @@ def rank_markets(markets):
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
