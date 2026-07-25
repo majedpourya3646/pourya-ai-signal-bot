@@ -1,124 +1,167 @@
 # core/trade_executor.py
 
-from core.auto_trader import (
-    execute_auto_trade
+from core.order_manager import (
+    create_order,
+    close_order
 )
 
-from core.risk_engine import (
-    calculate_risk_trade
-)
-
-from core.config_manager import (
-    get_setting
+from core.trade_manager import (
+    open_trade,
+    close_trade,
+    get_trade
 )
 
 from core.logger import logger
 
 
 
-def prepare_trade(
-    opportunity,
-    balance
+def execute_open(
+    symbol,
+    side,
+    quantity,
+    entry,
+    tp,
+    sl,
+    confidence=0,
+    signal=""
 ):
 
     try:
 
-
-        entry = opportunity.get(
-            "entry"
+        order_side = (
+            "buy"
+            if side == "LONG"
+            else "sell"
         )
 
 
-        sl = opportunity.get(
-            "sl"
+        order = create_order(
+
+            symbol,
+
+            order_side,
+
+            quantity
+
         )
 
 
-
-        if not entry or not sl:
+        if not order:
 
             return None
 
 
 
-        quantity = calculate_risk_trade(
+        order_id = (
 
-            balance,
-
-            entry,
-
-            sl,
-
-            get_setting(
-                "risk_percent",
-                1
+            order.get(
+                "data",
+                {}
+            )
+            .get(
+                "order_id"
             )
 
         )
 
 
 
-        opportunity["quantity"] = quantity
+        result = open_trade(
+
+            symbol=symbol,
+
+            side=side,
+
+            signal=signal,
+
+            order_id=order_id,
+
+            entry=entry,
+
+            tp=tp,
+
+            sl=sl,
+
+            quantity=quantity,
+
+            confidence=confidence
+
+        )
+
+
+        if not result:
+
+            return None
 
 
 
-        return opportunity
+        return order
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return None
 
 
 
 
-def execute_trade_flow(
-    opportunity,
-    balance
+
+def execute_close(
+    symbol,
+    price,
+    reason="MANUAL"
 ):
 
     try:
 
-
-        prepared = prepare_trade(
-
-            opportunity,
-
-            balance
-
+        trade = get_trade(
+            symbol
         )
 
 
-
-        if not prepared:
+        if not trade:
 
             return None
 
 
 
-        result = execute_auto_trade(
-            prepared
+        order = close_order(
+            symbol
         )
 
 
+        if not order:
 
-        return result
+            return None
+
+
+
+        result = close_trade(
+
+            symbol,
+
+            price,
+
+            reason
+
+        )
+
+
+        if not result:
+
+            return None
+
+
+
+        return order
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return None
