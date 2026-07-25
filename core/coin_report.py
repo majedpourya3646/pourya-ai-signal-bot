@@ -10,74 +10,71 @@ def create_coin_report(
 
     try:
 
-
         if not coins:
 
-
-            return """
-
-📊 <b>Coin Scanner Report</b>
-
-
-❌ ارز مناسبی پیدا نشد
-
-
-🤖 Pourya Trader AI
-
-"""
+            return (
+                "🪙 COIN REPORT\n\n"
+                "No coin data available."
+            )
 
 
 
-        message = """
+        report = (
 
-📊 <b>Coin Scanner Report</b>
+            "🪙 POURYA TRADER AI COIN REPORT\n\n"
 
-
-"""
-
+        )
 
 
-        for index, coin in enumerate(
 
-            coins,
-
-            start=1
-
-        ):
+        for coin in coins:
 
 
-            message += (
+            symbol = coin.get(
+                "symbol",
+                "UNKNOWN"
+            )
 
-                f"{index}️⃣ "
 
-                f"🪙 {coin.get('symbol')}\n"
+            price = coin.get(
+                "price",
+                0
+            )
 
-                f"📈 تغییر: {coin.get('change',0)}٪\n"
 
-                f"💰 حجم: {coin.get('volume',0)}\n\n"
+            change = coin.get(
+                "change",
+                0
+            )
+
+
+            volume = coin.get(
+                "volume",
+                0
+            )
+
+
+
+            report += (
+
+                f"🔹 {symbol}\n"
+
+                f"💰 Price: {price}\n"
+
+                f"📈 Change: {change}%\n"
+
+                f"📊 Volume: {volume}\n\n"
 
             )
 
 
 
-        message += (
-
-            "🤖 Pourya Trader AI"
-
-        )
-
-
-
-        return message
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در گزارش ارزها"
+        return "Coin report error."
