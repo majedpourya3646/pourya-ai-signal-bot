@@ -1,9 +1,13 @@
+# core/database_manager.py
+
 import sqlite3
 import os
 
 from core.logger import logger
 
+
 DATABASE_PATH = "data/pourya_trader.db"
+
 
 
 def get_connection():
@@ -23,11 +27,15 @@ def get_connection():
 
         return connection
 
+
     except Exception as e:
 
         logger.exception(e)
 
         return None
+
+
+
 
 
 def init_database():
@@ -40,7 +48,10 @@ def init_database():
 
             return False
 
+
         cursor = connection.cursor()
+
+
 
         cursor.execute(
             """
@@ -51,6 +62,10 @@ def init_database():
                 symbol TEXT,
 
                 side TEXT,
+
+                signal TEXT,
+
+                order_id TEXT,
 
                 entry REAL,
 
@@ -66,11 +81,17 @@ def init_database():
 
                 pnl REAL DEFAULT 0,
 
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                close_reason TEXT,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                closed_at TIMESTAMP
 
             )
             """
         )
+
+
 
         cursor.execute(
             """
@@ -88,6 +109,8 @@ def init_database():
             """
         )
 
+
+
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS reports (
@@ -104,16 +127,25 @@ def init_database():
             """
         )
 
+
+
         connection.commit()
+
         connection.close()
 
+
         return True
+
+
 
     except Exception as e:
 
         logger.exception(e)
 
         return False
+
+
+
 
 
 def execute_query(
@@ -123,39 +155,53 @@ def execute_query(
 
     connection = None
 
+
     try:
 
         connection = get_connection()
+
 
         if not connection:
 
             return []
 
+
+
         cursor = connection.cursor()
+
+
 
         cursor.execute(
             query,
             params
         )
 
-        sql = query.strip().upper()
 
-        if sql.startswith("SELECT"):
+
+        query_type = query.strip().upper()
+
+
+
+        if query_type.startswith(
+            "SELECT"
+        ):
 
             rows = cursor.fetchall()
 
-            result = [
+
+            return [
                 dict(row)
                 for row in rows
             ]
 
-        else:
 
-            connection.commit()
 
-            result = cursor.rowcount
+        connection.commit()
 
-        return result
+
+        return cursor.rowcount
+
+
 
     except Exception as e:
 
@@ -163,7 +209,10 @@ def execute_query(
 
         return []
 
+
+
     finally:
+
 
         if connection:
 
