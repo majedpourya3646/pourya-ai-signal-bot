@@ -20,12 +20,10 @@ def run_trading_cycle():
 
     try:
 
-
         if not get_setting(
             "trading_enabled",
             True
         ):
-
 
             return []
 
@@ -56,7 +54,6 @@ def run_trading_cycle():
                 65
             ):
 
-
                 continue
 
 
@@ -65,7 +62,6 @@ def run_trading_cycle():
                 "auto_trade",
                 False
             ):
-
 
                 continue
 
@@ -76,9 +72,7 @@ def run_trading_cycle():
             )
 
 
-
             if result:
-
 
                 executed.append(
                     result
@@ -92,10 +86,6 @@ def run_trading_cycle():
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
