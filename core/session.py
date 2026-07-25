@@ -1,26 +1,33 @@
+# core/session.py
+
 import requests
 
 from requests.adapters import HTTPAdapter
+
 from urllib3.util.retry import Retry
 
-from config import (
-    REQUEST_TIMEOUT,
-    MAX_RETRIES
-)
+from core.logger import logger
 
 
-class Session(requests.Session):
 
-    def __init__(self):
-
-        super().__init__()
-
-        self.timeout = REQUEST_TIMEOUT
+REQUEST_TIMEOUT = 20
 
 
-        retries = Retry(
-            total=MAX_RETRIES,
+
+def create_session():
+
+    try:
+
+        session = requests.Session()
+
+
+
+        retry_strategy = Retry(
+
+            total=3,
+
             backoff_factor=1,
+
             status_forcelist=[
                 429,
                 500,
@@ -28,45 +35,47 @@ class Session(requests.Session):
                 503,
                 504
             ],
+
             allowed_methods=[
                 "GET",
                 "POST"
             ]
+
         )
+
 
 
         adapter = HTTPAdapter(
-            max_retries=retries
+            max_retries=retry_strategy
         )
 
 
-        self.mount(
+
+        session.mount(
             "https://",
             adapter
         )
 
-        self.mount(
+
+        session.mount(
             "http://",
             adapter
         )
 
 
-    def request(
-        self,
-        method,
-        url,
-        **kwargs
-    ):
 
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = self.timeout
-
-        return super().request(
-            method,
-            url,
-            **kwargs
-        )
+        return session
 
 
 
-session = Session()
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
+
+
+
+
+
+session = create_session()
