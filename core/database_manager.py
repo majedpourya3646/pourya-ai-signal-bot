@@ -1,71 +1,49 @@
-# core/database_manager.py
-
 import sqlite3
 import os
 
 from core.logger import logger
 
-
-
 DATABASE_PATH = "data/pourya_trader.db"
-
 
 
 def get_connection():
 
     try:
 
-
         os.makedirs(
-
             "data",
-
             exist_ok=True
-
         )
 
-
-        return sqlite3.connect(
+        connection = sqlite3.connect(
             DATABASE_PATH
         )
 
+        connection.row_factory = sqlite3.Row
 
+        return connection
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return None
-
-
 
 
 def init_database():
 
     try:
 
-
         connection = get_connection()
-
-
 
         if not connection:
 
             return False
 
-
-
         cursor = connection.cursor()
-
-
 
         cursor.execute(
             """
-
             CREATE TABLE IF NOT EXISTS trades (
 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,15 +69,11 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
-
             """
         )
 
-
-
         cursor.execute(
             """
-
             CREATE TABLE IF NOT EXISTS users (
 
                 id INTEGER PRIMARY KEY,
@@ -111,15 +85,11 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
-
             """
         )
 
-
-
         cursor.execute(
             """
-
             CREATE TABLE IF NOT EXISTS reports (
 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,35 +101,19 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
-
             """
         )
 
-
-
         connection.commit()
-
-
-
         connection.close()
-
-
 
         return True
 
-
-
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
-
-
 
 
 def execute_query(
@@ -167,49 +121,50 @@ def execute_query(
     params=()
 ):
 
-    try:
+    connection = None
 
+    try:
 
         connection = get_connection()
 
+        if not connection:
 
+            return []
 
         cursor = connection.cursor()
 
-
-
         cursor.execute(
-
             query,
-
             params
-
         )
 
+        sql = query.strip().upper()
 
+        if sql.startswith("SELECT"):
 
-        connection.commit()
+            rows = cursor.fetchall()
 
+            result = [
+                dict(row)
+                for row in rows
+            ]
 
+        else:
 
-        result = cursor.fetchall()
+            connection.commit()
 
-
-
-        connection.close()
-
-
+            result = cursor.rowcount
 
         return result
 
-
-
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
+
+    finally:
+
+        if connection:
+
+            connection.close()
