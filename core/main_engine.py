@@ -1,3 +1,5 @@
+# core/main_engine.py
+
 from core.startup_manager import (
     initialize_system
 )
@@ -30,7 +32,9 @@ from core.position_manager import (
     check_tp_sl
 )
 
-from core.logger import logger
+from core.logger import (
+    logger
+)
 
 
 
@@ -41,6 +45,7 @@ def run_main_engine():
         logger.info(
             "MAIN ENGINE STARTED"
         )
+
 
 
         if not initialize_system():
@@ -56,6 +61,7 @@ def run_main_engine():
         closed = check_tp_sl()
 
 
+
         if closed:
 
             logger.info(
@@ -69,9 +75,11 @@ def run_main_engine():
         )
 
 
+
         logger.info(
             f"FOUND OPPORTUNITIES: {len(opportunities)}"
         )
+
 
 
         executed = []
@@ -86,28 +94,22 @@ def run_main_engine():
             )
 
 
+
             confidence = opportunity.get(
                 "confidence",
                 0
             )
 
 
+
             min_confidence = get_setting(
-
                 "min_confidence",
-
                 65
-
             )
 
 
+
             if confidence < min_confidence:
-
-                logger.info(
-
-                    f"SKIP {opportunity.get('symbol')} confidence={confidence}"
-
-                )
 
                 continue
 
@@ -130,6 +132,7 @@ def run_main_engine():
                 )
 
 
+
                 if result:
 
                     executed.append(
@@ -139,10 +142,9 @@ def run_main_engine():
 
 
         report = create_engine_report(
-
             len(executed)
-
         )
+
 
 
         send_message(
@@ -150,9 +152,11 @@ def run_main_engine():
         )
 
 
+
         logger.info(
             "MAIN ENGINE FINISHED"
         )
+
 
 
         return executed
@@ -161,14 +165,9 @@ def run_main_engine():
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
-
 
 
 
