@@ -8,7 +8,7 @@ from config import (
 from market import get_market_data
 from core.logger import logger
 
-from core.signal_engine import analyze_signal
+from signal_engine import analyze_signal
 
 
 TIMEFRAMES = [
