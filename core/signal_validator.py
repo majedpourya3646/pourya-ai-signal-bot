@@ -4,52 +4,56 @@ from core.logger import logger
 
 
 
-MIN_SCORE = 65
-
-
-
 def validate_signal(
-    result
+    opportunity
 ):
 
     try:
 
-
-        if not result:
-
+        if not opportunity:
 
             return False
 
 
 
-        signal = result.get(
-            "signal",
-            "WAIT"
+        symbol = opportunity.get(
+            "symbol"
         )
 
+        signal = opportunity.get(
+            "signal"
+        )
 
-        confidence = result.get(
+        confidence = opportunity.get(
             "confidence",
             0
         )
 
 
 
-        if signal not in [
-
-            "BUY",
-
-            "STRONG BUY"
-
-        ]:
-
+        if not symbol:
 
             return False
 
 
 
-        if confidence < MIN_SCORE:
+        if signal not in (
 
+            "BUY",
+
+            "STRONG BUY",
+
+            "SELL",
+
+            "STRONG SELL"
+
+        ):
+
+            return False
+
+
+
+        if float(confidence) < 50:
 
             return False
 
@@ -61,10 +65,6 @@ def validate_signal(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
