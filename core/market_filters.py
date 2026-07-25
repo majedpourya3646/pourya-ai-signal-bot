@@ -4,92 +4,93 @@ from core.logger import logger
 
 
 
-MIN_VOLUME = 100000
-
-MIN_PRICE_CHANGE = -10
-
-MAX_PRICE_CHANGE = 20
-
-
-
-def filter_markets(
-    markets
+def filter_market(
+    opportunity
 ):
 
     try:
+
+        if not opportunity:
+
+            return False
+
+
+
+        symbol = opportunity.get(
+            "symbol"
+        )
+
+        confidence = float(
+            opportunity.get(
+                "confidence",
+                0
+            )
+        )
+
+        signal = opportunity.get(
+            "signal",
+            "WAIT"
+        )
+
+
+
+        if not symbol:
+
+            return False
+
+
+
+        if signal == "WAIT":
+
+            return False
+
+
+
+        if confidence < 60:
+
+            return False
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def filter_symbols(
+    symbols
+):
+
+    try:
+
+        if not symbols:
+
+            return []
+
 
 
         result = []
 
 
-
-        for market in markets:
-
-
-            try:
+        for symbol in symbols:
 
 
-                volume = float(
-
-                    market.get(
-                        "volume",
-                        0
-                    )
-
-                )
-
-
-                change = float(
-
-                    market.get(
-                        "change",
-                        0
-                    )
-
-                )
-
-
-
-                if volume < MIN_VOLUME:
-
-                    continue
-
-
-
-                if change < MIN_PRICE_CHANGE:
-
-                    continue
-
-
-
-                if change > MAX_PRICE_CHANGE:
-
-                    continue
-
-
+            if symbol.endswith(
+                "USDT"
+            ):
 
                 result.append(
-
-                    {
-
-                        "symbol": market.get(
-                            "market"
-                        ),
-
-                        "volume": volume,
-
-                        "change": change
-
-                    }
-
+                    symbol
                 )
-
-
-
-            except Exception:
-
-
-                continue
 
 
 
@@ -99,10 +100,6 @@ def filter_markets(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
