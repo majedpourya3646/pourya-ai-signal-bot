@@ -5,7 +5,7 @@ from config import (
     DEFAULT_SL
 )
 
-from core.market import get_market_data
+from market import get_market_data
 from core.logger import logger
 
 from core.signal_engine import analyze_signal
