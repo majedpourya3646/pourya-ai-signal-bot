@@ -10,115 +10,79 @@ def create_opportunity_report(
 
     try:
 
-
         if not opportunities:
 
-
-            return """
-
-🎯 <b>OPPORTUNITY SCANNER</b>
-
-
-❌ فرصت معاملاتی قوی پیدا نشد
-
-
-🤖 Pourya Trader AI
-
-"""
-
-
-
-        message = """
-
-🎯 <b>OPPORTUNITY ALERT</b>
-
-
-"""
-
-
-
-        for index, item in enumerate(
-
-            opportunities,
-
-            start=1
-
-        ):
-
-
-            message += (
-
-                f"{index}️⃣ "
-
-                f"🪙 {item.get('symbol')}\n"
-
-                f"🚦 وضعیت: {item.get('signal')}\n"
-
-                f"⭐ قدرت: {item.get('confidence')}٪\n"
-
-                f"🔎 امتیاز بازار: {item.get('market_score')}٪\n"
-
+            return (
+                "OPPORTUNITY REPORT\n\n"
+                "No high quality opportunities."
             )
 
 
-            if item.get(
-                "entry"
-            ):
 
+        report = (
 
-                message += (
-
-                    f"💰 ورود: {item.get('entry')}\n"
-
-                )
-
-
-            if item.get(
-                "tp"
-            ):
-
-
-                message += (
-
-                    f"🎯 سود: {item.get('tp')}\n"
-
-                )
-
-
-            if item.get(
-                "sl"
-            ):
-
-
-                message += (
-
-                    f"🛑 ضرر: {item.get('sl')}\n"
-
-                )
-
-
-            message += "\n"
-
-
-
-        message += (
-
-            "🤖 Pourya Trader AI"
+            "🚀 POURYA TRADER AI OPPORTUNITIES\n\n"
 
         )
 
 
 
-        return message
+        for item in opportunities:
+
+
+            symbol = item.get(
+                "symbol",
+                "UNKNOWN"
+            )
+
+
+            signal = item.get(
+                "signal",
+                "WAIT"
+            )
+
+
+            confidence = item.get(
+                "confidence",
+                0
+            )
+
+
+            rank = item.get(
+                "rank",
+                0
+            )
+
+
+            grade = item.get(
+                "grade",
+                "-"
+            )
+
+
+
+            report += (
+
+                f"🪙 {symbol}\n"
+
+                f"📈 Signal: {signal}\n"
+
+                f"🎯 Confidence: {confidence}%\n"
+
+                f"⭐ Rank: {rank}\n"
+
+                f"🏷 Grade: {grade}\n\n"
+
+            )
+
+
+
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در ساخت Opportunity Report"
+        return "Opportunity report error."
