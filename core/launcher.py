@@ -1,42 +1,33 @@
 # core/launcher.py
 
 from core.final_engine import (
-    start_final_engine
+    run_final_engine
 )
 
 from core.logger import logger
 
 
 
-def launch():
+def start():
 
     try:
 
-
         logger.info(
-            "LAUNCHING POURYA TRADER AI"
+            "POURYA TRADER AI LAUNCHER STARTED"
         )
 
 
-
-        result = start_final_engine()
-
+        result = run_final_engine()
 
 
-        if result:
+        logger.info(
+            f"ENGINE RESULT: {result}"
+        )
 
 
-            logger.info(
-                "SYSTEM RUNNING"
-            )
-
-        else:
-
-
-            logger.error(
-                "SYSTEM FAILED"
-            )
-
+        logger.info(
+            "POURYA TRADER AI FINISHED"
+        )
 
 
         return result
@@ -45,17 +36,12 @@ def launch():
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return False
-
+        return {}
 
 
 
 if __name__ == "__main__":
 
-    launch()
+    start()
