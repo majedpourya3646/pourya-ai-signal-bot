@@ -1,10 +1,16 @@
+# core/position_manager.py
+
 from coinex_futures_api import (
     coinex_futures
 )
 
-from trade_manager import (
+from core.trade_manager import (
     close_trade,
     get_trade
+)
+
+from core.order_manager import (
+    create_order
 )
 
 from core.logger import logger
@@ -48,6 +54,8 @@ def get_positions():
 
 
 
+
+
 def monitor_positions():
 
     closed_positions = []
@@ -79,13 +87,12 @@ def monitor_positions():
 
 
             unrealized = float(
-
                 position.get(
                     "unrealized_pnl",
                     0
                 )
-
             )
+
 
 
             trade = get_trade(
@@ -99,29 +106,17 @@ def monitor_positions():
 
 
 
-            if unrealized > 0:
-
-                status = "PROFIT"
-
-            elif unrealized < 0:
-
-                status = "LOSS"
-
-            else:
-
-                continue
-
-
-
             closed_positions.append(
 
                 {
-
                     "symbol": symbol,
 
                     "pnl": unrealized,
 
-                    "status": status,
+                    "status":
+                        "PROFIT"
+                        if unrealized > 0
+                        else "LOSS",
 
                     "side": trade.get(
                         "side"
@@ -153,6 +148,8 @@ def monitor_positions():
         logger.exception(e)
 
         return []
+
+
 
 
 
@@ -202,22 +199,18 @@ def check_tp_sl():
 
 
             tp = float(
-
                 trade.get(
                     "tp",
                     0
                 )
-
             )
 
 
             sl = float(
-
                 trade.get(
                     "sl",
                     0
                 )
-
             )
 
 
@@ -243,7 +236,6 @@ def check_tp_sl():
                     reason = "TAKE_PROFIT"
 
 
-
                 elif price <= sl:
 
                     close = True
@@ -262,7 +254,6 @@ def check_tp_sl():
                     reason = "TAKE_PROFIT"
 
 
-
                 elif price >= sl:
 
                     close = True
@@ -272,36 +263,52 @@ def check_tp_sl():
 
 
 
+
             if close:
 
 
-                result = close_trade(
+                order = create_order(
 
                     symbol,
 
-                    price,
+                    "sell",
 
-                    reason
+                    trade.get(
+                        "quantity"
+                    )
 
                 )
 
 
-                if result:
+                if order:
 
 
-                    results.append(
+                    result = close_trade(
 
-                        {
+                        symbol,
 
-                            "symbol": symbol,
+                        price,
 
-                            "reason": reason,
-
-                            "price": price
-
-                        }
+                        reason
 
                     )
+
+
+                    if result:
+
+                        results.append(
+
+                            {
+
+                                "symbol": symbol,
+
+                                "reason": reason,
+
+                                "price": price
+
+                            }
+
+                        )
 
 
 
