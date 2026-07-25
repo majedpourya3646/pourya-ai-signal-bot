@@ -1,163 +1,63 @@
 # core/performance.py
 
-import json
-import os
+from core.database_manager import (
+    execute_query
+)
 
 from core.logger import logger
 
 
 
-PERFORMANCE_FILE = "data/performance.json"
-
-
-
-DEFAULT_DATA = {
-
-    "wins": 0,
-
-    "losses": 0,
-
-    "total_profit": 0,
-
-    "total_loss": 0
-
-}
-
-
-
-def load_performance():
-
-    try:
-
-
-        if not os.path.exists(
-            PERFORMANCE_FILE
-        ):
-
-
-            save_performance(
-                DEFAULT_DATA
-            )
-
-
-            return DEFAULT_DATA
-
-
-
-        with open(
-
-            PERFORMANCE_FILE,
-
-            "r",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            return json.load(
-                file
-            )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return DEFAULT_DATA
-
-
-
-
-def save_performance(
-    data
+def add_trade(
+    symbol,
+    signal,
+    entry,
+    tp,
+    sl,
+    exit_price,
+    pnl,
+    quantity,
+    confidence,
+    grade
 ):
 
     try:
 
-
-        os.makedirs(
-
-            "data",
-
-            exist_ok=True
-
+        execute_query(
+            """
+            INSERT INTO reports
+            (
+                type,
+                content
+            )
+            VALUES
+            (
+                ?,
+                ?
+            )
+            """,
+            (
+                "TRADE",
+                str(
+                    {
+                        "symbol": symbol,
+                        "signal": signal,
+                        "entry": entry,
+                        "tp": tp,
+                        "sl": sl,
+                        "exit": exit_price,
+                        "pnl": pnl,
+                        "quantity": quantity,
+                        "confidence": confidence,
+                        "grade": grade
+                    }
+                )
+            )
         )
 
 
-        with open(
-
-            PERFORMANCE_FILE,
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            json.dump(
-
-                data,
-
-                file,
-
-                ensure_ascii=False,
-
-                indent=4
-
-            )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-
-
-def add_trade_result(
-    profit
-):
-
-    try:
-
-
-        data = load_performance()
-
-
-
-        if profit > 0:
-
-
-            data["wins"] += 1
-
-            data["total_profit"] += profit
-
-
-
-        else:
-
-
-            data["losses"] += 1
-
-            data["total_loss"] += abs(
-                profit
-            )
-
-
-
-        save_performance(
-            data
+        logger.info(
+            f"TRADE RECORDED {symbol}"
         )
 
 
@@ -167,93 +67,111 @@ def add_trade_result(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
 
 
 
 
-def get_summary():
 
-    data = load_performance()
+def get_performance():
 
+    try:
 
-
-    total = (
-
-        data.get("wins",0)
-
-        +
-
-        data.get("losses",0)
-
-    )
+        trades = execute_query(
+            """
+            SELECT *
+            FROM trades
+            WHERE status='CLOSED'
+            """
+        )
 
 
-
-    win_rate = 0
-
-
-
-    if total > 0:
+        total = len(
+            trades
+        )
 
 
-        win_rate = round(
+        wins = 0
 
-            (
+        losses = 0
 
-                data.get("wins",0)
+        profit = 0
 
-                /
 
-                total
 
+        for trade in trades:
+
+            pnl = float(
+                trade.get(
+                    "pnl",
+                    0
+                )
             )
 
-            *
 
-            100,
-
-            2
-
-        )
+            profit += pnl
 
 
+            if pnl > 0:
 
-    return {
+                wins += 1
 
-        "wins": data.get(
-            "wins",
-            0
-        ),
 
-        "losses": data.get(
-            "losses",
-            0
-        ),
+            elif pnl < 0:
 
-        "win_rate": win_rate,
-
-        "profit": data.get(
-            "total_profit",
-            0
-        ),
-
-        "loss": data.get(
-            "total_loss",
-            0
-        )
-
-    }
+                losses += 1
 
 
 
+        win_rate = 0
 
-def get_daily_performance():
 
-    return get_summary()
+        if total > 0:
+
+            win_rate = (
+                wins / total
+            ) * 100
+
+
+
+        return {
+
+            "total_trades": total,
+
+            "wins": wins,
+
+            "losses": losses,
+
+            "profit": round(
+                profit,
+                4
+            ),
+
+            "win_rate": round(
+                win_rate,
+                2
+            )
+
+        }
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return {
+
+            "total_trades": 0,
+
+            "wins": 0,
+
+            "losses": 0,
+
+            "profit": 0,
+
+            "win_rate": 0
+
+        }
