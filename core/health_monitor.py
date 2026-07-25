@@ -1,87 +1,78 @@
 # core/health_monitor.py
 
-import time
-
-from core.system_health import (
-    system_status
-)
-
-from telegram_sender import (
-    send_message
+from core.database_manager import (
+    execute_query
 )
 
 from core.logger import logger
 
 
 
-HEALTH_INTERVAL = 1800
+def check_database():
 
+    try:
 
-
-def run_health_monitor():
-
-    logger.info(
-        "HEALTH MONITOR STARTED"
-    )
-
-
-
-    while True:
-
-
-        try:
-
-
-            status = system_status()
-
-
-
-            if status.get(
-                "status"
-            ) != "ONLINE":
-
-
-                send_message(
-
-f"""
-🚨 <b>System Warning</b>
-
-❌ وضعیت سیستم مشکل دارد
-
-🤖 Pourya Trader AI
-
-"""
-
-                )
-
-
-
-            else:
-
-
-                logger.info(
-                    "SYSTEM HEALTH OK"
-                )
-
-
-
-        except Exception as e:
-
-
-            logger.exception(
-                e
-            )
-
-
-
-        time.sleep(
-            HEALTH_INTERVAL
+        result = execute_query(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+            """
         )
 
 
+        if result:
+
+            return True
 
 
-if __name__ == "__main__":
+        return False
 
 
-    run_health_monitor()
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def get_system_health():
+
+    try:
+
+        database_status = check_database()
+
+
+        return {
+
+            "database": (
+                "OK"
+                if database_status
+                else "FAILED"
+            ),
+
+            "status": (
+                "HEALTHY"
+                if database_status
+                else "ERROR"
+            )
+
+        }
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return {
+
+            "database": "ERROR",
+
+            "status": "ERROR"
+
+        }
