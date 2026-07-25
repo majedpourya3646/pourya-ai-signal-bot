@@ -15,15 +15,11 @@ def analyze_market_symbols(
     results = []
 
 
-
     try:
-
 
         for symbol in symbols:
 
-
             try:
-
 
                 result = analyze_symbol(
                     symbol
@@ -40,7 +36,6 @@ def analyze_market_symbols(
                     continue
 
 
-
                 results.append(
 
                     {
@@ -53,7 +48,7 @@ def analyze_market_symbols(
                         ),
 
                         "confidence": result.get(
-                            "confidence",
+                            "score",
                             0
                         ),
 
@@ -62,11 +57,11 @@ def analyze_market_symbols(
                         ),
 
                         "tp": result.get(
-                            "tp"
+                            "take_profit"
                         ),
 
                         "sl": result.get(
-                            "sl"
+                            "stop_loss"
                         ),
 
                         "grade": result.get(
@@ -79,28 +74,20 @@ def analyze_market_symbols(
                 )
 
 
-
             except Exception as e:
 
-
                 logger.error(
-
                     f"{symbol} ERROR {e}"
-
                 )
-
 
 
         return results
 
 
-
     except Exception as e:
-
 
         logger.exception(
             e
         )
-
 
         return []
