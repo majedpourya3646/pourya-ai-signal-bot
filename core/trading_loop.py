@@ -2,12 +2,8 @@
 
 import time
 
-from core.trading_controller import (
-    run_trading_cycle
-)
-
-from core.position_manager import (
-    monitor_positions
+from core.final_engine import (
+    run_final_engine
 )
 
 from core.config_manager import (
@@ -18,76 +14,57 @@ from core.logger import logger
 
 
 
-def run_trading_loop():
-
-    interval = get_setting(
-        "scan_interval",
-        300
-    )
-
+def run_loop():
 
     logger.info(
         "TRADING LOOP STARTED"
     )
 
 
-
     while True:
-
 
         try:
 
-
-            # بررسی معاملات باز
-
-            closed = monitor_positions()
+            result = run_final_engine()
 
 
-
-            if closed:
-
-
-                logger.info(
-
-                    f"CLOSED POSITIONS: {closed}"
-
-                )
+            logger.info(
+                f"LOOP RESULT: {result}"
+            )
 
 
+            interval = get_setting(
+                "loop_interval",
+                60
+            )
 
-            # اجرای چرخه جدید
 
-            result = run_trading_cycle()
+            time.sleep(
+                interval
+            )
 
 
 
-            if result:
+        except KeyboardInterrupt:
 
+            logger.info(
+                "TRADING LOOP STOPPED BY USER"
+            )
 
-                logger.info(
-
-                    f"NEW TRADES: {result}"
-
-                )
+            break
 
 
 
         except Exception as e:
 
+            logger.exception(e)
 
-            logger.exception(
-                e
+            time.sleep(
+                30
             )
-
-
-
-        time.sleep(
-            interval
-        )
 
 
 
 if __name__ == "__main__":
 
-
-    run_trading_loop()
+    run_loop()
