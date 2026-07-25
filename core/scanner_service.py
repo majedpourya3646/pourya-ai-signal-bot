@@ -1,118 +1,85 @@
 # core/scanner_service.py
 
-from market_scanner import scan_market
+from core.coin_scanner import (
+    get_symbols
+)
 
-from core.market_ranker import rank_markets
+from core.opportunity_engine import (
+    find_opportunities
+)
 
-from core.market_cache import (
-    save_cache,
-    load_cache
+from core.market_filters import (
+    filter_symbols
 )
 
 from core.logger import logger
 
 
 
-def get_market_opportunities(
-    force_refresh=False
-):
+def run_scanner():
 
     try:
 
-
-        if not force_refresh:
-
-
-            cached = load_cache()
+        symbols = get_symbols()
 
 
-
-            if cached:
-
-
-                return cached
-
-
-
-        markets = scan_market()
-
-
-
-        if not markets:
-
+        if not symbols:
 
             return []
 
 
 
-        ranked = rank_markets(
-            markets
+        symbols = filter_symbols(
+            symbols
         )
 
 
-
-        save_cache(
-            ranked
+        opportunities = find_opportunities(
+            len(symbols)
         )
 
 
-        return ranked
+        return opportunities
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
 
 
 
 
-def get_top_opportunities(
-    limit=10
+
+def scan_symbol(
+    symbol
 ):
 
-    markets = get_market_opportunities()
+    try:
 
-
-
-    return markets[:limit]
-
-
-
-
-def get_symbols(
-    limit=10
-):
-
-    markets = get_top_opportunities(
-        limit
-    )
-
-
-    symbols = []
-
-
-
-    for item in markets:
-
-
-        symbol = item.get(
-            "symbol"
+        opportunities = find_opportunities(
+            1
         )
 
 
-        if symbol:
+        for item in opportunities:
 
-            symbols.append(
-                symbol
-            )
+            if item.get(
+                "symbol"
+            ) == symbol:
+
+                return item
 
 
 
-    return symbols
+        return None
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
