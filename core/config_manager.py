@@ -11,23 +11,21 @@ CONFIG_FILE = "data/settings.json"
 
 
 
-DEFAULT_CONFIG = {
-
-    "trading_enabled": True,
+DEFAULT_SETTINGS = {
 
     "auto_trade": False,
 
-    "telegram_alerts": True,
-
-    "pump_scanner": True,
-
-    "scan_interval": 300,
+    "trading_enabled": True,
 
     "min_confidence": 65,
 
-    "risk_percent": 1,
+    "loop_interval": 60,
 
     "max_open_trades": 3,
+
+    "risk_percent": 1,
+
+    "paper_trading": True,
 
     "leverage": 10
 
@@ -35,106 +33,70 @@ DEFAULT_CONFIG = {
 
 
 
-def load_config():
+
+
+def load_settings():
 
     try:
-
 
         if not os.path.exists(
             CONFIG_FILE
         ):
 
-
-            save_config(
-                DEFAULT_CONFIG
+            save_settings(
+                DEFAULT_SETTINGS
             )
 
 
-            return DEFAULT_CONFIG
+            return DEFAULT_SETTINGS
 
 
 
         with open(
-
             CONFIG_FILE,
-
             "r",
-
             encoding="utf-8"
-
         ) as file:
 
-
-            config = json.load(
+            return json.load(
                 file
             )
 
 
 
-        merged = DEFAULT_CONFIG.copy()
-
-
-
-        merged.update(
-            config
-        )
-
-
-
-        return merged
-
-
-
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return DEFAULT_CONFIG
+        return DEFAULT_SETTINGS
 
 
 
 
-def save_config(
-    config
+
+def save_settings(
+    settings
 ):
 
     try:
 
-
         os.makedirs(
-
             "data",
-
             exist_ok=True
-
         )
 
 
         with open(
-
             CONFIG_FILE,
-
             "w",
-
             encoding="utf-8"
-
         ) as file:
 
-
             json.dump(
-
-                config,
-
+                settings,
                 file,
-
-                ensure_ascii=False,
-
-                indent=4
-
+                indent=4,
+                ensure_ascii=False
             )
 
 
@@ -144,13 +106,10 @@ def save_config(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
+
 
 
 
@@ -160,17 +119,24 @@ def get_setting(
     default=None
 ):
 
-    config = load_config()
+    try:
+
+        settings = load_settings()
+
+
+        return settings.get(
+            key,
+            default
+        )
 
 
 
-    return config.get(
+    except Exception as e:
 
-        key,
+        logger.exception(e)
 
-        default
+        return default
 
-    )
 
 
 
@@ -182,31 +148,20 @@ def update_setting(
 
     try:
 
-
-        config = load_config()
-
+        settings = load_settings()
 
 
-        config[key] = value
+        settings[key] = value
 
 
-
-        save_config(
-            config
+        return save_settings(
+            settings
         )
-
-
-
-        return True
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
