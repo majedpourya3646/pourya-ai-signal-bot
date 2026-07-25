@@ -1,45 +1,10 @@
 # core/system_health.py
 
-import time
-
-from coinex_api import coinex
+from core.health_monitor import (
+    get_system_health
+)
 
 from core.logger import logger
-
-
-
-def check_coinex_connection():
-
-    try:
-
-
-        result = coinex.get_balance()
-
-
-
-        if result and result.get(
-            "code"
-        ) == 0:
-
-
-            return True
-
-
-
-        return False
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return False
-
 
 
 
@@ -47,67 +12,27 @@ def system_status():
 
     try:
 
+        health = get_system_health()
 
-        return {
 
-            "status": "ONLINE",
+        logger.info(
+            f"SYSTEM STATUS: {health}"
+        )
 
-            "coinex": check_coinex_connection(),
 
-            "timestamp": time.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-
-        }
+        return health
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return {
 
             "status": "ERROR",
 
-            "coinex": False
+            "database": "UNKNOWN"
 
         }
-
-
-
-
-def create_health_report():
-
-    status = system_status()
-
-
-
-    message = f"""
-
-🩺 <b>System Health Report</b>
-
-
-⚙️ وضعیت سیستم:
-{status.get('status')}
-
-
-🟢 CoinEx:
-{"Connected" if status.get('coinex') else "Disconnected"}
-
-
-🕒 زمان:
-{status.get('timestamp')}
-
-
-🤖 Pourya Trader AI
-
-"""
-
-
-
-    return message
