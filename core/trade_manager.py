@@ -1,8 +1,18 @@
-from core.database_manager import execute_query
+# core/trade_manager.py
+
+from datetime import datetime
+
+from core.database_manager import (
+    execute_query
+)
+
 from core.logger import logger
 
 
-def can_buy(symbol):
+
+def can_buy(
+    symbol
+):
 
     try:
 
@@ -19,13 +29,18 @@ def can_buy(symbol):
             )
         )
 
+
         return len(result) == 0
+
 
     except Exception as e:
 
         logger.exception(e)
 
         return False
+
+
+
 
 
 def open_trade(
@@ -35,9 +50,9 @@ def open_trade(
     quantity,
     confidence=0,
     signal="",
+    order_id=None,
     tp=0,
-    sl=0,
-    order_id=None
+    sl=0
 ):
 
     try:
@@ -48,6 +63,8 @@ def open_trade(
             (
                 symbol,
                 side,
+                signal,
+                order_id,
                 entry,
                 tp,
                 sl,
@@ -55,14 +72,19 @@ def open_trade(
                 confidence,
                 status
             )
+
             VALUES
             (
-                ?,?,?,?,?,?,?,?
+                ?,?,?,?,?,?,?,?,?,?
             )
             """,
             (
                 symbol,
                 side,
+                signal,
+                str(order_id)
+                if order_id
+                else None,
                 float(entry),
                 float(tp),
                 float(sl),
@@ -72,11 +94,15 @@ def open_trade(
             )
         )
 
+
         logger.info(
-            f"TRADE OPENED {symbol}"
+            f"OPEN TRADE {symbol} {side}"
         )
 
+
         return True
+
+
 
     except Exception as e:
 
@@ -85,26 +111,22 @@ def open_trade(
         return False
 
 
-def get_trade(symbol):
+
+
+
+def get_trade(
+    symbol
+):
 
     try:
 
         result = execute_query(
             """
-            SELECT
-                id,
-                symbol,
-                side,
-                entry,
-                tp,
-                sl,
-                quantity,
-                confidence,
-                status,
-                pnl
+            SELECT *
             FROM trades
             WHERE symbol=?
             AND status='OPEN'
+            ORDER BY id DESC
             LIMIT 1
             """,
             (
@@ -112,26 +134,15 @@ def get_trade(symbol):
             )
         )
 
+
         if not result:
 
             return None
 
-        row = result[0]
 
-        return {
+        return result[0]
 
-            "id": row[0],
-            "symbol": row[1],
-            "side": row[2],
-            "entry": row[3],
-            "tp": row[4],
-            "sl": row[5],
-            "quantity": row[6],
-            "confidence": row[7],
-            "status": row[8],
-            "pnl": row[9]
 
-        }
 
     except Exception as e:
 
@@ -140,50 +151,31 @@ def get_trade(symbol):
         return None
 
 
+
+
+
 def get_open_trades():
 
     try:
 
-        result = execute_query(
+        return execute_query(
             """
-            SELECT
-                symbol,
-                side,
-                entry,
-                tp,
-                sl,
-                quantity,
-                confidence
+            SELECT *
             FROM trades
             WHERE status='OPEN'
+            ORDER BY id DESC
             """
         )
 
-        trades = []
-
-        for row in result:
-
-            trades.append(
-
-                {
-                    "symbol": row[0],
-                    "side": row[1],
-                    "entry": row[2],
-                    "tp": row[3],
-                    "sl": row[4],
-                    "quantity": row[5],
-                    "confidence": row[6]
-                }
-
-            )
-
-        return trades
 
     except Exception as e:
 
         logger.exception(e)
 
         return []
+
+
+
 
 
 def update_trade_pnl(
@@ -201,12 +193,15 @@ def update_trade_pnl(
             AND status='OPEN'
             """,
             (
-                pnl,
+                float(pnl),
                 symbol
             )
         )
 
+
         return True
+
+
 
     except Exception as e:
 
@@ -215,10 +210,13 @@ def update_trade_pnl(
         return False
 
 
+
+
+
 def close_trade(
     symbol,
     exit_price,
-    reason=""
+    reason="MANUAL"
 ):
 
     try:
@@ -227,51 +225,79 @@ def close_trade(
             symbol
         )
 
+
         if not trade:
 
             return False
+
+
 
         entry = float(
             trade["entry"]
         )
 
-        qty = float(
+        quantity = float(
             trade["quantity"]
         )
 
         side = trade["side"]
 
+
+
         if side == "LONG":
 
             pnl = (
-                exit_price - entry
-            ) * qty
+                float(exit_price)
+                -
+                entry
+            ) * quantity
+
 
         else:
 
             pnl = (
-                entry - exit_price
-            ) * qty
+                entry
+                -
+                float(exit_price)
+            ) * quantity
+
+
 
         execute_query(
             """
             UPDATE trades
+
             SET
+
                 status='CLOSED',
-                pnl=?
+
+                pnl=?,
+
+                close_reason=?,
+
+                closed_at=?
+
             WHERE id=?
+
             """,
             (
                 pnl,
+                reason,
+                datetime.utcnow().isoformat(),
                 trade["id"]
             )
         )
 
+
+
         logger.info(
-            f"{symbol} CLOSED | {reason} | PNL={pnl}"
+            f"CLOSE TRADE {symbol} PNL={pnl}"
         )
 
+
         return True
+
+
 
     except Exception as e:
 
