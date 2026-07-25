@@ -4,110 +4,71 @@ from core.logger import logger
 
 
 
-DEFAULT_SETTINGS = {
-
-    "buy_threshold": 65,
-
-    "strong_buy_threshold": 80,
-
-    "sell_threshold": 35,
-
-    "volume_weight": 20,
-
-    "trend_weight": 40,
-
-    "momentum_weight": 40
-
-}
-
-
-
 def optimize_signal(
-    confidence,
-    market_condition="normal"
+    opportunity
 ):
 
     try:
 
+        if not opportunity:
 
-        settings = DEFAULT_SETTINGS.copy()
-
-
-
-        if market_condition == "high_volatility":
-
-
-            settings["buy_threshold"] = 70
-
-            settings["strong_buy_threshold"] = 85
+            return None
 
 
 
-        elif market_condition == "low_volatility":
+        confidence = float(
+            opportunity.get(
+                "confidence",
+                0
+            )
+        )
 
 
-            settings["buy_threshold"] = 60
-
-            settings["strong_buy_threshold"] = 75
-
-
-
-        signal = "WAIT"
-
-
-
-        if confidence >= settings["strong_buy_threshold"]:
-
-
-            signal = "STRONG BUY"
+        signal = opportunity.get(
+            "signal",
+            "WAIT"
+        )
 
 
 
-        elif confidence >= settings["buy_threshold"]:
+        if confidence >= 85:
+
+            grade = "A"
 
 
-            signal = "BUY"
+        elif confidence >= 70:
+
+            grade = "B"
+
+
+        elif confidence >= 60:
+
+            grade = "C"
+
+
+        else:
+
+            grade = "D"
 
 
 
-        elif confidence <= settings["sell_threshold"]:
 
-
-            signal = "SELL"
+        opportunity["grade"] = grade
 
 
 
-        return {
+        if grade == "D":
 
-            "signal": signal,
+            opportunity["signal"] = "WAIT"
 
-            "confidence": confidence,
 
-            "settings": settings
 
-        }
+        return opportunity
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return {
-
-            "signal": "WAIT",
-
-            "confidence": 0
-
-        }
-
-
-
-
-def get_optimizer_settings():
-
-    return DEFAULT_SETTINGS
+        return opportunity
