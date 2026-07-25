@@ -1,102 +1,87 @@
 # core/monthly_report.py
 
-from datetime import datetime
-
-from core.trade_history import (
-    get_trade_history,
-    get_total_profit
-)
-
-from core.performance_tracker import (
-    get_summary
-)
-
 from core.logger import logger
 
 
 
-def create_monthly_report():
+def create_monthly_report(
+    data
+):
 
     try:
 
+        if not data:
 
-        trades = get_trade_history(
-            1000
+            return (
+                "📆 MONTHLY REPORT\n\n"
+                "No monthly data available."
+            )
+
+
+
+        total_trades = data.get(
+            "total_trades",
+            0
         )
 
 
-        performance = get_summary()
-
-
-
-        total_profit = get_total_profit()
-
-
-
-        wins = performance.get(
+        wins = data.get(
             "wins",
             0
         )
 
 
-        losses = performance.get(
+        losses = data.get(
             "losses",
             0
         )
 
 
-        win_rate = performance.get(
+        profit = data.get(
+            "profit",
+            0
+        )
+
+
+        win_rate = data.get(
             "win_rate",
             0
         )
 
 
-
-        message = f"""
-
-📅 <b>گزارش ماهانه Pourya Trader AI</b>
-
-
-🗓 ماه:
-{datetime.now().strftime('%Y-%m')}
-
-
-📈 تعداد معاملات:
-{len(trades)}
-
-
-✅ معاملات موفق:
-{wins}
-
-
-❌ معاملات ناموفق:
-{losses}
-
-
-🎯 درصد موفقیت:
-{win_rate}٪
-
-
-💰 سود خالص:
-{total_profit} USDT
-
-
-🤖 سیستم هوشمند ترید
-
-"""
+        balance = data.get(
+            "balance",
+            0
+        )
 
 
 
-        return message
+        report = (
+
+            "📆 POURYA TRADER AI MONTHLY REPORT\n\n"
+
+            f"🔄 Total Trades: {total_trades}\n"
+
+            f"✅ Wins: {wins}\n"
+
+            f"❌ Losses: {losses}\n"
+
+            f"🎯 Win Rate: {win_rate}%\n"
+
+            f"💰 Monthly PNL: {profit}\n"
+
+            f"💼 Balance: {balance}\n"
+
+        )
+
+
+
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در گزارش ماهانه"
+        return "Monthly report error."
