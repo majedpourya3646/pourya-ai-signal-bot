@@ -1,147 +1,79 @@
 # core/intelligence_report.py
 
-from core.market_intelligence import (
-    run_market_intelligence
-)
-
 from core.logger import logger
 
 
 
-def create_intelligence_report():
+def create_intelligence_report(
+    intelligence
+):
 
     try:
 
+        if not intelligence:
 
-        data = run_market_intelligence()
+            return (
+                "🧠 INTELLIGENCE REPORT\n\n"
+                "No intelligence data available."
+            )
 
 
 
-        analysis = data.get(
-            "analysis",
-            []
+        trend = intelligence.get(
+            "trend",
+            "UNKNOWN"
         )
 
 
-        pumps = data.get(
-            "pumps",
-            []
+        strength = intelligence.get(
+            "strength",
+            0
+        )
+
+
+        count = intelligence.get(
+            "count",
+            0
+        )
+
+
+        buy_signals = intelligence.get(
+            "buy_signals",
+            0
+        )
+
+
+        sell_signals = intelligence.get(
+            "sell_signals",
+            0
         )
 
 
 
-        message = """
+        report = (
 
-🧠 <b>Market Intelligence Report</b>
+            "🧠 POURYA TRADER AI MARKET INTELLIGENCE\n\n"
 
+            f"📊 Trend: {trend}\n"
 
-"""
+            f"💪 Strength: {strength}%\n"
 
+            f"🔎 Signals Checked: {count}\n"
 
+            f"🟢 Buy Signals: {buy_signals}\n"
 
-        message += "📊 <b>سیگنال‌های هوشمند</b>\n\n"
-
-
-
-        count = 0
-
-
-
-        for item in analysis:
-
-
-            if item.get(
-                "decision"
-            ) == "WAIT":
-
-
-                continue
-
-
-
-            count += 1
-
-
-
-            message += (
-
-                f"🪙 {item.get('symbol')}\n"
-
-                f"📌 تصمیم: {item.get('decision')}\n"
-
-                f"⭐ قدرت: {item.get('confidence')}٪\n"
-
-                f"💰 ورود: {item.get('entry')}\n"
-
-                f"🎯 TP: {item.get('tp')}\n"
-
-                f"🛑 SL: {item.get('sl')}\n\n"
-
-            )
-
-
-
-        if count == 0:
-
-
-            message += (
-
-                "❌ سیگنال قدرتمند وجود ندارد\n\n"
-
-            )
-
-
-
-        message += "🚀 <b>پامپ‌های احتمالی</b>\n\n"
-
-
-
-        if not pumps:
-
-
-            message += (
-
-                "❌ موردی پیدا نشد\n"
-
-            )
-
-
-        else:
-
-
-            for pump in pumps[:10]:
-
-
-                message += (
-
-                    f"🔥 {pump.get('symbol')}\n"
-
-                    f"📈 تغییر: {pump.get('change')}٪\n"
-
-                    f"📊 قدرت: {pump.get('score')}٪\n\n"
-
-                )
-
-
-
-        message += (
-
-            "🤖 Pourya Trader AI"
+            f"🔴 Sell Signals: {sell_signals}\n"
 
         )
 
 
 
-        return message
+        return report
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در گزارش هوش بازار"
+        return "Intelligence report error."
