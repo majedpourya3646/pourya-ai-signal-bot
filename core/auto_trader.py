@@ -1,33 +1,48 @@
+# core/auto_trader.py
+
 from coinex_trade import coinex_trade
 
-from trade_manager import (
+from core.trade_manager import (
     can_buy,
     open_trade
 )
 
-from portfolio import (
-    INITIAL_BALANCE,
-    get_trade_summary
-)
-
-from risk_manager import (
+from core.risk_engine import (
     validate_trade
 )
 
-from performance import (
+from core.portfolio_report import (
+    get_trade_summary,
+    INITIAL_BALANCE
+)
+
+from core.performance import (
     add_trade
+)
+
+from core.order_manager import (
+    create_order
 )
 
 from core.logger import logger
 
 
 
-def execute_auto_trade(opportunity):
+def execute_auto_trade(
+    opportunity
+):
 
     try:
 
-        symbol = opportunity.get("symbol")
-        signal = opportunity.get("signal", "WAIT")
+        symbol = opportunity.get(
+            "symbol"
+        )
+
+        signal = opportunity.get(
+            "signal",
+            "WAIT"
+        )
+
 
         if signal not in (
             "BUY",
@@ -35,113 +50,236 @@ def execute_auto_trade(opportunity):
             "SELL",
             "STRONG SELL"
         ):
+
             return None
 
-        if not can_buy(symbol):
-            logger.info(f"{symbol} already has an open trade.")
+
+
+        if not can_buy(
+            symbol
+        ):
+
+            logger.info(
+                f"{symbol} already has open trade"
+            )
+
             return None
 
-        entry = opportunity.get("entry")
-        tp = opportunity.get("tp")
-        sl = opportunity.get("sl")
 
-        if not all([entry, tp, sl]):
-            logger.warning(f"{symbol}: Entry/TP/SL missing.")
+
+        entry = opportunity.get(
+            "entry"
+        )
+
+        tp = opportunity.get(
+            "tp"
+        )
+
+        sl = opportunity.get(
+            "sl"
+        )
+
+
+
+        if not all(
+            [
+                entry,
+                tp,
+                sl
+            ]
+        ):
+
+            logger.warning(
+                f"{symbol} missing TP/SL"
+            )
+
             return None
+
+
 
         valid, result = validate_trade(
+
             INITIAL_BALANCE,
+
             INITIAL_BALANCE,
+
             {},
+
             entry,
+
             tp,
+
             sl
+
         )
+
+
 
         if not valid:
-            logger.info(f"{symbol}: Trade rejected ({result})")
+
+            logger.info(
+                f"{symbol} rejected {result}"
+            )
+
             return None
+
+
 
         summary = get_trade_summary(
+
             INITIAL_BALANCE,
+
             entry,
+
             tp,
+
             sl
+
         )
 
-        quantity = summary["quantity"]
+
+
+        quantity = summary.get(
+            "quantity",
+            0
+        )
+
+
 
         if quantity <= 0:
-            logger.warning(f"{symbol}: Invalid quantity.")
+
             return None
 
-        if signal in ("BUY", "STRONG BUY"):
 
-            order = coinex_trade.open_long(
-                symbol,
-                quantity
-            )
+
+        if signal in (
+            "BUY",
+            "STRONG BUY"
+        ):
 
             side = "LONG"
 
-        else:
+            order_side = "buy"
 
-            order = coinex_trade.open_short(
-                symbol,
-                quantity
-            )
+
+
+        else:
 
             side = "SHORT"
 
-        if not order:
-            return None
+            order_side = "sell"
 
-        if order.get("code") != 0:
-            logger.error(order)
-            return None
 
-        order_id = (
-            order.get("data", {})
-            .get("order_id")
+
+
+        order = create_order(
+
+            symbol,
+
+            order_side,
+
+            quantity
+
         )
 
-        open_trade(
+
+
+        if not order:
+
+            return None
+
+
+
+        order_id = (
+
+            order.get(
+                "data",
+                {}
+            )
+            .get(
+                "order_id"
+            )
+
+        )
+
+
+
+        opened = open_trade(
+
             symbol=symbol,
+
             side=side,
+
+            signal=signal,
+
+            order_id=order_id,
+
             entry=entry,
+
+            tp=tp,
+
+            sl=sl,
+
             quantity=quantity,
+
             confidence=opportunity.get(
                 "confidence",
                 0
-            ),
-            signal=signal,
-            order_id=order_id
+            )
+
         )
 
+
+
+        if not opened:
+
+            return None
+
+
+
         add_trade(
+
             symbol,
+
             signal,
+
             entry,
+
             tp,
+
             sl,
+
             None,
+
             0,
+
             quantity,
+
             opportunity.get(
                 "confidence",
                 0
             ),
+
             opportunity.get(
                 "grade",
                 ""
             )
+
         )
+
+
 
         logger.info(
-            f"{side} OPENED | {symbol} | Qty={quantity}"
+
+            f"{side} OPENED {symbol} QTY={quantity}"
+
         )
 
+
+
         return order
+
+
 
     except Exception as e:
 
