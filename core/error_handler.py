@@ -1,64 +1,28 @@
 # core/error_handler.py
 
-import traceback
-
 from core.logger import logger
-
-from telegram_sender import send_message
 
 
 
 def handle_error(
     error,
-    module="SYSTEM",
-    notify=False
+    context=""
 ):
 
     try:
 
-
-        error_message = (
-
-            f"❌ Error in {module}\n\n"
-
-            f"{str(error)}"
-
-        )
-
-
-
         logger.error(
-            error_message
+            f"{context} | ERROR: {error}"
         )
-
-
-
-        logger.error(
-
-            traceback.format_exc()
-
-        )
-
-
-
-        if notify:
-
-
-            send_message(
-
-                error_message
-
-            )
-
 
 
         return {
 
-            "status": False,
+            "success": False,
 
-            "module": module,
+            "error": str(error),
 
-            "error": str(error)
+            "context": context
 
         }
 
@@ -66,49 +30,14 @@ def handle_error(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return {
 
-            "status": False,
+            "success": False,
 
-            "error": str(e)
+            "error": str(e),
+
+            "context": context
 
         }
-
-
-
-
-def safe_execute(
-    function,
-    *args,
-    **kwargs
-):
-
-    try:
-
-
-        return function(
-
-            *args,
-
-            **kwargs
-
-        )
-
-
-
-    except Exception as e:
-
-
-        handle_error(
-            e,
-            function.__name__
-        )
-
-
-        return None
