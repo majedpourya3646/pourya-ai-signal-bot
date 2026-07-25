@@ -1,4 +1,4 @@
-# core/multi_timeframe.py
+# multi_timeframe.py
 
 from config import (
     DEFAULT_TP,
@@ -7,7 +7,6 @@ from config import (
 
 from market import get_market_data
 from core.logger import logger
-
 from signal_engine import analyze_signal
 
 
@@ -26,13 +25,32 @@ TIMEFRAME_WEIGHTS = {
 
 
 
+def smart_round(value):
+
+    if value >= 1000:
+        return round(value, 2)
+
+    elif value >= 1:
+        return round(value, 4)
+
+    elif value >= 0.01:
+        return round(value, 6)
+
+    elif value >= 0.0001:
+        return round(value, 8)
+
+    elif value >= 0.000001:
+        return round(value, 10)
+
+    else:
+        return round(value, 12)
+
+
+
 def calculate_trade_levels(
     entry,
     side
 ):
-    """
-    Calculate TP and SL based on trade direction
-    """
 
     if side == "BUY":
 
@@ -58,13 +76,12 @@ def calculate_trade_levels(
 
     else:
 
-        tp = None
-        sl = None
+        return None, None
 
 
     return (
-        round(tp, 8),
-        round(sl, 8)
+        smart_round(tp),
+        smart_round(sl)
     )
 
 
@@ -75,14 +92,12 @@ def analyze_symbol(
 
     results = []
 
-    total_score = 0
-
+    weighted_score = 0
 
     last_price = None
 
 
     for timeframe in TIMEFRAMES:
-
 
         df = get_market_data(
             symbol,
@@ -93,11 +108,10 @@ def analyze_symbol(
         if df.empty:
 
             logger.warning(
-                f"{symbol} {timeframe} DATA EMPTY"
+                f"{symbol} {timeframe} EMPTY"
             )
 
             continue
-
 
 
         last_price = float(
@@ -105,15 +119,8 @@ def analyze_symbol(
         )
 
 
-
         signal = analyze_signal(
             df
-        )
-
-
-        score = signal.get(
-            "score",
-            0
         )
 
 
@@ -123,14 +130,15 @@ def analyze_symbol(
         )
 
 
-        weight = TIMEFRAME_WEIGHTS.get(
-            timeframe,
+        score = signal.get(
+            "score",
             0
         )
 
 
-        total_score += (
-            score * weight
+        weighted_score += (
+            score *
+            TIMEFRAME_WEIGHTS[timeframe]
         )
 
 
@@ -155,52 +163,53 @@ def analyze_symbol(
 
 
     avg_score = round(
-        total_score,
+        weighted_score,
         2
     )
 
 
-    buy_count = sum(
-        1 for x in results
-        if x["signal"] in [
+    buy_votes = sum(
+        1 for item in results
+        if item["signal"] in [
             "BUY",
             "STRONG BUY"
         ]
     )
 
 
-    sell_count = sum(
-        1 for x in results
-        if x["signal"] in [
+    sell_votes = sum(
+        1 for item in results
+        if item["signal"] in [
             "SELL",
             "STRONG SELL"
         ]
     )
 
 
-
-    if buy_count == len(results):
-
-        final_signal = "BUY"
+    total = len(results)
 
 
 
-    elif sell_count == len(results):
+    # تصمیم نهایی
 
-        final_signal = "SELL"
-
-
-
-    elif avg_score >= 60:
+    if buy_votes == total:
 
         final_signal = "BUY"
 
 
-
-    elif avg_score <= 40:
+    elif sell_votes == total:
 
         final_signal = "SELL"
 
+
+    elif avg_score >= 65:
+
+        final_signal = "BUY"
+
+
+    elif avg_score <= 35:
+
+        final_signal = "SELL"
 
 
     else:
@@ -225,11 +234,11 @@ def analyze_symbol(
 
 
 
-    if final_signal in [
-        "BUY",
-        "SELL"
-    ] and last_price:
-
+    if (
+        final_signal in ["BUY", "SELL"]
+        and last_price
+        and avg_score > 0
+    ):
 
         tp, sl = calculate_trade_levels(
             last_price,
