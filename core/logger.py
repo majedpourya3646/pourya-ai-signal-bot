@@ -2,7 +2,6 @@
 
 import logging
 import os
-
 from datetime import datetime
 
 
@@ -11,84 +10,57 @@ LOG_FOLDER = "logs"
 
 
 
-def setup_logger():
+os.makedirs(
+    LOG_FOLDER,
+    exist_ok=True
+)
 
-    os.makedirs(
 
-        LOG_FOLDER,
 
-        exist_ok=True
+LOG_FILE = (
 
+    f"{LOG_FOLDER}/"
+
+    +
+
+    datetime.now()
+    .strftime(
+        "%Y-%m-%d"
     )
 
+    +
 
-    logger = logging.getLogger(
-        "PouryaTraderAI"
-    )
+    ".log"
 
-
-    logger.setLevel(
-        logging.INFO
-    )
+)
 
 
 
-    if not logger.handlers:
+logging.basicConfig(
 
+    level=logging.INFO,
 
-        file_handler = logging.FileHandler(
+    format=(
+        "%(asctime)s | "
+        "%(levelname)s | "
+        "%(message)s"
+    ),
 
-            os.path.join(
+    handlers=[
 
-                LOG_FOLDER,
-
-                f"bot_{datetime.now().strftime('%Y%m%d')}.log"
-
-            ),
-
+        logging.FileHandler(
+            LOG_FILE,
             encoding="utf-8"
+        ),
 
-        )
+        logging.StreamHandler()
 
+    ]
 
-
-        console_handler = logging.StreamHandler()
-
-
-
-        formatter = logging.Formatter(
-
-            "%(asctime)s | %(levelname)s | %(message)s"
-
-        )
+)
 
 
 
-        file_handler.setFormatter(
-            formatter
-        )
-
-
-        console_handler.setFormatter(
-            formatter
-        )
-
-
-
-        logger.addHandler(
-            file_handler
-        )
-
-
-        logger.addHandler(
-            console_handler
-        )
-
-
-
-    return logger
-
-
-
-
-logger = setup_logger()
+logger = logging.getLogger(
+    "PouryaTraderAI"
+)
