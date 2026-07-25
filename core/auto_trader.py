@@ -1,6 +1,8 @@
 # core/auto_trader.py
 
-from coinex_trade import coinex_trade
+from core.order_manager import (
+    create_order
+)
 
 from core.trade_manager import (
     can_buy,
@@ -11,17 +13,13 @@ from core.risk_engine import (
     validate_trade
 )
 
-from core.portfolio_report import (
-    get_trade_summary,
-    INITIAL_BALANCE
+from core.portfolio import (
+    INITIAL_BALANCE,
+    get_trade_summary
 )
 
 from core.performance import (
     add_trade
-)
-
-from core.order_manager import (
-    create_order
 )
 
 from core.logger import logger
@@ -60,7 +58,7 @@ def execute_auto_trade(
         ):
 
             logger.info(
-                f"{symbol} already has open trade"
+                f"{symbol} already open"
             )
 
             return None
@@ -89,10 +87,6 @@ def execute_auto_trade(
             ]
         ):
 
-            logger.warning(
-                f"{symbol} missing TP/SL"
-            )
-
             return None
 
 
@@ -118,7 +112,7 @@ def execute_auto_trade(
         if not valid:
 
             logger.info(
-                f"{symbol} rejected {result}"
+                result
             )
 
             return None
@@ -138,12 +132,10 @@ def execute_auto_trade(
         )
 
 
-
         quantity = summary.get(
             "quantity",
             0
         )
-
 
 
         if quantity <= 0:
@@ -160,7 +152,6 @@ def execute_auto_trade(
             side = "LONG"
 
             order_side = "buy"
-
 
 
         else:
@@ -204,7 +195,7 @@ def execute_auto_trade(
 
 
 
-        opened = open_trade(
+        open_trade(
 
             symbol=symbol,
 
@@ -228,12 +219,6 @@ def execute_auto_trade(
             )
 
         )
-
-
-
-        if not opened:
-
-            return None
 
 
 
@@ -268,13 +253,9 @@ def execute_auto_trade(
         )
 
 
-
         logger.info(
-
-            f"{side} OPENED {symbol} QTY={quantity}"
-
+            f"{side} OPENED {symbol}"
         )
-
 
 
         return order
