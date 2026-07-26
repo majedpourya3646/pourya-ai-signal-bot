@@ -6,6 +6,7 @@ import os
 from core.logger import logger
 
 
+
 DATABASE_PATH = "data/pourya_trader.db"
 
 
@@ -19,13 +20,17 @@ def get_connection():
             exist_ok=True
         )
 
+
         connection = sqlite3.connect(
             DATABASE_PATH
         )
 
+
         connection.row_factory = sqlite3.Row
 
+
         return connection
+
 
 
     except Exception as e:
@@ -37,16 +42,17 @@ def get_connection():
 
 
 
-
 def init_database():
 
     try:
 
         connection = get_connection()
 
+
         if not connection:
 
             return False
+
 
 
         cursor = connection.cursor()
@@ -81,6 +87,8 @@ def init_database():
 
                 pnl REAL DEFAULT 0,
 
+                exit_price REAL,
+
                 close_reason TEXT,
 
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -97,7 +105,7 @@ def init_database():
             """
             CREATE TABLE IF NOT EXISTS users (
 
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
                 username TEXT,
 
@@ -134,6 +142,13 @@ def init_database():
         connection.close()
 
 
+
+        logger.info(
+            "DATABASE INITIALIZED"
+        )
+
+
+
         return True
 
 
@@ -143,7 +158,6 @@ def init_database():
         logger.exception(e)
 
         return False
-
 
 
 
@@ -186,17 +200,12 @@ def execute_query(
             "SELECT"
         ):
 
-            rows = cursor.fetchall()
-
-
-            return [
-                dict(row)
-                for row in rows
-            ]
+            return cursor.fetchall()
 
 
 
         connection.commit()
+
 
 
         return cursor.rowcount
@@ -212,7 +221,6 @@ def execute_query(
 
 
     finally:
-
 
         if connection:
 
