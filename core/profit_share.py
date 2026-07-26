@@ -34,7 +34,9 @@ def create_profit_share_table():
             """
         )
 
+
         return True
+
 
 
     except Exception as e:
@@ -42,7 +44,6 @@ def create_profit_share_table():
         logger.exception(e)
 
         return False
-
 
 
 
@@ -57,13 +58,9 @@ def calculate_commission(
         return round(
 
             float(profit)
-
             *
-
             float(percentage)
-
             /
-
             100,
 
             2
@@ -71,12 +68,12 @@ def calculate_commission(
         )
 
 
+
     except Exception as e:
 
         logger.exception(e)
 
         return 0
-
 
 
 
@@ -90,8 +87,11 @@ def add_profit_share(
     try:
 
         commission = calculate_commission(
+
             profit,
+
             percentage
+
         )
 
 
@@ -116,7 +116,13 @@ def add_profit_share(
         )
 
 
+        logger.info(
+            f"PROFIT SHARE ADDED USER={user_id} COMMISSION={commission}"
+        )
+
+
         return True
+
 
 
     except Exception as e:
@@ -124,7 +130,6 @@ def add_profit_share(
         logger.exception(e)
 
         return False
-
 
 
 
@@ -138,11 +143,10 @@ def get_user_commission(
         result = execute_query(
             """
             SELECT
-
                 COALESCE(
                     SUM(commission),
                     0
-                )
+                ) AS total
 
             FROM profit_share
 
@@ -155,7 +159,22 @@ def get_user_commission(
         )
 
 
-        return result[0][0]
+        if not result:
+
+            return 0
+
+
+
+        return round(
+
+            float(
+                result[0]["total"]
+            ),
+
+            2
+
+        )
+
 
 
     except Exception as e:
@@ -163,3 +182,30 @@ def get_user_commission(
         logger.exception(e)
 
         return 0
+
+
+
+
+def get_all_profit_shares():
+
+    try:
+
+        return execute_query(
+            """
+            SELECT
+                user_id,
+                SUM(profit) AS total_profit,
+                SUM(commission) AS total_commission
+
+            FROM profit_share
+
+            GROUP BY user_id
+            """
+        )
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return []
