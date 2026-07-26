@@ -5,7 +5,7 @@ from market_scanner import (
 )
 
 from core.market_filters import (
-    filter_markets
+    filter_market
 )
 
 from core.logger import logger
@@ -27,7 +27,7 @@ def scan_market():
 
 
 
-        filtered = filter_markets(
+        filtered = filter_market(
             markets
         )
 
