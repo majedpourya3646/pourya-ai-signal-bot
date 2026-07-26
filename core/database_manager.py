@@ -6,7 +6,6 @@ import os
 from core.logger import logger
 
 
-
 DATABASE_PATH = "data/pourya_trader.db"
 
 
@@ -32,12 +31,12 @@ def get_connection():
         return connection
 
 
-
     except Exception as e:
 
         logger.exception(e)
 
         return None
+
 
 
 
@@ -87,8 +86,6 @@ def init_database():
 
                 pnl REAL DEFAULT 0,
 
-                exit_price REAL,
-
                 close_reason TEXT,
 
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -105,7 +102,7 @@ def init_database():
             """
             CREATE TABLE IF NOT EXISTS users (
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY,
 
                 username TEXT,
 
@@ -142,13 +139,6 @@ def init_database():
         connection.close()
 
 
-
-        logger.info(
-            "DATABASE INITIALIZED"
-        )
-
-
-
         return True
 
 
@@ -158,6 +148,7 @@ def init_database():
         logger.exception(e)
 
         return False
+
 
 
 
@@ -200,12 +191,17 @@ def execute_query(
             "SELECT"
         ):
 
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+
+
+            return [
+                dict(row)
+                for row in rows
+            ]
 
 
 
         connection.commit()
-
 
 
         return cursor.rowcount
