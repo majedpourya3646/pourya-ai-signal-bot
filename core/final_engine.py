@@ -1,18 +1,20 @@
 # core/final_engine.py
 
-from core.trading_controller import (
-    run_trading_cycle
+from core.main_engine import (
+    run_main_engine
 )
 
-from core.position_manager import (
-    check_tp_sl
+from core.final_report import (
+    create_final_report
 )
 
-from core.engine_report import (
-    create_engine_report
+from core.performance_tracker import (
+    get_statistics
 )
 
 from core.logger import logger
+
+
 
 
 
@@ -21,27 +23,55 @@ def run_final_engine():
     try:
 
         logger.info(
-            "FINAL ENGINE STARTED"
+            "FINAL ENGINE EXECUTION STARTED"
         )
 
 
-        closed = check_tp_sl()
+
+        result = run_main_engine()
 
 
-        if closed:
 
-            logger.info(
-                f"CLOSED POSITIONS: {closed}"
+        stats = get_statistics()
+
+
+
+        report_data = {
+
+            "executed": len(
+                result.get(
+                    "opened",
+                    []
+                )
+            )
+            if result
+            else 0,
+
+
+            "closed": len(
+                result.get(
+                    "closed",
+                    []
+                )
+            )
+            if result
+            else 0,
+
+
+            "opportunities": 0,
+
+
+            "profit": stats.get(
+                "profit",
+                0
             )
 
-
-
-        trades = run_trading_cycle()
+        }
 
 
 
-        report = create_engine_report(
-            len(trades)
+        report = create_final_report(
+            report_data
         )
 
 
@@ -52,18 +82,13 @@ def run_final_engine():
 
 
 
-        logger.info(
-            "FINAL ENGINE FINISHED"
-        )
-
-
         return {
 
-            "closed": closed,
+            "result": result,
 
-            "executed": trades,
+            "report": report,
 
-            "count": len(trades)
+            "statistics": stats
 
         }
 
@@ -73,18 +98,4 @@ def run_final_engine():
 
         logger.exception(e)
 
-        return {
-
-            "closed": [],
-
-            "executed": [],
-
-            "count": 0
-
-        }
-
-
-
-if __name__ == "__main__":
-
-    run_final_engine()
+        return None
