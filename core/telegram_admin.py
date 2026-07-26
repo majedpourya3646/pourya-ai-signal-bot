@@ -1,181 +1,141 @@
 # core/telegram_admin.py
 
-from telegram_sender import send_message
-
-from core.admin_panel import (
-    list_users,
-    create_user,
-    delete_user,
-    enable_user,
-    disable_user
+from core.user_manager import (
+    get_all_users,
+    activate_user,
+    deactivate_user
 )
 
-from core.final_report import (
-    create_final_report
+from core.performance_tracker import (
+    get_statistics
 )
 
 from core.logger import logger
 
 
 
-ADMIN_ID = None
+def admin_users():
+
+    try:
+
+        users = get_all_users()
 
 
 
-def set_admin(
+        if not users:
+
+            return "No users found."
+
+
+
+        message = (
+
+            "👥 USERS LIST\n\n"
+
+        )
+
+
+
+        for user in users:
+
+
+            status = (
+
+                "ACTIVE"
+
+                if user.get(
+                    "active"
+                )
+
+                else
+
+                "INACTIVE"
+
+            )
+
+
+            message += (
+
+                f"ID: {user.get('id')}\n"
+
+                f"Username: {user.get('username')}\n"
+
+                f"Status: {status}\n\n"
+
+            )
+
+
+
+        return message
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return "Users error."
+
+
+
+
+
+def admin_statistics():
+
+    try:
+
+        stats = get_statistics()
+
+
+
+        return (
+
+            "📊 ADMIN STATISTICS\n\n"
+
+            f"Trades: {stats.get('total_trades',0)}\n"
+
+            f"Wins: {stats.get('wins',0)}\n"
+
+            f"Losses: {stats.get('losses',0)}\n"
+
+            f"Win Rate: {stats.get('win_rate',0)}%\n"
+
+            f"Profit: {stats.get('profit',0)}"
+
+        )
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return "Statistics error."
+
+
+
+
+
+def admin_action(
+    action,
     user_id
-):
-
-    global ADMIN_ID
-
-    ADMIN_ID = user_id
-
-
-
-
-def is_admin(
-    user_id
-):
-
-    return (
-
-        ADMIN_ID is not None
-
-        and
-
-        user_id == ADMIN_ID
-
-    )
-
-
-
-
-def handle_admin_command(
-    user_id,
-    command
 ):
 
     try:
 
+        if action == "activate":
 
-        if not is_admin(
-            user_id
-        ):
-
-
-            return False
-
-
-
-        if command == "/admin_report":
-
-
-            send_message(
-
-                create_final_report()
-
-            )
-
-
-            return True
-
-
-
-        if command == "/admin_users":
-
-
-            send_message(
-
-                list_users()
-
-            )
-
-
-            return True
-
-
-
-        if command.startswith(
-            "/admin_add"
-        ):
-
-
-            parts = command.split()
-
-
-
-            if len(parts) < 2:
-
-                return False
-
-
-
-            result = create_user(
-
-                int(parts[1]),
-
-                parts[2]
-                if len(parts) > 2
-                else ""
-
+            return activate_user(
+                user_id
             )
 
 
 
-            send_message(
+        elif action == "deactivate":
 
-                "✅ User Added"
-
-                if result
-
-                else
-
-                "❌ Failed"
-
+            return deactivate_user(
+                user_id
             )
-
-
-            return True
-
-
-
-        if command.startswith(
-            "/admin_delete"
-        ):
-
-
-            parts = command.split()
-
-
-
-            if len(parts) < 2:
-
-                return False
-
-
-
-            result = delete_user(
-
-                int(parts[1])
-
-            )
-
-
-
-            send_message(
-
-                "✅ User Removed"
-
-                if result
-
-                else
-
-                "❌ Not Found"
-
-            )
-
-
-            return True
 
 
 
@@ -185,10 +145,6 @@ def handle_admin_command(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
