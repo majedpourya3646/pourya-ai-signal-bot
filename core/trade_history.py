@@ -9,14 +9,24 @@ from core.logger import logger
 
 
 def get_trade_history(
-    limit=50
+    limit=100
 ):
 
     try:
 
-        result = execute_query(
+        rows = execute_query(
             """
-            SELECT *
+            SELECT
+                symbol,
+                side,
+                entry,
+                tp,
+                sl,
+                quantity,
+                confidence,
+                pnl,
+                status,
+                created_at
             FROM trades
             ORDER BY id DESC
             LIMIT ?
@@ -27,7 +37,44 @@ def get_trade_history(
         )
 
 
-        return result
+
+        history = []
+
+
+
+        for row in rows:
+
+            history.append(
+
+                {
+
+                    "symbol": row[0],
+
+                    "side": row[1],
+
+                    "entry": row[2],
+
+                    "tp": row[3],
+
+                    "sl": row[4],
+
+                    "quantity": row[5],
+
+                    "confidence": row[6],
+
+                    "pnl": row[7],
+
+                    "status": row[8],
+
+                    "created_at": row[9]
+
+                }
+
+            )
+
+
+
+        return history
 
 
 
@@ -41,18 +88,23 @@ def get_trade_history(
 
 
 
-def get_closed_trades():
+def get_last_trade():
 
     try:
 
-        return execute_query(
-            """
-            SELECT *
-            FROM trades
-            WHERE status='CLOSED'
-            ORDER BY id DESC
-            """
+        history = get_trade_history(
+            1
         )
+
+
+
+        if history:
+
+            return history[0]
+
+
+
+        return None
 
 
 
@@ -60,63 +112,4 @@ def get_closed_trades():
 
         logger.exception(e)
 
-        return []
-
-
-
-
-
-def get_open_trades():
-
-    try:
-
-        return execute_query(
-            """
-            SELECT *
-            FROM trades
-            WHERE status='OPEN'
-            ORDER BY id DESC
-            """
-        )
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return []
-
-
-
-
-
-def count_trades():
-
-    try:
-
-        result = execute_query(
-            """
-            SELECT COUNT(*) as total
-            FROM trades
-            """
-        )
-
-
-        if not result:
-
-            return 0
-
-
-        return result[0].get(
-            "total",
-            0
-        )
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return 0
+        return None
