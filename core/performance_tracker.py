@@ -8,6 +8,105 @@ from core.logger import logger
 
 
 
+
+
+def create_performance_table():
+
+    try:
+
+        execute_query(
+            """
+            CREATE TABLE IF NOT EXISTS performance (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                trade_id INTEGER,
+
+                symbol TEXT,
+
+                pnl REAL DEFAULT 0,
+
+                result TEXT,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+            )
+            """
+        )
+
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def record_trade_result(
+    trade_id,
+    symbol,
+    pnl
+):
+
+    try:
+
+        result = (
+
+            "WIN"
+
+            if float(pnl) > 0
+
+            else
+
+            "LOSS"
+
+        )
+
+
+
+        execute_query(
+            """
+            INSERT INTO performance
+            (
+                trade_id,
+                symbol,
+                pnl,
+                result
+            )
+            VALUES
+            (?, ?, ?, ?)
+            """,
+            (
+                trade_id,
+                symbol,
+                pnl,
+                result
+            )
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
 def get_statistics():
 
     try:
@@ -15,27 +114,7 @@ def get_statistics():
         total = execute_query(
             """
             SELECT COUNT(*)
-            FROM trades
-            """
-        )[0][0]
-
-
-
-        open_trades = execute_query(
-            """
-            SELECT COUNT(*)
-            FROM trades
-            WHERE status='OPEN'
-            """
-        )[0][0]
-
-
-
-        closed = execute_query(
-            """
-            SELECT COUNT(*)
-            FROM trades
-            WHERE status='CLOSED'
+            FROM performance
             """
         )[0][0]
 
@@ -44,30 +123,17 @@ def get_statistics():
         wins = execute_query(
             """
             SELECT COUNT(*)
-            FROM trades
-            WHERE status='CLOSED'
-            AND pnl > 0
+            FROM performance
+            WHERE result='WIN'
             """
         )[0][0]
 
 
 
-        losses = execute_query(
+        profit = execute_query(
             """
-            SELECT COUNT(*)
-            FROM trades
-            WHERE status='CLOSED'
-            AND pnl <= 0
-            """
-        )[0][0]
-
-
-
-        pnl = execute_query(
-            """
-            SELECT
-                COALESCE(SUM(pnl),0)
-            FROM trades
+            SELECT COALESCE(SUM(pnl),0)
+            FROM performance
             """
         )[0][0]
 
@@ -77,14 +143,18 @@ def get_statistics():
 
 
 
-        if closed > 0:
+        if total > 0:
 
             win_rate = round(
 
                 wins
+
                 /
-                closed
+
+                total
+
                 *
+
                 100,
 
                 2
@@ -97,17 +167,19 @@ def get_statistics():
 
             "total_trades": total,
 
-            "open_trades": open_trades,
-
-            "closed_trades": closed,
-
             "wins": wins,
 
-            "losses": losses,
+            "losses": total - wins,
 
             "win_rate": win_rate,
 
-            "profit": pnl
+            "profit": round(
+
+                profit,
+
+                2
+
+            )
 
         }
 
@@ -117,23 +189,16 @@ def get_statistics():
 
         logger.exception(e)
 
-        return {}
+        return {
 
+            "total_trades": 0,
 
+            "wins": 0,
 
+            "losses": 0,
 
+            "win_rate": 0,
 
-def get_total_profit():
+            "profit": 0
 
-    try:
-
-        return get_statistics().get(
-            "profit",
-            0
-        )
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return 0
+        }
