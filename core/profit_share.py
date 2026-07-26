@@ -1,129 +1,165 @@
 # core/profit_share.py
 
-from core.user_manager import (
-    get_users
+from core.database_manager import (
+    execute_query
 )
 
 from core.logger import logger
 
 
 
-DEFAULT_COMMISSION = 20
-
-
-
-def calculate_profit_share(
-    total_profit,
-    commission=DEFAULT_COMMISSION
-):
+def create_profit_share_table():
 
     try:
 
+        execute_query(
+            """
+            CREATE TABLE IF NOT EXISTS profit_share (
 
-        users = get_users()
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
+                user_id INTEGER,
 
+                profit REAL DEFAULT 0,
 
-        if not users:
+                percentage REAL DEFAULT 0,
 
+                commission REAL DEFAULT 0,
 
-            return []
+                status TEXT DEFAULT 'PENDING',
 
-
-
-        results = []
-
-
-
-        for user in users:
-
-
-            if not user.get(
-                "active",
-                True
-            ):
-
-
-                continue
-
-
-
-            share = (
-
-                total_profit
-
-                *
-
-                (
-
-                    100 - commission
-
-                )
-
-                /
-
-                100
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
+            """
+        )
 
-
-
-            platform_fee = (
-
-                total_profit
-
-                *
-
-                commission
-
-                /
-
-                100
-
-            )
-
-
-
-            results.append(
-
-                {
-
-                    "user_id": user.get(
-                        "id"
-                    ),
-
-                    "username": user.get(
-                        "username"
-                    ),
-
-                    "profit": total_profit,
-
-                    "share": round(
-                        share,
-                        2
-                    ),
-
-                    "platform_fee": round(
-                        platform_fee,
-                        2
-                    )
-
-                }
-
-            )
-
-
-
-        return results
-
+        return True
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
+        return False
+
+
+
+
+
+def calculate_commission(
+    profit,
+    percentage
+):
+
+    try:
+
+        return round(
+
+            float(profit)
+
+            *
+
+            float(percentage)
+
+            /
+
+            100,
+
+            2
+
         )
 
 
-        return []
+    except Exception as e:
+
+        logger.exception(e)
+
+        return 0
+
+
+
+
+
+def add_profit_share(
+    user_id,
+    profit,
+    percentage
+):
+
+    try:
+
+        commission = calculate_commission(
+            profit,
+            percentage
+        )
+
+
+        execute_query(
+            """
+            INSERT INTO profit_share
+            (
+                user_id,
+                profit,
+                percentage,
+                commission
+            )
+            VALUES
+            (?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                profit,
+                percentage,
+                commission
+            )
+        )
+
+
+        return True
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def get_user_commission(
+    user_id
+):
+
+    try:
+
+        result = execute_query(
+            """
+            SELECT
+
+                COALESCE(
+                    SUM(commission),
+                    0
+                )
+
+            FROM profit_share
+
+            WHERE user_id=?
+
+            """,
+            (
+                user_id,
+            )
+        )
+
+
+        return result[0][0]
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return 0
