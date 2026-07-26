@@ -14,8 +14,6 @@ from core.logger import logger
 
 
 
-
-
 def create_daily_report(
     stats=None
 ):
@@ -34,34 +32,29 @@ def create_daily_report(
 
         report = (
 
-            "📊 DAILY REPORT\n"
+            "📊 گزارش روزانه Pourya Trader AI\n"
 
             "━━━━━━━━━━━━━━\n\n"
 
-            f"📅 Date: {datetime.now().strftime('%Y-%m-%d')}\n\n"
+            f"📅 تاریخ: "
+            f"{datetime.now().strftime('%Y-%m-%d')}\n\n"
 
-            f"📈 Total Trades: "
+            f"📈 تعداد معاملات: "
+            f"{stats.get('total_trades', 0)}\n"
 
-            f"{stats.get('total_trades',0)}\n"
+            f"✅ معاملات سودده: "
+            f"{stats.get('wins', 0)}\n"
 
-            f"✅ Wins: "
+            f"❌ معاملات زیان‌ده: "
+            f"{stats.get('losses', 0)}\n"
 
-            f"{stats.get('wins',0)}\n"
+            f"🎯 درصد موفقیت: "
+            f"{stats.get('win_rate', 0)}%\n"
 
-            f"❌ Losses: "
+            f"💰 سود/زیان کل: "
+            f"{stats.get('profit', 0)} USDT\n\n"
 
-            f"{stats.get('losses',0)}\n"
-
-            f"🎯 Win Rate: "
-
-            f"{stats.get('win_rate',0)}%\n"
-
-            f"💰 Profit: "
-
-            f"{stats.get('profit',0)}\n\n"
-
-            f"📌 Open Positions: "
-
+            f"📌 پوزیشن‌های باز: "
             f"{len(open_trades)}\n\n"
 
             "🤖 Pourya Trader AI"
@@ -78,4 +71,4 @@ def create_daily_report(
 
         logger.exception(e)
 
-        return "DAILY REPORT ERROR"
+        return "❌ خطا در ساخت گزارش روزانه"
