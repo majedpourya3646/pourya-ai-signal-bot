@@ -21,23 +21,26 @@ def get_current_price(
             symbol
         )
 
+
         if not ticker:
 
             return None
 
 
 
-        price = (
-
-            ticker.get(
-                "data",
-                {}
-            )
-            .get(
-                "last"
-            )
-
+        price = ticker.get(
+            "data",
+            {}
+        ).get(
+            "last"
         )
+
+
+
+        if not price:
+
+            return None
+
 
 
         return float(
@@ -45,12 +48,12 @@ def get_current_price(
         )
 
 
+
     except Exception as e:
 
         logger.exception(e)
 
         return None
-
 
 
 
@@ -64,43 +67,46 @@ def calculate_pnl(
 
     try:
 
-        if side == "LONG":
+        if side in [
+            "BUY",
+            "LONG"
+        ]:
 
             return round(
-
                 (
                     current
                     -
                     entry
-
                 )
                 *
                 quantity,
 
-                4
-
+                6
             )
 
 
-        elif side == "SHORT":
+
+        elif side in [
+            "SELL",
+            "SHORT"
+        ]:
 
             return round(
-
                 (
                     entry
                     -
                     current
-
                 )
                 *
                 quantity,
 
-                4
-
+                6
             )
+
 
 
         return 0
+
 
 
     except Exception as e:
@@ -108,7 +114,6 @@ def calculate_pnl(
         logger.exception(e)
 
         return 0
-
 
 
 
@@ -125,6 +130,12 @@ def check_tp_sl():
 
 
 
+        if not trades:
+
+            return []
+
+
+
         for trade in trades:
 
 
@@ -134,34 +145,39 @@ def check_tp_sl():
 
 
             side = trade.get(
-                "side"
+                "side",
+                "BUY"
             )
 
 
             entry = float(
                 trade.get(
-                    "entry"
+                    "entry",
+                    0
                 )
             )
 
 
             tp = float(
                 trade.get(
-                    "tp"
+                    "tp",
+                    0
                 )
             )
 
 
             sl = float(
                 trade.get(
-                    "sl"
+                    "sl",
+                    0
                 )
             )
 
 
             quantity = float(
                 trade.get(
-                    "quantity"
+                    "quantity",
+                    0
                 )
             )
 
@@ -181,13 +197,14 @@ def check_tp_sl():
 
             should_close = False
 
-
-
             reason = ""
 
 
 
-            if side == "LONG":
+            if side in [
+                "BUY",
+                "LONG"
+            ]:
 
 
                 if current >= tp:
@@ -195,6 +212,7 @@ def check_tp_sl():
                     should_close = True
 
                     reason = "TAKE PROFIT"
+
 
 
                 elif current <= sl:
@@ -206,7 +224,10 @@ def check_tp_sl():
 
 
 
-            elif side == "SHORT":
+            elif side in [
+                "SELL",
+                "SHORT"
+            ]:
 
 
                 if current <= tp:
@@ -214,6 +235,7 @@ def check_tp_sl():
                     should_close = True
 
                     reason = "TAKE PROFIT"
+
 
 
                 elif current >= sl:
@@ -225,64 +247,70 @@ def check_tp_sl():
 
 
 
-            if should_close:
+            if not should_close:
+
+                continue
 
 
-                result = coinex_trade.close_position(
-                    symbol
+
+            result = coinex_trade.close_position(
+                symbol
+            )
+
+
+
+            if result and result.get(
+                "code"
+            ) == 0:
+
+
+                pnl = calculate_pnl(
+
+                    side,
+
+                    entry,
+
+                    current,
+
+                    quantity
+
                 )
 
 
 
-                if result and result.get(
-                    "code"
-                ) == 0:
+                close_trade(
+
+                    symbol,
+
+                    current,
+
+                    pnl
+
+                )
 
 
-                    pnl = calculate_pnl(
 
-                        side,
+                closed.append(
 
-                        entry,
+                    {
 
-                        current,
+                        "symbol": symbol,
 
-                        quantity
+                        "reason": reason,
 
-                    )
+                        "pnl": pnl
 
+                    }
 
-                    close_trade(
-
-                        symbol,
-
-                        current,
-
-                        pnl
-
-                    )
+                )
 
 
-                    closed.append(
 
-                        {
+                logger.info(
 
-                            "symbol": symbol,
+                    f"{symbol} CLOSED {reason} PNL={pnl}"
 
-                            "reason": reason,
-
-                            "pnl": pnl
-
-                        }
-
-                    )
-
-
-                    logger.info(
-
-                        f"{symbol} CLOSED {reason} PNL={pnl}"
-
-                    )
+                )
 
 
 
