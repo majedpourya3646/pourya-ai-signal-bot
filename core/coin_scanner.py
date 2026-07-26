@@ -50,7 +50,7 @@ def get_symbols():
             markets
         )
 
-
+        filtered = rank_by_volume(filtered)
 
         symbols = []
 
