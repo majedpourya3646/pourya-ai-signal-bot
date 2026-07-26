@@ -8,8 +8,6 @@ from telegram_sender import (
 
 
 
-
-
 def notify_trade_opened(
     trade
 ):
@@ -18,19 +16,19 @@ def notify_trade_opened(
 
         message = (
 
-            "🟢 NEW TRADE\n\n"
+            "🟢 معامله جدید باز شد\n\n"
 
-            f"Symbol: {trade.get('symbol')}\n"
+            f"🪙 ارز: {trade.get('symbol')}\n"
 
-            f"Side: {trade.get('side')}\n"
+            f"📈 جهت: {trade.get('side')}\n"
 
-            f"Entry: {trade.get('entry')}\n"
+            f"💵 ورود: {trade.get('entry')}\n"
 
-            f"TP: {trade.get('tp')}\n"
+            f"🎯 حد سود: {trade.get('tp')}\n"
 
-            f"SL: {trade.get('sl')}\n"
+            f"🛑 حد ضرر: {trade.get('sl')}\n"
 
-            f"Confidence: {trade.get('confidence')}%"
+            f"🤖 اطمینان: {trade.get('confidence')}%"
 
         )
 
@@ -64,13 +62,13 @@ def notify_trade_closed(
 
         message = (
 
-            "🔴 TRADE CLOSED\n\n"
+            "🔴 معامله بسته شد\n\n"
 
-            f"Symbol: {trade.get('symbol')}\n"
+            f"🪙 ارز: {trade.get('symbol')}\n"
 
-            f"Reason: {trade.get('reason')}\n"
+            f"📌 دلیل: {trade.get('reason')}\n"
 
-            f"PNL: {trade.get('pnl')}"
+            f"💰 سود/ضرر: {trade.get('pnl')} USDT"
 
         )
 
