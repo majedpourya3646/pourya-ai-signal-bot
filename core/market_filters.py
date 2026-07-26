@@ -4,97 +4,121 @@ from core.logger import logger
 
 
 
+
+
 def filter_market(
-    opportunity
+    markets
 ):
 
     try:
 
-        if not opportunity:
-
-            return False
+        filtered = []
 
 
 
-        symbol = opportunity.get(
-            "symbol"
-        )
+        if not isinstance(
+            markets,
+            list
+        ):
 
-        confidence = float(
-            opportunity.get(
-                "confidence",
-                0
+            logger.error(
+                "MARKET FILTER INPUT IS NOT LIST"
             )
-        )
-
-        signal = opportunity.get(
-            "signal",
-            "WAIT"
-        )
-
-
-
-        if not symbol:
-
-            return False
-
-
-
-        if signal == "WAIT":
-
-            return False
-
-
-
-        if confidence < 60:
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-
-def filter_symbols(
-    symbols
-):
-
-    try:
-
-        if not symbols:
 
             return []
 
 
 
-        result = []
+        for market in markets:
 
 
-        for symbol in symbols:
+            if not isinstance(
+                market,
+                dict
+            ):
+
+                continue
 
 
-            if symbol.endswith(
+
+            symbol = market.get(
+                "symbol",
+                ""
+            )
+
+
+
+            volume = float(
+                market.get(
+                    "volume",
+                    0
+                )
+                or 0
+            )
+
+
+
+            last = float(
+                market.get(
+                    "last",
+                    0
+                )
+                or 0
+            )
+
+
+
+            if not symbol:
+
+                continue
+
+
+
+            if not symbol.endswith(
                 "USDT"
             ):
 
-                result.append(
-                    symbol
-                )
+                continue
 
 
 
-        return result
+            if volume <= 0:
+
+                continue
+
+
+
+            if last <= 0:
+
+                continue
+
+
+
+            filtered.append(
+
+                {
+
+                    "symbol": symbol,
+
+                    "volume": volume,
+
+                    "last": last
+
+                }
+
+            )
+
+
+
+        logger.info(
+
+            f"FILTERED MARKETS: {len(filtered)}"
+
+        )
+
+
+
+        return filtered
 
 
 
