@@ -1,11 +1,13 @@
 # core/version.py
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 BOT_NAME = "Pourya Trader AI"
 
+BUILD = "PRODUCTION_READY"
 
-BUILD = "Production"
+STATUS = "DEVELOPMENT"
+
 
 
 def get_version():
@@ -16,6 +18,22 @@ def get_version():
 
         "version": VERSION,
 
-        "build": BUILD
+        "build": BUILD,
+
+        "status": STATUS
 
     }
+
+
+
+
+
+def version_string():
+
+    return (
+
+        f"{BOT_NAME} "
+
+        f"v{VERSION}"
+
+    )
