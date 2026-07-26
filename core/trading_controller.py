@@ -4,17 +4,11 @@ from core.auto_trader import (
     execute_batch
 )
 
-from core.market_signal_bridge import (
-    analyze_market_symbols
-)
-
-from core.coin_scanner import (
-    get_symbols
+from core.opportunity_engine import (
+    find_opportunities
 )
 
 from core.logger import logger
-
-
 
 
 
@@ -22,32 +16,31 @@ def collect_opportunities():
 
     try:
 
-        symbols = get_symbols()
+        opportunities = find_opportunities(
+            limit=20
+        )
 
 
-
-        if not symbols:
+        if not opportunities:
 
             return []
 
 
 
-        signals = analyze_market_symbols(
-            symbols
-        )
+        filtered = []
 
 
 
-        opportunities = []
+        for item in opportunities:
 
 
+            signal = item.get(
+                "signal",
+                "WAIT"
+            )
 
-        for item in signals:
 
-
-            if item.get(
-                "signal"
-            ) not in [
+            if signal not in [
 
                 "BUY",
 
@@ -63,13 +56,18 @@ def collect_opportunities():
 
 
 
-            opportunities.append(
+            filtered.append(
                 item
             )
 
 
 
-        return opportunities
+        logger.info(
+            f"VALID OPPORTUNITIES: {len(filtered)}"
+        )
+
+
+        return filtered
 
 
 
@@ -78,7 +76,6 @@ def collect_opportunities():
         logger.exception(e)
 
         return []
-
 
 
 
@@ -114,9 +111,7 @@ def run_trading_cycle():
 
 
         logger.info(
-
             f"EXECUTED {len(trades)} TRADES"
-
         )
 
 
