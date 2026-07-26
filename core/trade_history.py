@@ -44,33 +44,66 @@ def get_trade_history(
 
         for row in rows:
 
-            history.append(
+            if isinstance(row, dict):
 
-                {
+                history.append(
 
-                    "symbol": row[0],
+                    {
 
-                    "side": row[1],
+                        "symbol": row.get("symbol"),
 
-                    "entry": row[2],
+                        "side": row.get("side"),
 
-                    "tp": row[3],
+                        "entry": row.get("entry"),
 
-                    "sl": row[4],
+                        "tp": row.get("tp"),
 
-                    "quantity": row[5],
+                        "sl": row.get("sl"),
 
-                    "confidence": row[6],
+                        "quantity": row.get("quantity"),
 
-                    "pnl": row[7],
+                        "confidence": row.get("confidence"),
 
-                    "status": row[8],
+                        "pnl": row.get("pnl"),
 
-                    "created_at": row[9]
+                        "status": row.get("status"),
 
-                }
+                        "created_at": row.get("created_at")
 
-            )
+                    }
+
+                )
+
+
+            else:
+
+                history.append(
+
+                    {
+
+                        "symbol": row[0],
+
+                        "side": row[1],
+
+                        "entry": row[2],
+
+                        "tp": row[3],
+
+                        "sl": row[4],
+
+                        "quantity": row[5],
+
+                        "confidence": row[6],
+
+                        "pnl": row[7],
+
+                        "status": row[8],
+
+                        "created_at": row[9]
+
+                    }
+
+                )
 
 
 
