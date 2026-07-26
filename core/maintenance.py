@@ -1,60 +1,36 @@
 # core/maintenance.py
 
-import os
-import shutil
+from core.database_manager import (
+    execute_query
+)
 
 from core.logger import logger
 
 
 
-BACKUP_FOLDER = "data/backups"
 
 
-
-def create_backup():
+def clean_closed_trades(
+    days=30
+):
 
     try:
 
-        os.makedirs(
-            BACKUP_FOLDER,
-            exist_ok=True
+        execute_query(
+            """
+            DELETE FROM trades
+            WHERE status='CLOSED'
+            AND created_at <= datetime(
+                'now',
+                ?
+            )
+            """,
+            (
+                f"-{days} days",
+            )
         )
-
-
-        source = "data/pourya_trader.db"
-
-
-        if not os.path.exists(
-            source
-        ):
-
-            return False
-
-
-
-        destination = (
-
-            f"{BACKUP_FOLDER}/"
-            "pourya_trader_backup.db"
-
-        )
-
-
-
-        shutil.copy(
-            source,
-            destination
-        )
-
-
-        logger.info(
-            "DATABASE BACKUP CREATED"
-        )
-
 
         return True
-
-
 
     except Exception as e:
 
@@ -66,50 +42,61 @@ def create_backup():
 
 
 
-def clean_old_backups():
+def vacuum_database():
 
     try:
 
-        if not os.path.exists(
-            BACKUP_FOLDER
-        ):
-
-            return True
-
-
-
-        files = os.listdir(
-            BACKUP_FOLDER
+        execute_query(
+            "VACUUM"
         )
-
-
-
-        for file in files:
-
-            path = os.path.join(
-                BACKUP_FOLDER,
-                file
-            )
-
-
-            if os.path.isfile(
-                path
-            ):
-
-                os.remove(
-                    path
-                )
-
-
-
-        logger.info(
-            "OLD BACKUPS CLEANED"
-        )
-
 
         return True
 
+    except Exception as e:
 
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def optimize_database():
+
+    try:
+
+        execute_query(
+            "ANALYZE"
+        )
+
+        vacuum_database()
+
+        return True
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def run_maintenance():
+
+    try:
+
+        clean_closed_trades()
+
+        optimize_database()
+
+        logger.info(
+            "DATABASE MAINTENANCE COMPLETED"
+        )
+
+        return True
 
     except Exception as e:
 
