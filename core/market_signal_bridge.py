@@ -26,14 +26,16 @@ def analyze_market_symbols(
                 )
 
 
+                if not result:
+
+                    continue
+
+
+
                 logger.info(
                     f"{symbol} RESULT: {result}"
                 )
 
-
-                if not result:
-
-                    continue
 
 
                 results.append(
@@ -52,8 +54,14 @@ def analyze_market_symbols(
                             0
                         ),
 
+                        "score": result.get(
+                            "score",
+                            0
+                        ),
+
                         "entry": result.get(
-                            "entry"
+                            "entry",
+                            result.get("price")
                         ),
 
                         "tp": result.get(
@@ -62,6 +70,15 @@ def analyze_market_symbols(
 
                         "sl": result.get(
                             "stop_loss"
+                        ),
+
+                        "price": result.get(
+                            "price"
+                        ),
+
+                        "timeframes": result.get(
+                            "timeframes",
+                            []
                         ),
 
                         "grade": result.get(
@@ -74,6 +91,7 @@ def analyze_market_symbols(
                 )
 
 
+
             except Exception as e:
 
                 logger.error(
@@ -81,7 +99,14 @@ def analyze_market_symbols(
                 )
 
 
+
+        logger.info(
+            f"MARKET SIGNALS GENERATED: {len(results)}"
+        )
+
+
         return results
+
 
 
     except Exception as e:
