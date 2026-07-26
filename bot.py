@@ -1,47 +1,52 @@
 # bot.py
 
-from core.main_engine import run_main_engine
+from core.app import (
+    start,
+    stop
+)
+
 from core.logger import logger
 
 
 
-def start_bot():
+
+
+def main():
 
     try:
 
         logger.info(
-            "STARTING POURYA TRADER AI SINGLE RUN"
+            "STARTING POURYA TRADER AI BOT"
         )
 
 
-        result = run_main_engine()
+        start()
+
+
+
+    except KeyboardInterrupt:
 
 
         logger.info(
-            f"MAIN ENGINE RESULT: {result}"
+            "BOT STOPPED BY USER"
         )
 
 
-        logger.info(
-            "BOT RUN FINISHED"
-        )
-
-
-        return result
+        stop()
 
 
 
     except Exception as e:
 
-
         logger.exception(e)
 
 
-        return []
+        stop()
+
 
 
 
 
 if __name__ == "__main__":
 
-    start_bot()
+    main()
