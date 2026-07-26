@@ -1,7 +1,7 @@
 # core/coin_scanner.py
 
-from market_scanner import (
-    get_all_markets
+from core.market_api import (
+    get_market_tickers
 )
 
 from core.market_filters import (
@@ -12,18 +12,37 @@ from core.logger import logger
 
 
 
-def scan_market():
+
+
+def get_symbols():
 
     try:
 
-
-        markets = get_all_markets()
+        markets = get_market_tickers()
 
 
 
         if not markets:
 
+            logger.warning(
+                "NO MARKET DATA RECEIVED"
+            )
+
             return []
+
+
+
+        logger.info(
+            f"RAW MARKETS COUNT: {len(markets)}"
+        )
+
+
+
+        if len(markets) > 0:
+
+            logger.info(
+                f"RAW MARKET SAMPLE: {markets[0]}"
+            )
 
 
 
@@ -33,19 +52,44 @@ def scan_market():
 
 
 
-        return filtered
+        symbols = []
+
+
+
+        for item in filtered:
+
+
+            symbol = item.get(
+                "symbol"
+            )
+
+
+            if symbol:
+
+                symbols.append(
+                    symbol
+                )
+
+
+
+        logger.info(
+
+            f"AVAILABLE SYMBOLS: {len(symbols)}"
+
+        )
+
+
+
+        return symbols
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
+
 
 
 
@@ -56,6 +100,20 @@ def rank_by_volume(
 
     try:
 
+        if not markets:
+
+            return []
+
+
+
+        if not isinstance(
+            markets,
+            list
+        ):
+
+            return []
+
+
 
         return sorted(
 
@@ -63,14 +121,16 @@ def rank_by_volume(
 
             key=lambda x:
 
-            float(
+                float(
 
-                x.get(
-                    "volume",
-                    0
-                )
+                    x.get(
+                        "volume",
+                        0
+                    )
 
-            ),
+                    or 0
+
+                ),
 
             reverse=True
 
@@ -80,95 +140,6 @@ def rank_by_volume(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
-
-        return []
-
-
-
-
-def get_top_coins(
-    limit=50
-):
-
-    markets = scan_market()
-
-
-
-    ranked = rank_by_volume(
-        markets
-    )
-
-
-
-    return ranked[:limit]
-
-
-
-
-def get_symbols(
-    limit=50
-):
-
-    coins = get_top_coins(
-        limit
-    )
-
-
-    symbols = []
-
-
-
-    for coin in coins:
-
-
-        symbol = (
-
-            coin.get(
-                "market"
-            )
-
-            or
-
-            coin.get(
-                "symbol"
-            )
-
-        )
-
-
-
-        if symbol:
-
-            symbols.append(
-                symbol
-            )
-
-
-
-    return symbols
-def scan_all_coins():
-
-    """
-    Compatibility function
-    Used by market_discovery
-    """
-
-    try:
-
-        return get_top_coins(
-            200
-        )
-
-
-    except Exception as e:
-
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
         return []
