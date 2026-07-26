@@ -1,46 +1,64 @@
 # core/main_engine.py
 
+from core.engine_connector import (
+    run_full_engine
+)
+
+from core.config_validator import (
+    validate_config
+)
+
 from core.startup_manager import (
     initialize_system
 )
 
-from core.opportunity_engine import (
-    find_opportunities
-)
+from core.logger import logger
 
-from core.auto_trader import (
-    execute_auto_trade
-)
 
-from core.engine_report import (
-    create_engine_report
-)
 
-from core.market_alerts import (
-    send_signal_alert
-)
+ENGINE_RUNNING = False
 
-from telegram_sender import (
-    send_message
-)
 
-from core.config_manager import (
-    get_setting
-)
-
-from core.position_manager import (
-    check_tp_sl
-)
-
-from core.logger import (
-    logger
-)
 
 
 
 def run_main_engine():
 
+    global ENGINE_RUNNING
+
+
+
     try:
+
+        if ENGINE_RUNNING:
+
+            return False
+
+
+
+        if not validate_config():
+
+            logger.error(
+                "CONFIG VALIDATION FAILED"
+            )
+
+            return False
+
+
+
+        if not initialize_system():
+
+            logger.error(
+                "SYSTEM INIT FAILED"
+            )
+
+            return False
+
+
+
+        ENGINE_RUNNING = True
+
+
 
         logger.info(
             "MAIN ENGINE STARTED"
@@ -48,118 +66,17 @@ def run_main_engine():
 
 
 
-        if not initialize_system():
-
-            logger.error(
-                "SYSTEM INITIALIZATION FAILED"
-            )
-
-            return []
-
-
-
-        closed = check_tp_sl()
-
-
-
-        if closed:
-
-            logger.info(
-                f"CLOSED POSITIONS: {closed}"
-            )
-
-
-
-        opportunities = find_opportunities(
-            10
-        )
+        result = run_full_engine()
 
 
 
         logger.info(
-            f"FOUND OPPORTUNITIES: {len(opportunities)}"
+            f"ENGINE RESULT: {result}"
         )
 
 
 
-        executed = []
-
-
-
-        for opportunity in opportunities:
-
-
-            logger.info(
-                opportunity
-            )
-
-
-
-            confidence = opportunity.get(
-                "confidence",
-                0
-            )
-
-
-
-            min_confidence = get_setting(
-                "min_confidence",
-                65
-            )
-
-
-
-            if confidence < min_confidence:
-
-                continue
-
-
-
-            send_signal_alert(
-                opportunity
-            )
-
-
-
-            if get_setting(
-                "auto_trade",
-                False
-            ):
-
-
-                result = execute_auto_trade(
-                    opportunity
-                )
-
-
-
-                if result:
-
-                    executed.append(
-                        result
-                    )
-
-
-
-        report = create_engine_report(
-            len(executed)
-        )
-
-
-
-        send_message(
-            report
-        )
-
-
-
-        logger.info(
-            "MAIN ENGINE FINISHED"
-        )
-
-
-
-        return executed
+        return result
 
 
 
@@ -167,10 +84,48 @@ def run_main_engine():
 
         logger.exception(e)
 
-        return []
+        return None
 
 
 
-if __name__ == "__main__":
 
-    run_main_engine()
+
+def stop_engine():
+
+    global ENGINE_RUNNING
+
+
+
+    try:
+
+        ENGINE_RUNNING = False
+
+
+
+        logger.info(
+            "MAIN ENGINE STOPPED"
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def engine_status():
+
+    return {
+
+        "running": ENGINE_RUNNING
+
+    }
