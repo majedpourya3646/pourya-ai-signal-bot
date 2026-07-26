@@ -2,92 +2,137 @@
 
 import time
 
-from telegram_sender import send_message
-
-from core.engine_report import (
-    create_engine_report
+from core.daily_report import (
+    create_daily_report
 )
 
-from core.final_report import (
-    create_final_report
+from core.monthly_report import (
+    create_monthly_report
 )
+
+from core.performance_tracker import (
+    get_statistics
+)
+
+from core.logger import logger
 
 from core.config_manager import (
     get_setting
 )
 
-from core.logger import logger
 
 
+def send_daily_report():
 
-REPORT_INTERVAL = 86400
+    try:
 
-
-
-def run_report_scheduler():
-
-    logger.info(
-        "REPORT SCHEDULER STARTED"
-    )
+        stats = get_statistics()
 
 
-
-    while True:
-
-
-        try:
-
-
-            if not get_setting(
-                "telegram_alerts",
-                True
-            ):
-
-
-                time.sleep(
-                    REPORT_INTERVAL
-                )
-
-                continue
-
-
-
-            engine_report = create_engine_report()
-
-
-
-            final_report = create_final_report()
-
-
-
-            send_message(
-                engine_report
-            )
-
-
-
-            send_message(
-                final_report
-            )
-
-
-
-        except Exception as e:
-
-
-            logger.exception(
-                e
-            )
-
-
-
-        time.sleep(
-            REPORT_INTERVAL
+        report = create_daily_report(
+            stats
         )
 
 
+        return report
 
-if __name__ == "__main__":
 
 
-    run_report_scheduler()
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
+
+
+
+
+
+def send_monthly_report():
+
+    try:
+
+        stats = get_statistics()
+
+
+        report = create_monthly_report(
+            stats
+        )
+
+
+        return report
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
+
+
+
+
+
+def start_report_scheduler():
+
+    try:
+
+        logger.info(
+            "REPORT SCHEDULER STARTED"
+        )
+
+
+        while True:
+
+
+            daily_interval = get_setting(
+
+                "daily_report_interval",
+
+                86400
+
+            )
+
+
+            monthly_interval = get_setting(
+
+                "monthly_report_interval",
+
+                2592000
+
+            )
+
+
+
+            daily = send_daily_report()
+
+
+            if daily:
+
+                logger.info(
+                    daily
+                )
+
+
+
+            monthly = send_monthly_report()
+
+
+            if monthly:
+
+                logger.info(
+                    monthly
+                )
+
+
+
+            time.sleep(
+                daily_interval
+            )
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
