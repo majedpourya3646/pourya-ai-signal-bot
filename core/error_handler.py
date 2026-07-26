@@ -11,16 +11,29 @@ def handle_error(
 
     try:
 
-        logger.error(
-            f"{context} | ERROR: {error}"
+        message = str(
+            error
         )
+
+
+        if context:
+
+            logger.error(
+                f"{context}: {message}"
+            )
+
+        else:
+
+            logger.error(
+                message
+            )
 
 
         return {
 
             "success": False,
 
-            "error": str(error),
+            "error": message,
 
             "context": context
 
@@ -36,8 +49,33 @@ def handle_error(
 
             "success": False,
 
-            "error": str(e),
-
-            "context": context
+            "error": str(e)
 
         }
+
+
+
+
+
+def safe_error(
+    func,
+    *args,
+    **kwargs
+):
+
+    try:
+
+        return func(
+            *args,
+            **kwargs
+        )
+
+
+    except Exception as e:
+
+        handle_error(
+            e,
+            func.__name__
+        )
+
+        return None
