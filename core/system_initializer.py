@@ -16,8 +16,6 @@ from core.logger import logger
 
 
 
-
-
 def initialize():
 
     try:
@@ -28,21 +26,27 @@ def initialize():
 
 
 
-        if not init_database():
+        steps = [
 
-            return False
+            init_database,
+
+            create_performance_table,
+
+            create_profit_share_table
+
+        ]
 
 
 
-        if not create_performance_table():
+        for step in steps:
 
-            return False
+            if not step():
 
+                logger.error(
+                    f"INITIALIZATION FAILED: {step.__name__}"
+                )
 
-
-        if not create_profit_share_table():
-
-            return False
+                return False
 
 
 
@@ -61,7 +65,6 @@ def initialize():
         logger.exception(e)
 
         return False
-
 
 
 
