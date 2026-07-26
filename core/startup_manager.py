@@ -4,6 +4,10 @@ from core.database_manager import (
     init_database
 )
 
+from core.health_monitor import (
+    check_database
+)
+
 from core.logger import logger
 
 
@@ -13,14 +17,16 @@ def initialize_system():
     try:
 
         logger.info(
-            "SYSTEM INITIALIZATION STARTED"
+            "INITIALIZING SYSTEM"
         )
 
 
-        database_ready = init_database()
+
+        database = init_database()
 
 
-        if not database_ready:
+
+        if not database:
 
             logger.error(
                 "DATABASE INITIALIZATION FAILED"
@@ -30,15 +36,43 @@ def initialize_system():
 
 
 
+        if not check_database():
+
+            logger.error(
+                "DATABASE CHECK FAILED"
+            )
+
+            return False
+
+
+
         logger.info(
-            "DATABASE READY"
+            "SYSTEM READY"
         )
 
 
-        logger.info(
-            "SYSTEM INITIALIZATION COMPLETED"
-        )
 
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+def shutdown_system():
+
+    try:
+
+        logger.info(
+            "SYSTEM SHUTDOWN"
+        )
 
         return True
 
