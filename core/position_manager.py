@@ -1,48 +1,47 @@
 # core/position_manager.py
 
-from coinex_futures_api import (
-    coinex_futures
-)
+from coinex_trade import coinex_trade
 
 from core.trade_manager import (
-    close_trade,
-    get_trade
-)
-
-from core.order_manager import (
-    create_order
+    get_open_trades,
+    close_trade
 )
 
 from core.logger import logger
 
 
 
-def get_positions():
+def get_current_price(
+    symbol
+):
 
     try:
 
-        result = coinex_futures.get_futures_positions()
+        ticker = coinex_trade.get_ticker(
+            symbol
+        )
+
+        if not ticker:
+
+            return None
 
 
-        if not result:
 
-            return []
+        price = (
 
-
-        if result.get(
-            "code"
-        ) != 0:
-
-            logger.error(
-                result
+            ticker.get(
+                "data",
+                {}
+            )
+            .get(
+                "last"
             )
 
-            return []
+        )
 
 
-        return result.get(
-            "data",
-            []
+        return float(
+            price
         )
 
 
@@ -50,104 +49,65 @@ def get_positions():
 
         logger.exception(e)
 
-        return []
+        return None
 
 
 
 
 
-def monitor_positions():
-
-    closed_positions = []
-
+def calculate_pnl(
+    side,
+    entry,
+    current,
+    quantity
+):
 
     try:
 
-        positions = get_positions()
+        if side == "LONG":
 
+            return round(
 
-        if not positions:
+                (
+                    current
+                    -
+                    entry
 
-            return []
-
-
-
-        for position in positions:
-
-
-            symbol = position.get(
-                "market"
-            )
-
-
-            if not symbol:
-
-                continue
-
-
-
-            unrealized = float(
-                position.get(
-                    "unrealized_pnl",
-                    0
                 )
-            )
+                *
+                quantity,
 
-
-
-            trade = get_trade(
-                symbol
-            )
-
-
-            if not trade:
-
-                continue
-
-
-
-            closed_positions.append(
-
-                {
-                    "symbol": symbol,
-
-                    "pnl": unrealized,
-
-                    "status":
-                        "PROFIT"
-                        if unrealized > 0
-                        else "LOSS",
-
-                    "side": trade.get(
-                        "side"
-                    ),
-
-                    "entry": trade.get(
-                        "entry"
-                    ),
-
-                    "tp": trade.get(
-                        "tp"
-                    ),
-
-                    "sl": trade.get(
-                        "sl"
-                    )
-
-                }
+                4
 
             )
 
 
-        return closed_positions
+        elif side == "SHORT":
 
+            return round(
+
+                (
+                    entry
+                    -
+                    current
+
+                )
+                *
+                quantity,
+
+                4
+
+            )
+
+
+        return 0
 
 
     except Exception as e:
 
         logger.exception(e)
 
-        return []
+        return 0
 
 
 
@@ -155,62 +115,21 @@ def monitor_positions():
 
 def check_tp_sl():
 
-    results = []
+    closed = []
+
 
 
     try:
 
-        positions = get_positions()
-
-
-        if not positions:
-
-            return []
+        trades = get_open_trades()
 
 
 
-        for position in positions:
+        for trade in trades:
 
 
-            symbol = position.get(
-                "market"
-            )
-
-
-            price = float(
-
-                position.get(
-                    "mark_price",
-                    0
-                )
-
-            )
-
-
-            trade = get_trade(
-                symbol
-            )
-
-
-            if not trade:
-
-                continue
-
-
-
-            tp = float(
-                trade.get(
-                    "tp",
-                    0
-                )
-            )
-
-
-            sl = float(
-                trade.get(
-                    "sl",
-                    0
-                )
+            symbol = trade.get(
+                "symbol"
             )
 
 
@@ -219,8 +138,50 @@ def check_tp_sl():
             )
 
 
+            entry = float(
+                trade.get(
+                    "entry"
+                )
+            )
 
-            close = False
+
+            tp = float(
+                trade.get(
+                    "tp"
+                )
+            )
+
+
+            sl = float(
+                trade.get(
+                    "sl"
+                )
+            )
+
+
+            quantity = float(
+                trade.get(
+                    "quantity"
+                )
+            )
+
+
+
+            current = get_current_price(
+                symbol
+            )
+
+
+
+            if not current:
+
+                continue
+
+
+
+            should_close = False
+
+
 
             reason = ""
 
@@ -229,90 +190,103 @@ def check_tp_sl():
             if side == "LONG":
 
 
-                if price >= tp:
+                if current >= tp:
 
-                    close = True
+                    should_close = True
 
-                    reason = "TAKE_PROFIT"
+                    reason = "TAKE PROFIT"
 
 
-                elif price <= sl:
+                elif current <= sl:
 
-                    close = True
+                    should_close = True
 
-                    reason = "STOP_LOSS"
+                    reason = "STOP LOSS"
+
 
 
 
             elif side == "SHORT":
 
 
-                if price <= tp:
+                if current <= tp:
 
-                    close = True
+                    should_close = True
 
-                    reason = "TAKE_PROFIT"
-
-
-                elif price >= sl:
-
-                    close = True
-
-                    reason = "STOP_LOSS"
+                    reason = "TAKE PROFIT"
 
 
+                elif current >= sl:
+
+                    should_close = True
+
+                    reason = "STOP LOSS"
 
 
 
-            if close:
+
+            if should_close:
 
 
-                order = create_order(
-
-                    symbol,
-
-                    "sell",
-
-                    trade.get(
-                        "quantity"
-                    )
-
+                result = coinex_trade.close_position(
+                    symbol
                 )
 
 
-                if order:
+
+                if result and result.get(
+                    "code"
+                ) == 0:
 
 
-                    result = close_trade(
+                    pnl = calculate_pnl(
 
-                        symbol,
+                        side,
 
-                        price,
+                        entry,
 
-                        reason
+                        current,
+
+                        quantity
 
                     )
 
 
-                    if result:
+                    close_trade(
 
-                        results.append(
+                        symbol,
 
-                            {
+                        current,
 
-                                "symbol": symbol,
+                        pnl
 
-                                "reason": reason,
-
-                                "price": price
-
-                            }
-
-                        )
+                    )
 
 
+                    closed.append(
 
-        return results
+                        {
+
+                            "symbol": symbol,
+
+                            "reason": reason,
+
+                            "pnl": pnl
+
+                        }
+
+                    )
+
+
+                    logger.info(
+
+                        f"{symbol} CLOSED {reason} PNL={pnl}"
+
+                    )
+
+
+
+        return closed
 
 
 
