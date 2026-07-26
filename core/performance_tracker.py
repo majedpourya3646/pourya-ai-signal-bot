@@ -1,258 +1,139 @@
 # core/performance_tracker.py
 
-import json
-import os
-
-from datetime import datetime
+from core.database_manager import (
+    execute_query
+)
 
 from core.logger import logger
 
 
 
-PERFORMANCE_FILE = "data/performance.json"
-
-
-
-def load_performance():
+def get_statistics():
 
     try:
 
-        if not os.path.exists(
-            PERFORMANCE_FILE
-        ):
-
-            return {
-
-                "wins": 0,
-
-                "losses": 0,
-
-                "profit": 0,
-
-                "trades": 0
-
-            }
+        total = execute_query(
+            """
+            SELECT COUNT(*)
+            FROM trades
+            """
+        )[0][0]
 
 
-        with open(
 
-            PERFORMANCE_FILE,
+        open_trades = execute_query(
+            """
+            SELECT COUNT(*)
+            FROM trades
+            WHERE status='OPEN'
+            """
+        )[0][0]
 
-            "r",
-
-            encoding="utf-8"
-
-        ) as file:
 
 
-            return json.load(
-                file
+        closed = execute_query(
+            """
+            SELECT COUNT(*)
+            FROM trades
+            WHERE status='CLOSED'
+            """
+        )[0][0]
+
+
+
+        wins = execute_query(
+            """
+            SELECT COUNT(*)
+            FROM trades
+            WHERE status='CLOSED'
+            AND pnl > 0
+            """
+        )[0][0]
+
+
+
+        losses = execute_query(
+            """
+            SELECT COUNT(*)
+            FROM trades
+            WHERE status='CLOSED'
+            AND pnl <= 0
+            """
+        )[0][0]
+
+
+
+        pnl = execute_query(
+            """
+            SELECT
+                COALESCE(SUM(pnl),0)
+            FROM trades
+            """
+        )[0][0]
+
+
+
+        win_rate = 0
+
+
+
+        if closed > 0:
+
+            win_rate = round(
+
+                wins
+                /
+                closed
+                *
+                100,
+
+                2
+
             )
 
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
 
 
         return {
 
-            "wins": 0,
+            "total_trades": total,
 
-            "losses": 0,
+            "open_trades": open_trades,
 
-            "profit": 0,
+            "closed_trades": closed,
 
-            "trades": 0
+            "wins": wins,
+
+            "losses": losses,
+
+            "win_rate": win_rate,
+
+            "profit": pnl
 
         }
 
 
 
-
-def save_performance(
-    data
-):
-
-    try:
-
-
-        os.makedirs(
-
-            "data",
-
-            exist_ok=True
-
-        )
-
-
-        with open(
-
-            PERFORMANCE_FILE,
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            json.dump(
-
-                data,
-
-                file,
-
-                ensure_ascii=False,
-
-                indent=4
-
-            )
-
-
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
-
-
-
-def add_result(
-    result,
-    profit
-):
-
-    try:
-
-
-        data = load_performance()
-
-
-        data["trades"] += 1
-
-
-
-        if result == "WIN":
-
-
-            data["wins"] += 1
-
-
-
-        else:
-
-
-            data["losses"] += 1
-
-
-
-        data["profit"] = round(
-
-            data["profit"] + profit,
-
-            2
-
-        )
-
-
-        data["last_update"] = (
-
-            datetime.now()
-
-            .strftime(
-
-                "%Y-%m-%d %H:%M:%S"
-
-            )
-
-        )
-
-
-
-        save_performance(
-            data
-        )
-
-
-
-        return data
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return {}
 
 
 
 
-def get_summary():
 
-    data = load_performance()
+def get_total_profit():
 
+    try:
 
-    total = data.get(
-        "trades",
-        0
-    )
-
-
-    win_rate = 0
-
-
-
-    if total > 0:
-
-
-        win_rate = round(
-
-            (
-
-                data["wins"]
-
-                /
-
-                total
-
-            ) * 100,
-
-            2
-
-        )
-
-
-
-    return {
-
-        "trades": total,
-
-        "wins": data.get(
-            "wins",
-            0
-        ),
-
-        "losses": data.get(
-            "losses",
-            0
-        ),
-
-        "profit": data.get(
+        return get_statistics().get(
             "profit",
             0
-        ),
+        )
 
-        "win_rate": win_rate
+    except Exception as e:
 
-    }
+        logger.exception(e)
+
+        return 0
