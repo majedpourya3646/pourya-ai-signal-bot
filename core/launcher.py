@@ -1,36 +1,46 @@
 # core/launcher.py
 
-from core.final_engine import (
-    run_final_engine
+from core.main_engine import (
+    run_main_engine
+)
+
+from core.market_scheduler import (
+    start_scheduler
+)
+
+from core.startup_manager import (
+    initialize_system
 )
 
 from core.logger import logger
 
 
 
-def start():
+def start_application():
 
     try:
 
         logger.info(
-            "POURYA TRADER AI LAUNCHER STARTED"
+            "STARTING POURYA TRADER AI"
         )
 
 
-        result = run_final_engine()
+
+        if not initialize_system():
+
+            logger.error(
+                "SYSTEM INITIALIZATION FAILED"
+            )
+
+            return False
 
 
-        logger.info(
-            f"ENGINE RESULT: {result}"
-        )
+
+        run_main_engine()
 
 
-        logger.info(
-            "POURYA TRADER AI FINISHED"
-        )
 
-
-        return result
+        return True
 
 
 
@@ -38,10 +48,20 @@ def start():
 
         logger.exception(e)
 
-        return {}
+        return False
 
 
 
-if __name__ == "__main__":
 
-    start()
+
+def start_background():
+
+    try:
+
+        start_scheduler()
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
