@@ -14,6 +14,10 @@ from core.performance_tracker import (
     get_statistics
 )
 
+from core.telegram_notifier import (
+    notify_system
+)
+
 from core.logger import logger
 
 from core.config_manager import (
@@ -34,6 +38,13 @@ def send_daily_report():
         )
 
 
+        if report:
+
+            notify_system(
+                report
+            )
+
+
         return report
 
 
@@ -43,7 +54,6 @@ def send_daily_report():
         logger.exception(e)
 
         return None
-
 
 
 
@@ -60,6 +70,13 @@ def send_monthly_report():
         )
 
 
+        if report:
+
+            notify_system(
+                report
+            )
+
+
         return report
 
 
@@ -73,7 +90,6 @@ def send_monthly_report():
 
 
 
-
 def start_report_scheduler():
 
     try:
@@ -83,7 +99,18 @@ def start_report_scheduler():
         )
 
 
+
+        last_daily = 0
+
+        last_monthly = 0
+
+
+
         while True:
+
+
+            now = time.time()
+
 
 
             daily_interval = get_setting(
@@ -105,30 +132,44 @@ def start_report_scheduler():
 
 
 
-            daily = send_daily_report()
+            if now - last_daily >= daily_interval:
 
 
-            if daily:
-
-                logger.info(
-                    daily
-                )
+                report = send_daily_report()
 
 
+                if report:
 
-            monthly = send_monthly_report()
+                    logger.info(
+                        "DAILY REPORT SENT"
+                    )
 
 
-            if monthly:
+                last_daily = now
 
-                logger.info(
-                    monthly
-                )
+
+
+
+            if now - last_monthly >= monthly_interval:
+
+
+                report = send_monthly_report()
+
+
+                if report:
+
+                    logger.info(
+                        "MONTHLY REPORT SENT"
+                    )
+
+
+                last_monthly = now
+
 
 
 
             time.sleep(
-                daily_interval
+                60
             )
 
 
