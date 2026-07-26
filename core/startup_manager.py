@@ -22,11 +22,7 @@ def initialize_system():
 
 
 
-        database = init_database()
-
-
-
-        if not database:
+        if not init_database():
 
             logger.error(
                 "DATABASE INITIALIZATION FAILED"
@@ -65,7 +61,6 @@ def initialize_system():
 
 
 
-
 def shutdown_system():
 
     try:
@@ -73,6 +68,7 @@ def shutdown_system():
         logger.info(
             "SYSTEM SHUTDOWN"
         )
+
 
         return True
 
