@@ -17,11 +17,14 @@ from core.logger import logger
 
 
 
-
-
 def start():
 
     try:
+
+        logger.info(
+            "STARTING POURYA TRADER AI BOT"
+        )
+
 
         logger.info(
             version_string()
@@ -39,11 +42,17 @@ def start():
 
 
 
-        start_all_services()
+        logger.info(
+            "SYSTEM READY"
+        )
 
 
 
-        return True
+        result = start_all_services()
+
+
+
+        return bool(result)
 
 
 
@@ -52,7 +61,6 @@ def start():
         logger.exception(e)
 
         return False
-
 
 
 
@@ -80,7 +88,6 @@ def stop():
         logger.exception(e)
 
         return False
-
 
 
 
