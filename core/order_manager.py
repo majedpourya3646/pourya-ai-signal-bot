@@ -1,39 +1,131 @@
 # core/order_manager.py
 
+from coinex_trade import coinex_trade
+
+from core.config_manager import (
+    get_setting
+)
+
 from core.logger import logger
 
-from coinex_trade import coinex_trade
+
+
+
+
+def calculate_quantity(
+    balance,
+    price
+):
+
+    try:
+
+        risk = get_setting(
+
+            "risk_percent",
+
+            1
+
+        )
+
+
+        amount = (
+
+            float(balance)
+
+            *
+
+            float(risk)
+
+            /
+
+            100
+
+        )
+
+
+        quantity = (
+
+            amount
+
+            /
+
+            float(price)
+
+        )
+
+
+        return round(
+
+            quantity,
+
+            6
+
+        )
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return 0
+
+
 
 
 
 def create_order(
     symbol,
     side,
-    quantity,
-    order_type="market"
+    quantity
 ):
 
     try:
 
-        if side.lower() == "buy":
+        paper = get_setting(
 
-            result = coinex_trade.open_long(
-                symbol,
-                quantity
+            "paper_trading",
+
+            True
+
+        )
+
+
+
+        if paper:
+
+
+            logger.info(
+
+                f"PAPER ORDER {symbol} {side} {quantity}"
+
             )
 
 
-        elif side.lower() == "sell":
+            return {
 
-            result = coinex_trade.open_short(
-                symbol,
-                quantity
-            )
+                "status": "PAPER",
+
+                "symbol": symbol,
+
+                "side": side,
+
+                "quantity": quantity
+
+            }
 
 
-        else:
 
-            return None
+
+        result = coinex_trade.create_order(
+
+            symbol,
+
+            side,
+
+            quantity
+
+        )
 
 
 
@@ -55,81 +147,9 @@ def create_order(
 
 
 
-        return result
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return None
-
-
-
-
-
-def close_order(
-    symbol
-):
-
-    try:
-
-        result = coinex_trade.close_position(
-            symbol
+        return result.get(
+            "data"
         )
-
-
-        if not result:
-
-            return None
-
-
-
-        if result.get(
-            "code"
-        ) != 0:
-
-            logger.error(
-                result
-            )
-
-            return None
-
-
-
-        return result
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return None
-
-
-
-
-
-def get_order_status(
-    order_id
-):
-
-    try:
-
-        result = coinex_trade.get_order(
-            order_id
-        )
-
-
-        if not result:
-
-            return None
-
-
-
-        return result
 
 
 
@@ -144,25 +164,22 @@ def get_order_status(
 
 
 def cancel_order(
-    order_id
+    order_id,
+    symbol
 ):
 
     try:
 
         result = coinex_trade.cancel_order(
-            order_id
+
+            order_id,
+
+            symbol
+
         )
 
 
-        if result.get(
-            "code"
-        ) == 0:
-
-            return True
-
-
-
-        return False
+        return result
 
 
 
