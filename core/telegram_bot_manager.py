@@ -1,143 +1,96 @@
 # core/telegram_bot_manager.py
 
-import requests
-
-from config import (
-    BOT_TOKEN
+from core.telegram_commands import (
+    process_command
 )
 
-from core.telegram_commands import (
-    handle_command
+from core.telegram_admin import (
+    admin_users,
+    admin_statistics
 )
 
 from core.logger import logger
 
 
 
-TELEGRAM_API = (
-    f"https://api.telegram.org/bot{BOT_TOKEN}"
-)
+ADMIN_COMMANDS = [
+
+    "/users",
+
+    "/stats"
+
+]
 
 
 
-def get_updates(
-    offset=None
+
+
+def handle_message(
+    user_id,
+    text,
+    username=""
 ):
 
     try:
 
-
-        params = {}
-
-
-        if offset:
-
-            params["offset"] = offset
+        if text in ADMIN_COMMANDS:
 
 
+            if text == "/users":
 
-        response = requests.get(
+                return admin_users()
 
-            TELEGRAM_API + "/getUpdates",
 
-            params=params,
 
-            timeout=30
+            if text == "/stats":
+
+                return admin_statistics()
+
+
+
+
+        return process_command(
+
+            user_id,
+
+            text,
+
+            username
 
         )
-
-
-
-        return response.json()
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
+        return "Telegram bot error."
+
+
+
+
+
+def send_bot_message(
+    user_id,
+    message
+):
+
+    try:
+
+        logger.info(
+
+            f"SEND MESSAGE TO {user_id}: {message}"
+
         )
 
 
-        return {}
+        return True
 
 
 
+    except Exception as e:
 
-def process_updates():
+        logger.exception(e)
 
-    offset = None
-
-
-
-    logger.info(
-        "TELEGRAM BOT MANAGER STARTED"
-    )
-
-
-
-    while True:
-
-
-        try:
-
-
-            updates = get_updates(
-                offset
-            )
-
-
-
-            for update in updates.get(
-                "result",
-                []
-            ):
-
-
-                offset = update["update_id"] + 1
-
-
-
-                message = update.get(
-                    "message",
-                    {}
-                )
-
-
-                text = message.get(
-                    "text",
-                    ""
-                )
-
-
-                user_id = message.get(
-                    "from",
-                    {}
-                ).get(
-                    "id"
-                )
-
-
-
-                if text.startswith(
-                    "/"
-                ):
-
-
-                    handle_command(
-
-                        text,
-
-                        user_id
-
-                    )
-
-
-
-        except Exception as e:
-
-
-            logger.exception(
-                e
-            )
+        return False
