@@ -1,68 +1,70 @@
 # core/daily_report.py
 
+from datetime import datetime
+
+from core.performance_tracker import (
+    get_statistics
+)
+
+from core.trade_manager import (
+    get_open_trades
+)
+
 from core.logger import logger
 
 
 
+
+
 def create_daily_report(
-    data
+    stats=None
 ):
 
     try:
 
-        if not data:
+        if stats is None:
 
-            return (
-                "📅 DAILY REPORT\n\n"
-                "No daily data available."
-            )
+            stats = get_statistics()
 
 
 
-        total_trades = data.get(
-            "total_trades",
-            0
-        )
-
-
-        successful = data.get(
-            "successful",
-            0
-        )
-
-
-        failed = data.get(
-            "failed",
-            0
-        )
-
-
-        profit = data.get(
-            "profit",
-            0
-        )
-
-
-        balance = data.get(
-            "balance",
-            0
-        )
+        open_trades = get_open_trades()
 
 
 
         report = (
 
-            "📅 POURYA TRADER AI DAILY REPORT\n\n"
+            "📊 DAILY REPORT\n"
 
-            f"🔄 Total Trades: {total_trades}\n"
+            "━━━━━━━━━━━━━━\n\n"
 
-            f"✅ Successful: {successful}\n"
+            f"📅 Date: {datetime.now().strftime('%Y-%m-%d')}\n\n"
 
-            f"❌ Failed: {failed}\n"
+            f"📈 Total Trades: "
 
-            f"💰 Daily PNL: {profit}\n"
+            f"{stats.get('total_trades',0)}\n"
 
-            f"💼 Balance: {balance}\n"
+            f"✅ Wins: "
+
+            f"{stats.get('wins',0)}\n"
+
+            f"❌ Losses: "
+
+            f"{stats.get('losses',0)}\n"
+
+            f"🎯 Win Rate: "
+
+            f"{stats.get('win_rate',0)}%\n"
+
+            f"💰 Profit: "
+
+            f"{stats.get('profit',0)}\n\n"
+
+            f"📌 Open Positions: "
+
+            f"{len(open_trades)}\n\n"
+
+            "🤖 Pourya Trader AI"
 
         )
 
@@ -76,4 +78,4 @@ def create_daily_report(
 
         logger.exception(e)
 
-        return "Daily report error."
+        return "DAILY REPORT ERROR"
