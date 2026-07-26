@@ -4,86 +4,99 @@ import os
 import shutil
 import datetime
 
-from core.database_manager import (
-    DATABASE_PATH
-)
-
 from core.logger import logger
 
 
 
-BACKUP_DIR = "backups"
+BACKUP_FOLDER = "backup"
 
 
 
 
 
-def create_backup():
+def create_project_backup():
 
     try:
 
         os.makedirs(
-            BACKUP_DIR,
+            BACKUP_FOLDER,
+            exist_ok=True
+        )
+
+
+        timestamp = datetime.datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )
+
+
+        backup_name = (
+            f"pourya_trader_backup_{timestamp}"
+        )
+
+
+        backup_path = os.path.join(
+            BACKUP_FOLDER,
+            backup_name
+        )
+
+
+        os.makedirs(
+            backup_path,
             exist_ok=True
         )
 
 
 
-        if not os.path.exists(
-            DATABASE_PATH
-        ):
+        files = [
 
-            return None
+            "core",
 
+            "bot.py",
 
+            "config.py"
 
-        filename = (
-
-            "pourya_trader_"
-
-            +
-
-            datetime.datetime.now().strftime(
-                "%Y%m%d_%H%M%S"
-            )
-
-            +
-
-            ".db"
-
-        )
+        ]
 
 
 
-        destination = os.path.join(
-
-            BACKUP_DIR,
-
-            filename
-
-        )
+        for file in files:
 
 
+            if os.path.exists(
+                file
+            ):
 
-        shutil.copy2(
 
-            DATABASE_PATH,
+                destination = os.path.join(
+                    backup_path,
+                    file
+                )
 
-            destination
 
-        )
+                if os.path.isdir(
+                    file
+                ):
+
+                    shutil.copytree(
+                        file,
+                        destination
+                    )
+
+                else:
+
+                    shutil.copy2(
+                        file,
+                        destination
+                    )
 
 
 
         logger.info(
-
-            f"DATABASE BACKUP CREATED: {destination}"
-
+            f"PROJECT BACKUP CREATED: {backup_path}"
         )
 
 
-
-        return destination
+        return backup_path
 
 
 
@@ -97,35 +110,21 @@ def create_backup():
 
 
 
-def list_backups():
+def get_backups():
 
     try:
 
         if not os.path.exists(
-            BACKUP_DIR
+            BACKUP_FOLDER
         ):
 
             return []
 
 
 
-        files = os.listdir(
-            BACKUP_DIR
+        return os.listdir(
+            BACKUP_FOLDER
         )
-
-
-
-        return [
-
-            file
-
-            for file in files
-
-            if file.endswith(
-                ".db"
-            )
-
-        ]
 
 
 
@@ -134,54 +133,3 @@ def list_backups():
         logger.exception(e)
 
         return []
-
-
-
-
-
-def delete_old_backups(
-    keep=10
-):
-
-    try:
-
-        backups = list_backups()
-
-
-        backups.sort(
-            reverse=True
-        )
-
-
-
-        old_files = backups[keep:]
-
-
-
-        for file in old_files:
-
-
-            path = os.path.join(
-
-                BACKUP_DIR,
-
-                file
-
-            )
-
-
-            os.remove(
-                path
-            )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
