@@ -46,6 +46,7 @@ def create_performance_table():
 
 
 
+
 def record_trade_result(
     trade_id,
     symbol,
@@ -54,18 +55,12 @@ def record_trade_result(
 
     try:
 
-        value = float(
-            pnl
-        )
-
-
         result = (
             "WIN"
-            if value > 0
+            if float(pnl) > 0
             else
             "LOSS"
         )
-
 
 
         execute_query(
@@ -83,7 +78,7 @@ def record_trade_result(
             (
                 trade_id,
                 symbol,
-                value,
+                pnl,
                 result
             )
         )
@@ -102,13 +97,14 @@ def record_trade_result(
 
 
 
+
 def get_statistics():
 
     try:
 
         total_result = execute_query(
             """
-            SELECT COUNT(*) as count
+            SELECT COUNT(*) AS total
             FROM performance
             """
         )
@@ -116,7 +112,7 @@ def get_statistics():
 
         wins_result = execute_query(
             """
-            SELECT COUNT(*) as count
+            SELECT COUNT(*) AS wins
             FROM performance
             WHERE result='WIN'
             """
@@ -125,36 +121,43 @@ def get_statistics():
 
         profit_result = execute_query(
             """
-            SELECT COALESCE(SUM(pnl),0) as profit
+            SELECT COALESCE(SUM(pnl),0) AS profit
             FROM performance
             """
         )
 
 
-        total = total_result[0]["count"]
 
-        wins = wins_result[0]["count"]
+        total = (
+            total_result[0].get("total", 0)
+            if total_result
+            else 0
+        )
 
-        profit = profit_result[0]["profit"]
+
+        wins = (
+            wins_result[0].get("wins", 0)
+            if wins_result
+            else 0
+        )
+
+
+        profit = (
+            profit_result[0].get("profit", 0)
+            if profit_result
+            else 0
+        )
 
 
 
         win_rate = 0
 
 
-
         if total > 0:
 
             win_rate = round(
-
-                wins
-                /
-                total
-                *
-                100,
-
+                wins / total * 100,
                 2
-
             )
 
 
@@ -181,7 +184,6 @@ def get_statistics():
     except Exception as e:
 
         logger.exception(e)
-
 
         return {
 
