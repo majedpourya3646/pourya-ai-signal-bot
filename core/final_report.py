@@ -1,6 +1,10 @@
 # core/final_report.py
 
+from datetime import datetime
+
 from core.logger import logger
+
+
 
 
 
@@ -10,51 +14,29 @@ def create_final_report(
 
     try:
 
-        if not data:
-
-            return (
-                "📋 FINAL REPORT\n\n"
-                "No data available."
-            )
-
-
-
-        executed = data.get(
-            "executed",
-            0
-        )
-
-
-        closed = data.get(
-            "closed",
-            0
-        )
-
-
-        opportunities = data.get(
-            "opportunities",
-            0
-        )
-
-
-        profit = data.get(
-            "profit",
-            0
-        )
-
-
-
         report = (
 
-            "🤖 POURYA TRADER AI FINAL REPORT\n\n"
+            "🤖 POURYA TRADER AI REPORT\n\n"
 
-            f"🔎 Opportunities: {opportunities}\n"
+            "━━━━━━━━━━━━━━\n"
 
-            f"✅ Executed Trades: {executed}\n"
+            f"📅 Time: {datetime.now()}\n\n"
 
-            f"🔒 Closed Trades: {closed}\n"
+            f"📈 Opened Trades: "
 
-            f"💰 Profit/Loss: {profit}\n"
+            f"{data.get('executed',0)}\n"
+
+            f"📉 Closed Trades: "
+
+            f"{data.get('closed',0)}\n"
+
+            f"💰 Total Profit: "
+
+            f"{data.get('profit',0)}\n\n"
+
+            "━━━━━━━━━━━━━━\n"
+
+            "SYSTEM STATUS: RUNNING"
 
         )
 
@@ -68,4 +50,4 @@ def create_final_report(
 
         logger.exception(e)
 
-        return "Final report error."
+        return "REPORT ERROR"
