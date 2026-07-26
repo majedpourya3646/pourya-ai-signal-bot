@@ -42,7 +42,7 @@ def filter_market(
 
 
             symbol = market.get(
-                "symbol",
+                "market",
                 ""
             )
 
