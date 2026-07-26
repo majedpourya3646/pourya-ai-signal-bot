@@ -22,16 +22,13 @@ def calculate_opportunity_score(
 
     try:
 
-
         score = 0
-
 
 
         confidence = item.get(
             "confidence",
-            0
+            item.get("score", 0)
         )
-
 
 
         if confidence >= 80:
@@ -44,6 +41,11 @@ def calculate_opportunity_score(
             score += 35
 
 
+        elif confidence >= 50:
+
+            score += 20
+
+
 
         signal = item.get(
             "signal",
@@ -51,13 +53,18 @@ def calculate_opportunity_score(
         )
 
 
-
-        if signal == "STRONG BUY":
+        if signal in [
+            "STRONG BUY",
+            "STRONG SELL"
+        ]:
 
             score += 30
 
 
-        elif signal == "BUY":
+        elif signal in [
+            "BUY",
+            "SELL"
+        ]:
 
             score += 20
 
@@ -67,88 +74,42 @@ def calculate_opportunity_score(
 
 
 
-    except Exception:
+    except Exception as e:
 
+        logger.exception(e)
 
         return 0
 
 
 
 
-def find_opportunities(limit=20):
+def find_opportunities(
+    limit=20
+):
 
     try:
 
-        symbols = get_symbols(100)
+        symbols = get_symbols()
 
-        logger.info(f"TOTAL SYMBOLS: {len(symbols)}")
 
-        signals = analyze_market_symbols(symbols)
-
-        logger.info(f"SIGNALS FOUND: {len(signals)}")
-
-        pumps = scan_advanced_pumps(symbols)
-
-        logger.info(f"PUMPS FOUND: {len(pumps)}")
-
-        opportunities = []
-
-        for signal in signals:
-
-            score = calculate_opportunity_score(signal)
-
-            signal["opportunity_score"] = score
-
-            opportunities.append(signal)
-
-        for pump in pumps:
-
-            opportunities.append({
-
-                "symbol": pump.get("symbol"),
-
-                "signal": "PUMP WATCH",
-
-                "confidence": pump.get("score", 0),
-
-                "entry": None,
-
-                "tp": None,
-
-                "sl": None,
-
-                "opportunity_score": pump.get("score", 0)
-
-            })
-
-        logger.info(f"TOTAL OPPORTUNITIES: {len(opportunities)}")
-
-        opportunities.sort(
-
-            key=lambda x: x.get("opportunity_score", 0),
-
-            reverse=True
-
+        logger.info(
+            f"TOTAL SYMBOLS: {len(symbols)}"
         )
 
-        return opportunities[:limit]
 
-    except Exception as e:
+        if not symbols:
 
-        logger.exception(e)
-
-        return []
-    try:
-
-
-        symbols = get_symbols(
-            100
-        )
+            return []
 
 
 
         signals = analyze_market_symbols(
             symbols
+        )
+
+
+        logger.info(
+            f"SIGNALS FOUND: {len(signals)}"
         )
 
 
@@ -158,6 +119,11 @@ def find_opportunities(limit=20):
         )
 
 
+        logger.info(
+            f"PUMPS FOUND: {len(pumps)}"
+        )
+
+
 
         opportunities = []
 
@@ -166,14 +132,9 @@ def find_opportunities(limit=20):
         for signal in signals:
 
 
-            score = calculate_opportunity_score(
+            signal["opportunity_score"] = calculate_opportunity_score(
                 signal
             )
-
-
-
-            signal["opportunity_score"] = score
-
 
 
             opportunities.append(
@@ -232,16 +193,17 @@ def find_opportunities(limit=20):
 
 
 
+        logger.info(
+            f"TOTAL OPPORTUNITIES: {len(opportunities)}"
+        )
+
+
         return opportunities[:limit]
 
 
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return []
