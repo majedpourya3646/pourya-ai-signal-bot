@@ -1,7 +1,7 @@
 # core/coin_scanner.py
 
-from core.market_api import (
-    get_market_tickers
+from core.market_discovery import (
+    discover_markets
 )
 
 from core.market_filters import (
@@ -18,7 +18,7 @@ def get_symbols():
 
     try:
 
-        markets = get_market_tickers()
+        markets = discover_markets()
 
 
 
