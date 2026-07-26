@@ -1,110 +1,45 @@
 # core/auto_trader.py
 
-from core.order_manager import (
-    create_order
-)
-
-from core.trade_manager import (
-    can_buy,
-    open_trade
+from core.opportunity_engine import (
+    calculate_opportunity_score
 )
 
 from core.risk_engine import (
     validate_trade
 )
 
-from core.portfolio import (
-    INITIAL_BALANCE,
-    get_trade_summary
+from core.order_manager import (
+    create_order
 )
 
-from core.performance import (
-    add_trade
+from core.trade_manager import (
+    open_trade
 )
 
 from core.logger import logger
 
 
 
-def execute_auto_trade(
+
+
+def execute_opportunity(
     opportunity
 ):
 
     try:
 
-        symbol = opportunity.get(
-            "symbol"
-        )
-
-        signal = opportunity.get(
-            "signal",
-            "WAIT"
-        )
-
-
-        if signal not in (
-            "BUY",
-            "STRONG BUY",
-            "SELL",
-            "STRONG SELL"
-        ):
-
-            return None
-
-
-
-        if not can_buy(
-            symbol
-        ):
-
-            logger.info(
-                f"{symbol} already open"
-            )
-
-            return None
-
-
-
-        entry = opportunity.get(
-            "entry"
-        )
-
-        tp = opportunity.get(
-            "tp"
-        )
-
-        sl = opportunity.get(
-            "sl"
+        score = calculate_opportunity_score(
+            opportunity
         )
 
 
 
-        if not all(
-            [
-                entry,
-                tp,
-                sl
-            ]
-        ):
-
-            return None
+        opportunity["confidence"] = score
 
 
 
-        valid, result = validate_trade(
-
-            INITIAL_BALANCE,
-
-            INITIAL_BALANCE,
-
-            {},
-
-            entry,
-
-            tp,
-
-            sl
-
+        valid, reason = validate_trade(
+            opportunity
         )
 
 
@@ -112,54 +47,44 @@ def execute_auto_trade(
         if not valid:
 
             logger.info(
-                result
+
+                f"TRADE REJECTED: {reason}"
+
             )
 
             return None
 
 
 
-        summary = get_trade_summary(
-
-            INITIAL_BALANCE,
-
-            entry,
-
-            tp,
-
-            sl
-
+        symbol = opportunity.get(
+            "symbol"
         )
 
 
-        quantity = summary.get(
+        side = opportunity.get(
+            "signal"
+        )
+
+
+        quantity = opportunity.get(
             "quantity",
             0
         )
 
 
-        if quantity <= 0:
-
-            return None
-
-
-
-        if signal in (
-            "BUY",
-            "STRONG BUY"
-        ):
-
-            side = "LONG"
-
-            order_side = "buy"
+        entry = opportunity.get(
+            "entry"
+        )
 
 
-        else:
+        tp = opportunity.get(
+            "tp"
+        )
 
-            side = "SHORT"
 
-            order_side = "sell"
-
+        sl = opportunity.get(
+            "sl"
+        )
 
 
 
@@ -167,7 +92,7 @@ def execute_auto_trade(
 
             symbol,
 
-            order_side,
+            side,
 
             quantity
 
@@ -177,56 +102,19 @@ def execute_auto_trade(
 
         if not order:
 
+            logger.error(
+                "ORDER FAILED"
+            )
+
             return None
 
 
 
-        order_id = (
-
-            order.get(
-                "data",
-                {}
-            )
-            .get(
-                "order_id"
-            )
-
-        )
-
-
-
-        open_trade(
-
-            symbol=symbol,
-
-            side=side,
-
-            signal=signal,
-
-            order_id=order_id,
-
-            entry=entry,
-
-            tp=tp,
-
-            sl=sl,
-
-            quantity=quantity,
-
-            confidence=opportunity.get(
-                "confidence",
-                0
-            )
-
-        )
-
-
-
-        add_trade(
+        saved = open_trade(
 
             symbol,
 
-            signal,
+            side,
 
             entry,
 
@@ -234,31 +122,43 @@ def execute_auto_trade(
 
             sl,
 
-            None,
-
-            0,
-
             quantity,
 
-            opportunity.get(
-                "confidence",
-                0
-            ),
-
-            opportunity.get(
-                "grade",
-                ""
-            )
+            score
 
         )
+
+
+
+        if not saved:
+
+            logger.error(
+                "TRADE SAVE FAILED"
+            )
+
+            return None
+
 
 
         logger.info(
-            f"{side} OPENED {symbol}"
+
+            f"TRADE OPENED {symbol}"
+
         )
 
 
-        return order
+
+        return {
+
+            "symbol": symbol,
+
+            "side": side,
+
+            "confidence": score,
+
+            "order": order
+
+        }
 
 
 
@@ -267,3 +167,43 @@ def execute_auto_trade(
         logger.exception(e)
 
         return None
+
+
+
+
+
+def execute_batch(
+    opportunities
+):
+
+    results = []
+
+
+
+    try:
+
+        for item in opportunities:
+
+
+            result = execute_opportunity(
+                item
+            )
+
+
+            if result:
+
+                results.append(
+                    result
+                )
+
+
+
+        return results
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return []
