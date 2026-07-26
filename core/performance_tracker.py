@@ -8,8 +8,6 @@ from core.logger import logger
 
 
 
-
-
 def create_performance_table():
 
     try:
@@ -48,7 +46,6 @@ def create_performance_table():
 
 
 
-
 def record_trade_result(
     trade_id,
     symbol,
@@ -57,16 +54,16 @@ def record_trade_result(
 
     try:
 
+        value = float(
+            pnl
+        )
+
+
         result = (
-
             "WIN"
-
-            if float(pnl) > 0
-
+            if value > 0
             else
-
             "LOSS"
-
         )
 
 
@@ -86,11 +83,10 @@ def record_trade_result(
             (
                 trade_id,
                 symbol,
-                pnl,
+                value,
                 result
             )
         )
-
 
 
         return True
@@ -106,36 +102,40 @@ def record_trade_result(
 
 
 
-
 def get_statistics():
 
     try:
 
-        total = execute_query(
+        total_result = execute_query(
             """
-            SELECT COUNT(*)
+            SELECT COUNT(*) as count
             FROM performance
             """
-        )[0][0]
+        )
 
 
-
-        wins = execute_query(
+        wins_result = execute_query(
             """
-            SELECT COUNT(*)
+            SELECT COUNT(*) as count
             FROM performance
             WHERE result='WIN'
             """
-        )[0][0]
+        )
 
 
-
-        profit = execute_query(
+        profit_result = execute_query(
             """
-            SELECT COALESCE(SUM(pnl),0)
+            SELECT COALESCE(SUM(pnl),0) as profit
             FROM performance
             """
-        )[0][0]
+        )
+
+
+        total = total_result[0]["count"]
+
+        wins = wins_result[0]["count"]
+
+        profit = profit_result[0]["profit"]
 
 
 
@@ -148,13 +148,9 @@ def get_statistics():
             win_rate = round(
 
                 wins
-
                 /
-
                 total
-
                 *
-
                 100,
 
                 2
@@ -174,11 +170,8 @@ def get_statistics():
             "win_rate": win_rate,
 
             "profit": round(
-
-                profit,
-
+                float(profit),
                 2
-
             )
 
         }
@@ -188,6 +181,7 @@ def get_statistics():
     except Exception as e:
 
         logger.exception(e)
+
 
         return {
 
