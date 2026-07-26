@@ -16,8 +16,6 @@ from core.logger import logger
 
 
 
-
-
 def run():
 
     try:
@@ -30,9 +28,15 @@ def run():
 
         if not startup():
 
+            logger.error(
+                "SYSTEM STARTUP FAILED"
+            )
+
+
             notify_system(
                 "❌ System startup failed."
             )
+
 
             return False
 
@@ -44,11 +48,11 @@ def run():
 
 
 
-        start_all_services()
+        result = start_all_services()
 
 
 
-        return True
+        return bool(result)
 
 
 
@@ -56,12 +60,13 @@ def run():
 
         logger.exception(e)
 
+
         notify_system(
             f"❌ Critical Error:\n{e}"
         )
 
-        return False
 
+        return False
 
 
 
