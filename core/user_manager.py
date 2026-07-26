@@ -1,224 +1,198 @@
 # core/user_manager.py
 
-import json
-import os
-
-from datetime import datetime
+from core.database_manager import (
+    execute_query
+)
 
 from core.logger import logger
 
 
 
-USERS_FILE = "data/users.json"
-
-
-
-def load_users():
+def create_user(
+    user_id,
+    username
+):
 
     try:
 
-
-        if not os.path.exists(
-            USERS_FILE
-        ):
-
-
-            save_users([])
-
-
-            return []
-
-
-
-        with open(
-
-            USERS_FILE,
-
-            "r",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            return json.load(
-                file
+        execute_query(
+            """
+            INSERT INTO users
+            (
+                id,
+                username,
+                active
             )
+            VALUES
+            (?, ?, 1)
+            """,
+            (
+                user_id,
+                username
+            )
+        )
+
+
+        return True
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
+        return False
+
+
+
+
+
+def get_user(
+    user_id
+):
+
+    try:
+
+        result = execute_query(
+            """
+            SELECT
+
+                id,
+
+                username,
+
+                active,
+
+                created_at
+
+            FROM users
+
+            WHERE id=?
+
+            """,
+            (
+                user_id,
+            )
         )
 
+
+
+        if not result:
+
+            return None
+
+
+
+        row = result[0]
+
+
+
+        return {
+
+            "id": row[0],
+
+            "username": row[1],
+
+            "active": row[2],
+
+            "created_at": row[3]
+
+        }
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
+
+
+
+
+
+def get_all_users():
+
+    try:
+
+        rows = execute_query(
+            """
+            SELECT
+
+                id,
+
+                username,
+
+                active,
+
+                created_at
+
+            FROM users
+
+            ORDER BY id DESC
+
+            """
+        )
+
+
+
+        users = []
+
+
+
+        for row in rows:
+
+            users.append(
+
+                {
+
+                    "id": row[0],
+
+                    "username": row[1],
+
+                    "active": row[2],
+
+                    "created_at": row[3]
+
+                }
+
+            )
+
+
+
+        return users
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
 
         return []
 
 
 
 
-def save_users(
-    users
-):
 
-    try:
-
-
-        os.makedirs(
-
-            "data",
-
-            exist_ok=True
-
-        )
-
-
-        with open(
-
-            USERS_FILE,
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            json.dump(
-
-                users,
-
-                file,
-
-                ensure_ascii=False,
-
-                indent=4
-
-            )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return False
-
-
-
-
-def add_user(
-    user_id,
-    username=""
-):
-
-    try:
-
-
-        users = load_users()
-
-
-
-        for user in users:
-
-
-            if user["id"] == user_id:
-
-
-                return False
-
-
-
-        users.append(
-
-            {
-
-                "id": user_id,
-
-                "username": username,
-
-                "active": True,
-
-                "created_at":
-
-                    datetime.now().strftime(
-
-                        "%Y-%m-%d %H:%M:%S"
-
-                    )
-
-            }
-
-        )
-
-
-
-        save_users(
-            users
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return False
-
-
-
-
-def get_users():
-
-    return load_users()
-
-
-
-
-def remove_user(
+def deactivate_user(
     user_id
 ):
 
     try:
 
+        execute_query(
+            """
+            UPDATE users
 
-        users = load_users()
+            SET active=0
 
+            WHERE id=?
 
-
-        users = [
-
-            u for u in users
-
-            if u["id"] != user_id
-
-        ]
-
-
-
-        save_users(
-            users
+            """,
+            (
+                user_id,
+            )
         )
-
 
 
         return True
@@ -227,10 +201,41 @@ def remove_user(
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
+        return False
+
+
+
+
+
+def activate_user(
+    user_id
+):
+
+    try:
+
+        execute_query(
+            """
+            UPDATE users
+
+            SET active=1
+
+            WHERE id=?
+
+            """,
+            (
+                user_id,
+            )
         )
 
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
 
         return False
