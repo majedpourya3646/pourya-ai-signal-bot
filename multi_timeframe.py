@@ -131,8 +131,11 @@ def analyze_symbol(
 
 
         score = signal.get(
-            "score",
-            0
+            "confidence",
+            signal.get(
+                "score",
+                0
+            )
         )
 
 
