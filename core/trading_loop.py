@@ -28,13 +28,20 @@ def run_loop():
 
 
 
+        test_mode = get_setting(
+            "scheduler_mode",
+            "TEST"
+        )
+
+
+
         while True:
 
 
             try:
 
-
                 closed = check_tp_sl()
+
 
 
                 if closed:
@@ -57,18 +64,25 @@ def run_loop():
 
 
 
+                if test_mode == "TEST":
+
+                    logger.info(
+                        "TEST MODE ENABLED - RUNNING ONCE"
+                    )
+
+                    break
+
+
+
                 interval = get_setting(
-
                     "trading_interval",
-
                     300
-
                 )
 
 
 
                 time.sleep(
-                    interval
+                    int(interval)
                 )
 
 
@@ -76,6 +90,11 @@ def run_loop():
             except Exception as e:
 
                 logger.exception(e)
+
+                if test_mode == "TEST":
+
+                    break
+
 
                 time.sleep(
                     60
@@ -86,7 +105,6 @@ def run_loop():
     except Exception as e:
 
         logger.exception(e)
-
 
 
 
