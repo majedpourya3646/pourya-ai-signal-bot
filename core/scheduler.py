@@ -23,8 +23,6 @@ MODE = os.getenv(
 
 
 
-
-
 def start_trading_thread():
 
     try:
@@ -55,7 +53,6 @@ def start_trading_thread():
         logger.exception(e)
 
         return None
-
 
 
 
@@ -94,7 +91,6 @@ def start_report_thread():
 
 
 
-
 def start_all_services():
 
     try:
@@ -102,7 +98,6 @@ def start_all_services():
         logger.info(
             f"SCHEDULER MODE: {MODE}"
         )
-
 
 
         start_trading_thread()
@@ -118,11 +113,7 @@ def start_all_services():
         if MODE == "TEST":
 
             logger.info(
-                "TEST MODE ENABLED - RUNNING ONCE"
-            )
-
-            time.sleep(
-                30
+                "TEST MODE ENABLED"
             )
 
             return True
