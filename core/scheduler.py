@@ -2,6 +2,7 @@
 
 import time
 import threading
+import os
 
 from core.trading_loop import (
     run_loop
@@ -12,6 +13,13 @@ from core.report_scheduler import (
 )
 
 from core.logger import logger
+
+
+
+MODE = os.getenv(
+    "BOT_MODE",
+    "TEST"
+)
 
 
 
@@ -31,7 +39,6 @@ def start_trading_thread():
 
 
         thread.start()
-
 
 
         logger.info(
@@ -69,7 +76,6 @@ def start_report_thread():
         thread.start()
 
 
-
         logger.info(
             "REPORT THREAD STARTED"
         )
@@ -93,16 +99,34 @@ def start_all_services():
 
     try:
 
+        logger.info(
+            f"SCHEDULER MODE: {MODE}"
+        )
+
+
+
         start_trading_thread()
 
 
-        start_report_thread()
+
+        if MODE == "LIVE":
+
+            start_report_thread()
 
 
 
-        logger.info(
-            "ALL SERVICES STARTED"
-        )
+        if MODE == "TEST":
+
+            logger.info(
+                "TEST MODE ENABLED - RUNNING ONCE"
+            )
+
+            time.sleep(
+                30
+            )
+
+            return True
+
 
 
         while True:
@@ -115,9 +139,8 @@ def start_all_services():
 
     except KeyboardInterrupt:
 
-
         logger.info(
-            "SERVICES STOPPED"
+            "SCHEDULER STOPPED"
         )
 
 
@@ -125,3 +148,5 @@ def start_all_services():
     except Exception as e:
 
         logger.exception(e)
+
+        return False
