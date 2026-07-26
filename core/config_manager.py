@@ -19,6 +19,8 @@ DEFAULT_SETTINGS = {
 
     "min_confidence": 65,
 
+    "trading_interval": 300,
+
     "loop_interval": 60,
 
     "max_open_trades": 3,
@@ -27,10 +29,15 @@ DEFAULT_SETTINGS = {
 
     "paper_trading": True,
 
-    "leverage": 10
+    "leverage": 10,
+
+    "min_risk_reward": 2,
+
+    "default_tp": 5,
+
+    "default_sl": 2
 
 }
-
 
 
 
@@ -47,8 +54,7 @@ def load_settings():
                 DEFAULT_SETTINGS
             )
 
-
-            return DEFAULT_SETTINGS
+            return DEFAULT_SETTINGS.copy()
 
 
 
@@ -58,9 +64,35 @@ def load_settings():
             encoding="utf-8"
         ) as file:
 
-            return json.load(
+            settings = json.load(
                 file
             )
+
+
+
+        updated = False
+
+
+
+        for key, value in DEFAULT_SETTINGS.items():
+
+            if key not in settings:
+
+                settings[key] = value
+
+                updated = True
+
+
+
+        if updated:
+
+            save_settings(
+                settings
+            )
+
+
+
+        return settings
 
 
 
@@ -68,8 +100,7 @@ def load_settings():
 
         logger.exception(e)
 
-        return DEFAULT_SETTINGS
-
+        return DEFAULT_SETTINGS.copy()
 
 
 
@@ -86,6 +117,7 @@ def save_settings(
         )
 
 
+
         with open(
             CONFIG_FILE,
             "w",
@@ -93,11 +125,17 @@ def save_settings(
         ) as file:
 
             json.dump(
+
                 settings,
+
                 file,
+
                 indent=4,
+
                 ensure_ascii=False
+
             )
+
 
 
         return True
@@ -113,7 +151,6 @@ def save_settings(
 
 
 
-
 def get_setting(
     key,
     default=None
@@ -124,9 +161,13 @@ def get_setting(
         settings = load_settings()
 
 
+
         return settings.get(
+
             key,
+
             default
+
         )
 
 
@@ -136,7 +177,6 @@ def get_setting(
         logger.exception(e)
 
         return default
-
 
 
 
@@ -151,7 +191,9 @@ def update_setting(
         settings = load_settings()
 
 
+
         settings[key] = value
+
 
 
         return save_settings(
@@ -165,3 +207,19 @@ def update_setting(
         logger.exception(e)
 
         return False
+
+
+
+
+def get_all_settings():
+
+    try:
+
+        return load_settings()
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return {}
