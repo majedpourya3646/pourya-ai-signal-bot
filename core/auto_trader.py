@@ -20,8 +20,6 @@ from core.logger import logger
 
 
 
-
-
 def execute_opportunity(
     opportunity
 ):
@@ -33,7 +31,6 @@ def execute_opportunity(
         )
 
 
-
         opportunity["confidence"] = score
 
 
@@ -43,13 +40,10 @@ def execute_opportunity(
         )
 
 
-
         if not valid:
 
             logger.info(
-
                 f"TRADE REJECTED: {reason}"
-
             )
 
             return None
@@ -66,6 +60,19 @@ def execute_opportunity(
         )
 
 
+        if side not in [
+            "BUY",
+            "SELL"
+        ]:
+
+            logger.info(
+                f"INVALID SIDE {side}"
+            )
+
+            return None
+
+
+
         quantity = opportunity.get(
             "quantity",
             0
@@ -73,17 +80,26 @@ def execute_opportunity(
 
 
         entry = opportunity.get(
-            "entry"
+            "entry",
+            opportunity.get(
+                "price"
+            )
         )
 
 
         tp = opportunity.get(
-            "tp"
+            "tp",
+            opportunity.get(
+                "take_profit"
+            )
         )
 
 
         sl = opportunity.get(
-            "sl"
+            "sl",
+            opportunity.get(
+                "stop_loss"
+            )
         )
 
 
@@ -141,9 +157,7 @@ def execute_opportunity(
 
 
         logger.info(
-
             f"TRADE OPENED {symbol}"
-
         )
 
 
@@ -171,7 +185,6 @@ def execute_opportunity(
 
 
 
-
 def execute_batch(
     opportunities
 ):
@@ -179,8 +192,12 @@ def execute_batch(
     results = []
 
 
-
     try:
+
+        if not opportunities:
+
+            return []
+
 
         for item in opportunities:
 
@@ -196,6 +213,11 @@ def execute_batch(
                     result
                 )
 
+
+
+        logger.info(
+            f"EXECUTED TRADES: {len(results)}"
+        )
 
 
         return results
