@@ -1,160 +1,62 @@
 # core/subscription.py
 
-import json
-import os
-
-from datetime import datetime
+from core.database_manager import (
+    execute_query
+)
 
 from core.logger import logger
 
 
 
-SUBSCRIPTION_FILE = "data/subscriptions.json"
-
-
-
-def load_subscriptions():
-
-    try:
-
-
-        if not os.path.exists(
-            SUBSCRIPTION_FILE
-        ):
-
-            return []
-
-
-
-        with open(
-
-            SUBSCRIPTION_FILE,
-
-            "r",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            return json.load(
-                file
-            )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-        return []
-
-
-
-
-def save_subscriptions(
-    data
-):
-
-    try:
-
-
-        os.makedirs(
-
-            "data",
-
-            exist_ok=True
-
-        )
-
-
-        with open(
-
-            SUBSCRIPTION_FILE,
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            json.dump(
-
-                data,
-
-                file,
-
-                ensure_ascii=False,
-
-                indent=4
-
-            )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(
-            e
-        )
-
-
-
-
-def add_subscription(
+def create_subscription(
     user_id,
-    plan="monthly",
-    days=30
+    plan,
+    days
 ):
 
     try:
 
+        execute_query(
+            """
+            CREATE TABLE IF NOT EXISTS subscriptions (
 
-        subscriptions = load_subscriptions()
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
+                user_id INTEGER,
 
+                plan TEXT,
 
-        subscriptions.append(
+                expire_days INTEGER,
 
-            {
+                status TEXT DEFAULT 'ACTIVE',
 
-                "user_id": user_id,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
-                "plan": plan,
-
-                "start_date": datetime.now().strftime(
-                    "%Y-%m-%d"
-                ),
-
-                "expire_date": (
-
-                    datetime.now()
-
-                    .timestamp()
-
-                    +
-
-                    days * 86400
-
-                ),
-
-                "active": True
-
-            }
-
+            )
+            """
         )
 
 
 
-        save_subscriptions(
-            subscriptions
+        execute_query(
+            """
+            INSERT INTO subscriptions
+            (
+                user_id,
+                plan,
+                expire_days,
+                status
+            )
+            VALUES
+            (?, ?, ?, 'ACTIVE')
+            """,
+            (
+                user_id,
+                plan,
+                days
+            )
         )
+
 
 
         return True
@@ -163,78 +65,109 @@ def add_subscription(
 
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
 
 
 
 
-def check_subscription(
+
+def get_subscription(
     user_id
 ):
 
     try:
 
+        result = execute_query(
+            """
+            SELECT
 
-        subscriptions = load_subscriptions()
+                user_id,
 
+                plan,
 
+                expire_days,
 
-        for item in subscriptions:
+                status
 
+            FROM subscriptions
 
-            if (
+            WHERE user_id=?
 
-                item.get(
-                    "user_id"
-                )
+            ORDER BY id DESC
 
-                ==
-
-                user_id
-
-                and
-
-                item.get(
-                    "active"
-                )
-
-            ):
-
-
-                if item.get(
-                    "expire_date"
-                ) > datetime.now().timestamp():
-
-
-                    return True
-
-
-
-                item["active"] = False
-
-
-
-        save_subscriptions(
-            subscriptions
+            LIMIT 1
+            """,
+            (
+                user_id,
+            )
         )
 
 
-        return False
+
+        if not result:
+
+            return None
+
+
+
+        row = result[0]
+
+
+
+        return {
+
+            "user_id": row[0],
+
+            "plan": row[1],
+
+            "expire_days": row[2],
+
+            "status": row[3]
+
+        }
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
+        return None
+
+
+
+
+
+def deactivate_subscription(
+    user_id
+):
+
+    try:
+
+        execute_query(
+            """
+            UPDATE subscriptions
+
+            SET status='INACTIVE'
+
+            WHERE user_id=?
+
+            """,
+            (
+                user_id,
+            )
         )
 
+
+
+        return True
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
 
         return False
