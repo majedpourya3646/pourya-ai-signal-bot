@@ -1,18 +1,85 @@
 # core/trading_controller.py
 
-from core.opportunity_engine import (
-    find_opportunities
-)
-
 from core.auto_trader import (
-    execute_auto_trade
+    execute_batch
 )
 
-from core.config_manager import (
-    get_setting
+from core.market_signal_bridge import (
+    analyze_market_symbols
+)
+
+from core.coin_scanner import (
+    get_symbols
 )
 
 from core.logger import logger
+
+
+
+
+
+def collect_opportunities():
+
+    try:
+
+        symbols = get_symbols()
+
+
+
+        if not symbols:
+
+            return []
+
+
+
+        signals = analyze_market_symbols(
+            symbols
+        )
+
+
+
+        opportunities = []
+
+
+
+        for item in signals:
+
+
+            if item.get(
+                "signal"
+            ) not in [
+
+                "BUY",
+
+                "SELL",
+
+                "STRONG BUY",
+
+                "STRONG SELL"
+
+            ]:
+
+                continue
+
+
+
+            opportunities.append(
+                item
+            )
+
+
+
+        return opportunities
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return []
+
+
 
 
 
@@ -20,67 +87,41 @@ def run_trading_cycle():
 
     try:
 
-        if not get_setting(
-            "trading_enabled",
-            True
-        ):
+        logger.info(
+            "TRADING CYCLE STARTED"
+        )
+
+
+
+        opportunities = collect_opportunities()
+
+
+
+        if not opportunities:
+
+            logger.info(
+                "NO OPPORTUNITIES FOUND"
+            )
 
             return []
 
 
 
-        opportunities = find_opportunities(
-            10
+        trades = execute_batch(
+            opportunities
         )
 
 
 
-        executed = []
+        logger.info(
+
+            f"EXECUTED {len(trades)} TRADES"
+
+        )
 
 
 
-        for opportunity in opportunities:
-
-
-            confidence = opportunity.get(
-                "confidence",
-                0
-            )
-
-
-
-            if confidence < get_setting(
-                "min_confidence",
-                65
-            ):
-
-                continue
-
-
-
-            if not get_setting(
-                "auto_trade",
-                False
-            ):
-
-                continue
-
-
-
-            result = execute_auto_trade(
-                opportunity
-            )
-
-
-            if result:
-
-                executed.append(
-                    result
-                )
-
-
-
-        return executed
+        return trades
 
 
 
