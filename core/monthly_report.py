@@ -14,8 +14,6 @@ from core.logger import logger
 
 
 
-
-
 def create_monthly_report(
     stats=None
 ):
@@ -40,72 +38,64 @@ def create_monthly_report(
 
         for trade in history:
 
-
-            quantity = trade.get(
-                "quantity",
-                0
-            )
-
-
-            entry = trade.get(
-                "entry",
-                0
-            )
-
-
             try:
 
-                total_volume += (
-
-                    float(quantity)
-
-                    *
-
-                    float(entry)
-
+                quantity = float(
+                    trade.get(
+                        "quantity",
+                        0
+                    )
                 )
 
-            except:
 
-                pass
+                entry = float(
+                    trade.get(
+                        "entry",
+                        0
+                    )
+                )
 
+
+                total_volume += (
+                    quantity
+                    *
+                    entry
+                )
+
+
+            except Exception:
+
+                continue
 
 
 
 
         report = (
 
-            "📆 MONTHLY REPORT\n"
+            "📆 گزارش ماهانه Pourya Trader AI\n"
 
             "━━━━━━━━━━━━━━\n\n"
 
-            f"📅 Month: "
-
+            f"📅 ماه: "
             f"{datetime.now().strftime('%Y-%m')}\n\n"
 
-            f"🔄 Total Trades: "
+            f"🔄 تعداد معاملات: "
+            f"{stats.get('total_trades', 0)}\n"
 
-            f"{stats.get('total_trades',0)}\n"
+            f"✅ معاملات موفق: "
+            f"{stats.get('wins', 0)}\n"
 
-            f"✅ Winning Trades: "
+            f"❌ معاملات ناموفق: "
+            f"{stats.get('losses', 0)}\n"
 
-            f"{stats.get('wins',0)}\n"
+            f"🎯 درصد موفقیت: "
+            f"{stats.get('win_rate', 0)}%\n"
 
-            f"❌ Losing Trades: "
+            f"💰 سود خالص: "
+            f"{stats.get('profit', 0)} USDT\n"
 
-            f"{stats.get('losses',0)}\n"
-
-            f"🎯 Win Rate: "
-
-            f"{stats.get('win_rate',0)}%\n"
-
-            f"💰 Net Profit: "
-
-            f"{stats.get('profit',0)}\n"
-
-            f"📊 Trading Volume: "
-
-            f"{round(total_volume,2)}\n\n"
+            f"📊 حجم معاملات: "
+            f"{round(total_volume, 2)} USDT\n\n"
 
             "🤖 Pourya Trader AI"
 
@@ -121,4 +111,4 @@ def create_monthly_report(
 
         logger.exception(e)
 
-        return "MONTHLY REPORT ERROR"
+        return "❌ خطا در ساخت گزارش ماهانه"
