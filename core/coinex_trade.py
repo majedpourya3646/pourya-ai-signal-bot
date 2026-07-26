@@ -10,20 +10,44 @@ class CoinExTrade:
 
 
 
-    def open_long(
+    def create_order(
         self,
         symbol,
+        side,
         quantity
     ):
 
         try:
+
+            if side in [
+                "BUY",
+                "LONG"
+            ]:
+
+                order_side = "buy"
+
+            elif side in [
+                "SELL",
+                "SHORT"
+            ]:
+
+                order_side = "sell"
+
+            else:
+
+                logger.error(
+                    f"INVALID ORDER SIDE {side}"
+                )
+
+                return None
+
 
 
             return coinex.create_order(
 
                 market=symbol,
 
-                side="buy",
+                side=order_side,
 
                 amount=quantity,
 
@@ -35,13 +59,49 @@ class CoinExTrade:
 
         except Exception as e:
 
-
             logger.exception(
                 e
             )
 
-
             return None
+
+
+
+
+    def open_long(
+        self,
+        symbol,
+        quantity
+    ):
+
+        return self.create_order(
+
+            symbol,
+
+            "BUY",
+
+            quantity
+
+        )
+
+
+
+
+    def open_short(
+        self,
+        symbol,
+        quantity
+    ):
+
+        return self.create_order(
+
+            symbol,
+
+            "SELL",
+
+            quantity
+
+        )
 
 
 
@@ -53,7 +113,6 @@ class CoinExTrade:
 
         try:
 
-
             return coinex.close_position(
 
                 market=symbol
@@ -64,11 +123,9 @@ class CoinExTrade:
 
         except Exception as e:
 
-
             logger.exception(
                 e
             )
-
 
             return None
 
@@ -82,22 +139,17 @@ class CoinExTrade:
 
         try:
 
-
             return coinex.get_order(
-
                 order_id
-
             )
 
 
 
         except Exception as e:
 
-
             logger.exception(
                 e
             )
-
 
             return None
 
@@ -111,22 +163,17 @@ class CoinExTrade:
 
         try:
 
-
             return coinex.cancel_order(
-
                 order_id
-
             )
 
 
 
         except Exception as e:
 
-
             logger.exception(
                 e
             )
-
 
             return None
 
