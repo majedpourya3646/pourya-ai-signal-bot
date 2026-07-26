@@ -1,37 +1,39 @@
 # core/telegram_commands.py
 
-from telegram_sender import send_message
-
-from core.system_health import (
-    create_health_report
+from core.user_manager import (
+    get_user,
+    create_user
 )
 
-from core.final_report import (
-    create_final_report
+from core.trade_manager import (
+    get_open_trades
 )
 
-from core.coin_scanner import (
-    get_top_coins
-)
-
-from core.coinex_connector import (
-    get_available_usdt
-)
-
-from core.trade_history import (
-    get_trade_history
+from core.performance_tracker import (
+    get_statistics
 )
 
 from core.logger import logger
 
 
 
-def handle_command(
+def process_command(
+    user_id,
     command,
-    user_id=None
+    username=""
 ):
 
     try:
+
+        if not get_user(
+            user_id
+        ):
+
+            create_user(
+                user_id,
+                username
+            )
+
 
 
         command = command.lower()
@@ -40,172 +42,92 @@ def handle_command(
 
         if command == "/start":
 
+            return (
 
-            send_message(
+                "🤖 Welcome to Pourya Trader AI\n\n"
 
-"""
-
-🤖 <b>Pourya Trader AI</b>
-
-
-✅ ربات فعال شد
-
-
-دستورات:
-
-/status
-/report
-/balance
-/signals
-/trades
-
-
-"""
+                "Your account has been created."
 
             )
-
-
-            return True
-
 
 
 
         elif command == "/status":
 
-
-            send_message(
-
-                create_health_report()
-
-            )
+            stats = get_statistics()
 
 
-            return True
+            return (
 
+                "📊 SYSTEM STATUS\n\n"
 
+                f"Total Trades: {stats.get('total_trades',0)}\n"
 
+                f"Win Rate: {stats.get('win_rate',0)}%\n"
 
-        elif command == "/report":
-
-
-            send_message(
-
-                create_final_report()
+                f"Profit: {stats.get('profit',0)}"
 
             )
 
 
-            return True
+
+        elif command == "/positions":
+
+            trades = get_open_trades()
 
 
 
+            if not trades:
 
-        elif command == "/balance":
-
-
-            balance = get_available_usdt()
+                return "No open positions."
 
 
 
-            send_message(
-
-                f"""
-
-💰 <b>CoinEx Balance</b>
-
-
-USDT:
-{balance}
-
-
-🤖 Pourya Trader AI
-
-"""
-
-            )
-
-
-            return True
+            message = "📈 OPEN POSITIONS\n\n"
 
 
 
-
-        elif command == "/signals":
-
-
-            coins = get_top_coins(
-                10
-            )
-
-
-            message = "📊 <b>Top Market Coins</b>\n\n"
-
-
-
-            for coin in coins:
+            for trade in trades:
 
 
                 message += (
 
-                    f"🪙 {coin.get('symbol')}\n"
+                    f"{trade.get('symbol')}\n"
 
-                    f"📈 {coin.get('change')}%\n\n"
+                    f"Side: {trade.get('side')}\n"
+
+                    f"Entry: {trade.get('entry')}\n\n"
 
                 )
 
 
 
-            send_message(
-                message
-            )
-
-
-            return True
+            return message
 
 
 
+        elif command == "/help":
 
-        elif command == "/trades":
+            return (
 
+                "📚 COMMANDS\n\n"
 
-            trades = get_trade_history(
-                10
-            )
+                "/status\n"
 
+                "/positions\n"
 
-
-            send_message(
-
-                f"📈 Trades:\n\n{trades}"
+                "/help"
 
             )
 
 
-            return True
 
-
-
-
-        else:
-
-
-            send_message(
-
-                "❓ دستور ناشناخته است"
-
-            )
-
-
-            return False
+        return "Unknown command."
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return False
+        return "Command error."
