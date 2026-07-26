@@ -1,183 +1,134 @@
 # core/admin_panel.py
 
 from core.user_manager import (
-    get_users,
-    add_user,
-    remove_user
+    get_all_users,
+    activate_user,
+    deactivate_user
+)
+
+from core.performance_tracker import (
+    get_statistics
 )
 
 from core.logger import logger
 
 
 
-def list_users():
+def get_dashboard():
 
     try:
 
+        users = get_all_users()
 
-        users = get_users()
-
-
-
-        if not users:
-
-
-            return "👥 هیچ کاربری ثبت نشده"
+        stats = get_statistics()
 
 
 
-        message = "👥 <b>لیست کاربران</b>\n\n"
+        return {
 
+            "users": len(
+                users
+            ),
 
+            "active_users": len(
 
-        for user in users:
+                [
 
+                    user
 
-            status = (
+                    for user in users
 
-                "🟢 فعال"
+                    if user.get(
+                        "active"
+                    )
 
-                if user.get(
-                    "active"
-                )
+                ]
 
-                else
+            ),
 
-                "🔴 غیرفعال"
+            "trading": stats
 
-            )
-
-
-
-            message += (
-
-                f"ID: {user.get('id')}\n"
-
-                f"نام: {user.get('username')}\n"
-
-                f"وضعیت: {status}\n\n"
-
-            )
-
-
-
-        return message
+        }
 
 
 
     except Exception as e:
 
+        logger.exception(e)
 
-        logger.exception(
-            e
-        )
-
-
-        return "❌ خطا در دریافت کاربران"
+        return {}
 
 
 
 
-def create_user(
-    user_id,
-    username=""
+
+def manage_user(
+    action,
+    user_id
 ):
 
     try:
 
+        if action == "activate":
 
-        return add_user(
-
-            user_id,
-
-            username
-
-        )
+            return activate_user(
+                user_id
+            )
 
 
 
-    except Exception as e:
+        elif action == "deactivate":
 
+            return deactivate_user(
+                user_id
+            )
 
-        logger.exception(
-            e
-        )
 
 
         return False
 
 
 
-
-def delete_user(
-    user_id
-):
-
-    try:
-
-
-        return remove_user(
-            user_id
-        )
-
-
-
     except Exception as e:
 
-
-        logger.exception(
-            e
-        )
-
+        logger.exception(e)
 
         return False
 
 
 
 
-def enable_user(
-    user_id
-):
 
-    users = get_users()
+def format_dashboard():
 
+    try:
 
-
-    for user in users:
-
-
-        if user.get(
-            "id"
-        ) == user_id:
-
-
-            user["active"] = True
+        data = get_dashboard()
 
 
 
-    return True
+        return (
+
+            "🛠 POURYA TRADER AI ADMIN PANEL\n\n"
+
+            f"👥 Users: {data.get('users',0)}\n"
+
+            f"✅ Active: {data.get('active_users',0)}\n\n"
+
+            f"📊 Trades: "
+
+            f"{data.get('trading',{}).get('total_trades',0)}\n"
+
+            f"💰 Profit: "
+
+            f"{data.get('trading',{}).get('profit',0)}"
+
+        )
 
 
 
+    except Exception as e:
 
-def disable_user(
-    user_id
-):
+        logger.exception(e)
 
-    users = get_users()
-
-
-
-    for user in users:
-
-
-        if user.get(
-            "id"
-        ) == user_id:
-
-
-            user["active"] = False
-
-
-
-    return True
+        return "Admin panel error."
