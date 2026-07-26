@@ -10,8 +10,6 @@ from core.logger import logger
 
 
 
-
-
 def calculate_quantity(
     balance,
     price
@@ -20,48 +18,31 @@ def calculate_quantity(
     try:
 
         risk = get_setting(
-
             "risk_percent",
-
             1
-
         )
 
 
         amount = (
-
             float(balance)
-
             *
-
             float(risk)
-
             /
-
             100
-
         )
 
 
         quantity = (
-
             amount
-
             /
-
             float(price)
-
         )
 
 
         return round(
-
             quantity,
-
             6
-
         )
-
 
 
     except Exception as e:
@@ -69,7 +50,6 @@ def calculate_quantity(
         logger.exception(e)
 
         return 0
-
 
 
 
@@ -82,23 +62,30 @@ def create_order(
 
     try:
 
+        if side not in [
+            "BUY",
+            "SELL"
+        ]:
+
+            logger.error(
+                f"INVALID ORDER SIDE: {side}"
+            )
+
+            return None
+
+
+
         paper = get_setting(
-
             "paper_trading",
-
             True
-
         )
 
 
 
         if paper:
 
-
             logger.info(
-
                 f"PAPER ORDER {symbol} {side} {quantity}"
-
             )
 
 
@@ -131,6 +118,10 @@ def create_order(
 
         if not result:
 
+            logger.error(
+                "EMPTY ORDER RESPONSE"
+            )
+
             return None
 
 
@@ -158,7 +149,6 @@ def create_order(
         logger.exception(e)
 
         return None
-
 
 
 
