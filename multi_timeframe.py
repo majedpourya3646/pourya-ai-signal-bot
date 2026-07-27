@@ -1,225 +1,140 @@
-# multi_timeframe.py
-
-from config import (
-    DEFAULT_TP,
-    DEFAULT_SL
-)
-
+from config import DEFAULT_TP, DEFAULT_SL
 from market import get_market_data
-from core.logger import logger
 from signal_engine import analyze_signal
+from core.logger import logger
 
-
-TIMEFRAMES = [
-    "15",
-    "60",
-    "240"
-]
-
+TIMEFRAMES = ["15", "60", "240"]
 
 TIMEFRAME_WEIGHTS = {
     "15": 0.25,
     "60": 0.35,
-    "240": 0.40
+    "240": 0.40,
 }
-
 
 
 def smart_round(value):
 
     if value >= 1000:
         return round(value, 2)
-
     elif value >= 1:
         return round(value, 4)
-
     elif value >= 0.01:
         return round(value, 6)
-
     elif value >= 0.0001:
         return round(value, 8)
-
     elif value >= 0.000001:
         return round(value, 10)
 
-    else:
-        return round(value, 12)
+    return round(value, 12)
 
 
-
-def calculate_trade_levels(
-    entry,
-    side
-):
+def calculate_trade_levels(entry, side):
 
     if side == "BUY":
 
-        tp = entry * (
-            1 + DEFAULT_TP / 100
-        )
-
-        sl = entry * (
-            1 - DEFAULT_SL / 100
-        )
-
-
-    elif side == "SELL":
-
-        tp = entry * (
-            1 - DEFAULT_TP / 100
-        )
-
-        sl = entry * (
-            1 + DEFAULT_SL / 100
-        )
-
+        tp = entry * (1 + DEFAULT_TP / 100)
+        sl = entry * (1 - DEFAULT_SL / 100)
 
     else:
 
-        return None, None
-
+        tp = entry * (1 - DEFAULT_TP / 100)
+        sl = entry * (1 + DEFAULT_SL / 100)
 
     return (
         smart_round(tp),
-        smart_round(sl)
+        smart_round(sl),
     )
 
 
+def calculate_grade(score):
 
-def analyze_symbol(
-    symbol
-):
-    logger.info("NEW MULTI TIMEFRAME VERSION LOADED")
+    if score >= 90:
+        return "A+"
+
+    if score >= 80:
+        return "A"
+
+    if score >= 70:
+        return "B"
+
+    if score >= 60:
+        return "C"
+
+    return "D"
+
+
+def analyze_symbol(symbol):
+
+    logger.info(f"ANALYZING {symbol}")
+
     results = []
 
     weighted_score = 0
 
     last_price = None
 
+    buy_votes = 0
+    sell_votes = 0
 
     for timeframe in TIMEFRAMES:
 
-        df = get_market_data(
-            symbol,
-            timeframe
-        )
-
+        df = get_market_data(symbol, timeframe)
 
         if df.empty:
-
-            logger.warning(
-                f"{symbol} {timeframe} EMPTY"
-            )
-
             continue
 
+        last_price = float(df.iloc[-1]["close"])
 
-        last_price = float(
-            df.iloc[-1]["close"]
-        )
+        signal = analyze_signal(df)
 
+        direction = signal.get("signal", "WAIT")
 
-        signal = analyze_signal(
-            df
-        )
-
-
-        direction = signal.get(
-            "signal",
-            "WAIT"
-        )
-
-
-        score = signal.get(
-            "confidence",
-            signal.get(
-                "score",
-                0
-            )
-        )
-
+        confidence = signal.get("confidence", 0)
 
         weighted_score += (
-            score *
+            confidence *
             TIMEFRAME_WEIGHTS[timeframe]
         )
 
+        if direction == "BUY":
+            buy_votes += 1
+
+        elif direction == "SELL":
+            sell_votes += 1
 
         results.append(
             {
                 "timeframe": timeframe,
                 "signal": direction,
-                "score": score
+                "score": confidence,
             }
         )
-
-
 
     if not results:
 
         return {
             "symbol": symbol,
             "signal": "WAIT",
-            "score": 0
+            "score": 0,
         }
 
+    avg_score = round(weighted_score, 2)
 
-
-    avg_score = round(
-        weighted_score,
-        2
-    )
-
-
-    buy_votes = sum(
-        1 for item in results
-        if item["signal"] in [
-            "BUY",
-            "STRONG BUY"
-        ]
-    )
-
-
-    sell_votes = sum(
-        1 for item in results
-        if item["signal"] in [
-            "SELL",
-            "STRONG SELL"
-        ]
-    )
-
-
-    total = len(results)
-
-
-
+    # --------------------------
     # تصمیم نهایی
+    # --------------------------
 
-    if buy_votes == total:
-
-        final_signal = "BUY"
-
-
-    elif sell_votes == total:
-
-        final_signal = "SELL"
-
-
-    elif avg_score >= 65:
+    if buy_votes >= 2 and avg_score >= 65:
 
         final_signal = "BUY"
 
-
-    elif avg_score <= 35:
+    elif sell_votes >= 2 and avg_score <= 35:
 
         final_signal = "SELL"
-
 
     else:
 
         final_signal = "WAIT"
-
-
 
     result = {
 
@@ -229,38 +144,34 @@ def analyze_symbol(
 
         "score": avg_score,
 
+        "grade": calculate_grade(avg_score),
+
         "price": last_price,
 
-        "timeframes": results
+        "timeframes": results,
 
     }
 
-
-
     if (
-        final_signal in ["BUY", "SELL"]
+        final_signal != "WAIT"
         and last_price
-        and avg_score > 0
     ):
 
         tp, sl = calculate_trade_levels(
             last_price,
-            final_signal
+            final_signal,
         )
-
 
         result.update(
             {
                 "entry": last_price,
                 "take_profit": tp,
-                "stop_loss": sl
+                "stop_loss": sl,
             }
         )
 
-
     logger.info(
-        f"{symbol} | {final_signal} | SCORE {avg_score} | PRICE {last_price}"
+        f"{symbol} | {final_signal} | SCORE={avg_score} | BUY={buy_votes} | SELL={sell_votes}"
     )
-
 
     return result
