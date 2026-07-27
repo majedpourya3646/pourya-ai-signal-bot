@@ -11,19 +11,16 @@ from datetime import datetime
 
 
 VALID_SIGNALS = [
-
     "BUY",
     "SELL",
     "STRONG BUY",
     "STRONG SELL",
     "EARLY BUY",
-    "EARLY SELL"
-
+    "EARLY SELL",
 ]
 
 
-
-MIN_SCORE = 60
+MIN_SCORE = 55
 
 
 
@@ -36,12 +33,10 @@ def is_valid_signal(result):
             "WAIT"
         )
 
-
         score = result.get(
             "score",
             0
         )
-
 
 
         if signal not in VALID_SIGNALS:
@@ -49,24 +44,17 @@ def is_valid_signal(result):
             return False
 
 
-
         if score < MIN_SCORE:
 
             return False
 
 
-
         return True
-
 
 
     except Exception as e:
 
-
-        logger.error(
-            f"SIGNAL VALIDATION ERROR: {e}"
-        )
-
+        logger.exception(e)
 
         return False
 
@@ -74,173 +62,42 @@ def is_valid_signal(result):
 
 
 
-def improve_final_signal(result):
-
-    """
-    تبدیل EARLY ها به فرصت قابل بررسی
-    """
+def normalize_signal(signal):
 
     try:
 
+        mapping = {
 
-        signal = result.get(
-            "signal",
+            "STRONG BUY": "STRONG BUY",
+
+            "STRONG SELL": "STRONG SELL",
+
+            "BUY": "BUY",
+
+            "SELL": "SELL",
+
+            "EARLY BUY": "EARLY BUY",
+
+            "EARLY SELL": "EARLY SELL",
+
+        }
+
+
+        return mapping.get(
+            signal,
             "WAIT"
         )
 
 
-        timeframes = result.get(
-            "timeframes",
-            []
-        )
+    except Exception:
 
+        return "WAIT"
 
-        buy_votes = 0
 
-        sell_votes = 0
 
-        strong_votes = 0
 
 
-
-        for tf in timeframes:
-
-
-            tf_signal = tf.get(
-                "signal",
-                "WAIT"
-            )
-
-
-            tf_score = tf.get(
-                "score",
-                0
-            )
-
-
-
-            if tf_signal in [
-
-                "BUY",
-                "STRONG BUY",
-                "EARLY BUY"
-
-            ]:
-
-                buy_votes += 1
-
-
-
-            if tf_signal in [
-
-                "SELL",
-                "STRONG SELL",
-                "EARLY SELL"
-
-            ]:
-
-                sell_votes += 1
-
-
-
-            if tf_score >= 70:
-
-                strong_votes += 1
-
-
-
-        score = result.get(
-            "score",
-            0
-        )
-
-
-
-        # تقویت سیگنال صعودی
-
-        if (
-
-            signal == "WAIT"
-
-            and buy_votes >= 2
-
-            and score >= 60
-
-        ):
-
-            result["signal"] = "BUY"
-
-
-
-        elif (
-
-            signal == "EARLY BUY"
-
-            and buy_votes >= 2
-
-            and strong_votes >= 1
-
-        ):
-
-            result["signal"] = "BUY"
-
-
-
-
-
-        # تقویت سیگنال نزولی
-
-
-        elif (
-
-            signal == "WAIT"
-
-            and sell_votes >= 2
-
-            and score >= 60
-
-        ):
-
-            result["signal"] = "SELL"
-
-
-
-        elif (
-
-            signal == "EARLY SELL"
-
-            and sell_votes >= 2
-
-            and strong_votes >= 1
-
-        ):
-
-            result["signal"] = "SELL"
-
-
-
-        return result
-
-
-
-    except Exception as e:
-
-
-        logger.error(
-            f"SIGNAL IMPROVEMENT ERROR: {e}"
-        )
-
-
-        return result
-
-
-
-
-
-
-def analyze_market_symbols(
-    symbols
-):
+def analyze_market_symbols(symbols):
 
     results = []
 
@@ -272,12 +129,6 @@ def analyze_market_symbols(
 
 
 
-                result = improve_final_signal(
-                    result
-                )
-
-
-
                 logger.info(
                     f"{symbol} RESULT AFTER AI FILTER: {result}"
                 )
@@ -293,89 +144,113 @@ def analyze_market_symbols(
                         f"{symbol} FILTERED OUT"
                     )
 
-
                     continue
 
 
 
 
-                results.append(
-
-                    {
-
-                        "symbol": symbol,
-
-
-                        "market": "FUTURES",
+                signal = normalize_signal(
+                    result.get(
+                        "signal",
+                        "WAIT"
+                    )
+                )
 
 
 
-                        "signal": result.get(
-                            "signal",
-                            "WAIT"
-                        ),
+                score = result.get(
+                    "score",
+                    result.get(
+                        "confidence",
+                        0
+                    )
+                )
 
 
 
-                        "confidence": result.get(
-                            "score",
-                            0
-                        ),
+                item = {
 
 
-
-                        "score": result.get(
-                            "score",
-                            0
-                        ),
+                    "symbol": symbol,
 
 
-
-                        "entry": result.get(
-                            "entry",
-                            result.get(
-                                "price"
-                            )
-                        ),
+                    "market": "FUTURES",
 
 
-
-                        "tp": result.get(
-                            "take_profit"
-                        ),
+                    "signal": signal,
 
 
-
-                        "sl": result.get(
-                            "stop_loss"
-                        ),
+                    "confidence": score,
 
 
+                    "score": score,
 
-                        "price": result.get(
+
+                    "entry": result.get(
+                        "entry",
+                        result.get(
                             "price"
-                        ),
+                        )
+                    ),
+
+
+                    "price": result.get(
+                        "price"
+                    ),
+
+
+                    "tp": result.get(
+                        "take_profit"
+                    ),
+
+
+                    "sl": result.get(
+                        "stop_loss"
+                    ),
+
+
+                    "take_profit": result.get(
+                        "take_profit"
+                    ),
+
+
+                    "stop_loss": result.get(
+                        "stop_loss"
+                    ),
+
+
+                    "timeframes": result.get(
+                        "timeframes",
+                        []
+                    ),
+
+
+                    "grade": result.get(
+                        "grade",
+                        ""
+                    ),
+
+
+                    "reasons": result.get(
+                        "reasons",
+                        []
+                    ),
+
+
+                    "created_at": datetime.utcnow().isoformat()
+
+                }
 
 
 
-                        "timeframes": result.get(
-                            "timeframes",
-                            []
-                        ),
+                results.append(
+                    item
+                )
 
 
 
-                        "grade": result.get(
-                            "grade",
-                            ""
-                        ),
-
-
-
-                        "created_at": datetime.utcnow().isoformat()
-
-                    }
-
+                logger.info(
+                    f"{symbol} ACCEPTED | {signal} | SCORE={score}"
                 )
 
 
@@ -402,9 +277,7 @@ def analyze_market_symbols(
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return []
