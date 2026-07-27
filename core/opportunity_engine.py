@@ -319,7 +319,7 @@ def validate_signal(
 
 
 
-        if opportunity_score < MIN_SIGNAL_SCORE:
+        if opportunity_score < 45:
 
             return False
 
