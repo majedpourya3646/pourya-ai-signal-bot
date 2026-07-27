@@ -46,7 +46,7 @@ def start():
             "SYSTEM READY"
         )
 
-
+        from telegram_sender import send_message
 
         result = start_all_services()
 
