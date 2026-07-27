@@ -362,6 +362,8 @@ def find_best_opportunities():
 
         return []
         
-def find_opportunities():
+def find_opportunities(limit=10):
 
-    return find_best_opportunities()
+    opportunities = find_best_opportunities()
+
+    return opportunities[:limit]
