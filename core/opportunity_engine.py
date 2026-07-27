@@ -361,3 +361,7 @@ def find_best_opportunities():
         )
 
         return []
+        
+def find_opportunities():
+
+    return find_best_opportunities()
