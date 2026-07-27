@@ -1,3 +1,5 @@
+# core/opportunity_engine.py
+
 from core.market_signal_bridge import (
     analyze_market_symbols
 )
@@ -14,11 +16,13 @@ from core.logger import logger
 
 
 
-MIN_SIGNAL_SCORE = 45
+MIN_SIGNAL_SCORE = 55
 
 
 
-def calculate_opportunity_score(item):
+def calculate_opportunity_score(
+    item
+):
 
     try:
 
@@ -27,9 +31,9 @@ def calculate_opportunity_score(item):
 
         confidence = float(
             item.get(
-                "score",
+                "confidence",
                 item.get(
-                    "confidence",
+                    "score",
                     0
                 )
             )
@@ -37,14 +41,23 @@ def calculate_opportunity_score(item):
         )
 
 
-        if confidence >= 75:
-            score += 50
+        # confidence weight
 
-        elif confidence >= 60:
+        if confidence >= 85:
+
+            score += 45
+
+        elif confidence >= 75:
+
             score += 35
 
-        elif confidence >= 45:
-            score += 20
+        elif confidence >= 65:
+
+            score += 25
+
+        elif confidence >= 55:
+
+            score += 15
 
 
 
@@ -58,52 +71,92 @@ def calculate_opportunity_score(item):
             "STRONG BUY",
             "STRONG SELL"
         ]:
+
             score += 30
+
 
         elif signal in [
             "BUY",
             "SELL"
         ]:
+
             score += 20
 
 
 
-        buy = 0
-        sell = 0
-
-
-        for tf in item.get(
+        timeframes = item.get(
             "timeframes",
             []
-        ):
+        )
 
-            s = tf.get(
+
+        buy_count = 0
+
+        sell_count = 0
+
+        strong_count = 0
+
+
+
+        for tf in timeframes:
+
+            tf_signal = tf.get(
                 "signal",
                 ""
             )
 
 
-            if "BUY" in s:
-                buy += 1
+            if "BUY" in tf_signal:
+
+                buy_count += 1
 
 
-            if "SELL" in s:
-                sell += 1
+            elif "SELL" in tf_signal:
+
+                sell_count += 1
 
 
 
-        if buy >= 2:
+            if "STRONG" in tf_signal:
+
+                strong_count += 1
+
+
+
+        if buy_count >= 2:
+
             score += 20
 
 
-        if sell >= 2:
+        elif buy_count == 1:
+
+            score += 10
+
+
+
+        if sell_count >= 2:
+
             score += 20
 
 
+        elif sell_count == 1:
 
-        return min(
-            score,
-            100
+            score += 10
+
+
+
+        if strong_count >= 2:
+
+            score += 10
+
+
+
+        return max(
+            0,
+            min(
+                score,
+                100
+            )
         )
 
 
@@ -117,64 +170,214 @@ def calculate_opportunity_score(item):
 
 
 
-def validate_signal(item):
+def classify_opportunity(
+    item
+):
 
     try:
 
-        score = float(
-            item.get(
-                "score",
-                0
-            )
+        score = item.get(
+            "opportunity_score",
+            0
         )
 
 
-        if score < MIN_SIGNAL_SCORE:
+        signal = item.get(
+            "signal",
+            ""
+        )
 
-            return False
 
+        timeframes = item.get(
+            "timeframes",
+            []
+        )
 
 
         buy = 0
+
         sell = 0
 
 
-        for tf in item.get(
-            "timeframes",
-            []
-        ):
 
+        for tf in timeframes:
 
-            signal = tf.get(
+            tf_signal = tf.get(
                 "signal",
                 ""
             )
 
 
-            if "BUY" in signal:
+            if "BUY" in tf_signal:
 
                 buy += 1
 
 
-            elif "SELL" in signal:
+            elif "SELL" in tf_signal:
 
                 sell += 1
 
 
 
-        if buy >= 2:
+        # A+ Entry
 
-            item["signal"] = "EARLY BUY"
+        if (
+
+            score >= 75
+
+            and
+
+            (
+                buy >= 2
+
+                or
+
+                sell >= 2
+
+            )
+
+        ):
+
+            return "A+"
+
+
+
+        # A Setup
+
+        if (
+
+            score >= 60
+
+            and
+
+            (
+                buy >= 1
+
+                or
+
+                sell >= 1
+
+            )
+
+        ):
+
+            return "A"
+
+
+
+        # B Watch
+
+        if score >= 45:
+
+            return "B"
+
+
+
+        return "C"
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return "C"
+
+
+
+
+
+def validate_signal(
+    item
+):
+
+    try:
+
+        opportunity_score = item.get(
+            "opportunity_score",
+            0
+        )
+
+
+        grade = item.get(
+            "opportunity_grade",
+            "C"
+        )
+
+
+        signal = item.get(
+            "signal",
+            ""
+        )
+
+
+        # حذف کامل WAIT انجام نمی‌شود
+
+        if grade == "C":
+
+            return False
+
+
+
+        if opportunity_score < MIN_SIGNAL_SCORE:
+
+            return False
+
+
+
+        # سیگنال‌های واقعی
+
+        if signal in [
+
+            "BUY",
+
+            "SELL",
+
+            "STRONG BUY",
+
+            "STRONG SELL"
+
+        ]:
 
             return True
 
 
 
-        if sell >= 2:
+        # WAIT ولی آماده ورود
 
-            item["signal"] = "EARLY SELL"
+        if signal == "WAIT":
 
-            return True
+            timeframes = item.get(
+                "timeframes",
+                []
+            )
+
+
+            for tf in timeframes:
+
+                tf_score = tf.get(
+                    "score",
+                    0
+                )
+
+
+                tf_signal = tf.get(
+                    "signal",
+                    ""
+                )
+
+
+                if (
+
+                    tf_score >= 70
+
+                    and
+
+                    tf_signal != "WAIT"
+
+                ):
+
+                    return True
 
 
 
@@ -192,13 +395,11 @@ def validate_signal(item):
 
 
 
-
 def find_opportunities(
     limit=20
 ):
 
     try:
-
 
         symbols = get_symbols()
 
@@ -208,10 +409,32 @@ def find_opportunities(
         )
 
 
+        if not symbols:
+
+            return []
+
+
 
         signals = analyze_market_symbols(
             symbols
         )
+
+
+        logger.info(
+            f"SIGNALS FOUND: {len(signals)}"
+        )
+
+
+
+        pumps = scan_advanced_pumps(
+            symbols
+        )
+
+
+        logger.info(
+            f"PUMPS FOUND: {len(pumps)}"
+        )
+
 
 
         opportunities = []
@@ -226,15 +449,30 @@ def find_opportunities(
             )
 
 
+            signal["opportunity_grade"] = classify_opportunity(
+                signal
+            )
+
+
+            signal["confidence"] = max(
+
+                float(
+                    signal.get(
+                        "confidence",
+                        0
+                    )
+                    or 0
+                ),
+
+                signal["opportunity_score"]
+
+            )
+
+
 
             if validate_signal(
                 signal
             ):
-
-
-                signal["confidence"] = signal[
-                    "opportunity_score"
-                ]
 
 
                 opportunities.append(
@@ -242,53 +480,47 @@ def find_opportunities(
                 )
 
 
-            else:
-
-
-                logger.info(
-                    f"{signal.get('symbol')} FILTERED"
-                )
-
-
-
-
-        pumps = scan_advanced_pumps(
-            symbols
-        )
-
-
 
         for pump in pumps:
 
 
-            if pump.get(
+            pump_score = pump.get(
                 "score",
                 0
-            ) >= 75:
+            )
 
 
-                opportunities.append(
+            if pump_score < 70:
 
-                    {
+                continue
 
-                        "symbol": pump.get(
-                            "symbol"
-                        ),
 
-                        "signal": "PUMP WATCH",
 
-                        "confidence": pump.get(
-                            "score"
-                        ),
+            opportunities.append(
 
-                        "opportunity_score": pump.get(
-                            "score"
-                        )
+                {
 
-                    }
+                    "symbol": pump.get(
+                        "symbol"
+                    ),
 
-                )
+                    "signal": "PUMP WATCH",
 
+                    "confidence": pump_score,
+
+                    "entry": None,
+
+                    "tp": None,
+
+                    "sl": None,
+
+                    "opportunity_score": pump_score,
+
+                    "opportunity_grade": "A"
+
+                }
+
+            )
 
 
 
@@ -317,7 +549,10 @@ def find_opportunities(
 
             logger.info(
 
-                f"TOP {item['symbol']} | {item['signal']} | {item['opportunity_score']}"
+                f"TOP {item.get('symbol')} | "
+                f"{item.get('signal')} | "
+                f"GRADE {item.get('opportunity_grade')} | "
+                f"SCORE {item.get('opportunity_score')}"
 
             )
 
