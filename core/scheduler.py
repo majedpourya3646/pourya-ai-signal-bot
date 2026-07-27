@@ -87,31 +87,23 @@ def start_all_services():
             f"SCHEDULER MODE: {MODE}"
         )
 
-        trading_thread = start_trading_thread()
-
-        if MODE == "LIVE":
-
-            start_report_thread()
-
-            while True:
-
-                time.sleep(60)
-
         if MODE == "TEST":
 
             logger.info(
                 "TEST MODE ENABLED"
             )
 
-    run_loop()
-
-    return True
-
-            if trading_thread:
-
-                trading_thread.join()
+            run_loop()
 
             return True
+
+        start_trading_thread()
+
+        start_report_thread()
+
+        while True:
+
+            time.sleep(60)
 
     except KeyboardInterrupt:
 
