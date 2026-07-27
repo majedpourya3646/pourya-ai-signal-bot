@@ -16,6 +16,13 @@ from core.logger import logger
 
 
 
+# =========================================
+# OPPORTUNITY ENGINE V2
+# AI Opportunity Ranking System
+# =========================================
+
+
+
 def calculate_opportunity_score(item):
 
     try:
@@ -44,59 +51,73 @@ def calculate_opportunity_score(item):
         )
 
 
-        # AI confidence
 
-        score += confidence * 0.5
+        # -------------------------
+        # AI CONFIDENCE
+        # -------------------------
+
+        score += confidence * 0.55
 
 
 
-        if confidence >= 80:
+        if confidence >= 90:
 
             score += 20
 
 
-        elif confidence >= 65:
+        elif confidence >= 80:
+
+            score += 15
+
+
+        elif confidence >= 70:
 
             score += 10
 
 
 
-        # Signal power
 
-        if signal == "STRONG BUY":
+        # -------------------------
+        # SIGNAL QUALITY
+        # -------------------------
 
-            score += 20
+        if signal in [
+            "STRONG BUY",
+            "STRONG SELL"
+        ]:
 
-
-        elif signal == "BUY":
-
-            score += 15
-
-
-        elif signal == "EARLY BUY":
-
-            score += 10
+            score += 25
 
 
 
-        elif signal == "STRONG SELL":
-
-            score += 20
-
-
-        elif signal == "SELL":
+        elif signal in [
+            "BUY",
+            "SELL"
+        ]:
 
             score += 15
 
 
 
-        # Multi timeframe
+        elif signal in [
+            "EARLY BUY",
+            "EARLY SELL"
+        ]:
+
+            score += 5
+
+
+
+
+        # -------------------------
+        # MULTI TIMEFRAME CONFIRM
+        # -------------------------
 
         bullish = 0
 
         bearish = 0
 
-        strong = 0
+        strong_tf = 0
 
 
 
@@ -115,6 +136,7 @@ def calculate_opportunity_score(item):
             )
 
 
+
             if tf_signal in [
                 "BUY",
                 "STRONG BUY",
@@ -125,7 +147,7 @@ def calculate_opportunity_score(item):
 
 
 
-            if tf_signal in [
+            elif tf_signal in [
                 "SELL",
                 "STRONG SELL",
                 "EARLY SELL"
@@ -135,9 +157,10 @@ def calculate_opportunity_score(item):
 
 
 
-            if tf_score >= 70:
+            if tf_score >= 75:
 
-                strong += 1
+                strong_tf += 1
+
 
 
 
@@ -163,9 +186,11 @@ def calculate_opportunity_score(item):
 
 
 
-        if strong >= 2:
+
+        if strong_tf >= 2:
 
             score += 10
+
 
 
 
@@ -181,12 +206,14 @@ def calculate_opportunity_score(item):
         )
 
 
-    except Exception as e:
 
+    except Exception as e:
 
         logger.exception(e)
 
         return 0
+
+
 
 
 
@@ -209,7 +236,7 @@ def calculate_grade(score):
         return "B"
 
 
-    elif score >= 50:
+    elif score >= 55:
 
         return "C"
 
@@ -220,7 +247,8 @@ def calculate_grade(score):
 
 
 
-def improve_signal_type(item):
+
+def is_trade_ready(item):
 
     try:
 
@@ -237,77 +265,60 @@ def improve_signal_type(item):
         )
 
 
-        timeframes = item.get(
-            "timeframes",
-            []
+        grade = item.get(
+            "grade",
+            "D"
         )
 
 
-        bullish = 0
 
-        bearish = 0
+        valid_signals = [
 
+            "BUY",
 
+            "SELL",
 
-        for tf in timeframes:
+            "STRONG BUY",
 
+            "STRONG SELL"
 
-            tf_signal = tf.get(
-                "signal",
-                "WAIT"
-            )
-
-
-            if tf_signal in [
-                "BUY",
-                "STRONG BUY"
-            ]:
-
-                bullish += 1
+        ]
 
 
 
-            if tf_signal in [
-                "SELL",
-                "STRONG SELL"
-            ]:
+        if signal not in valid_signals:
 
-                bearish += 1
+            return False
 
 
 
-        if signal == "WAIT":
+        if score < 60:
 
-
-            if score >= 50 and bullish >= 1:
-
-                item["signal"] = "EARLY BUY"
+            return False
 
 
 
-            elif score >= 50 and bearish >= 1:
+        if grade == "D":
 
-                item["signal"] = "EARLY SELL"
-
-
-
-        return item
+            return False
 
 
 
-    except Exception as e:
+        return True
 
 
-        logger.exception(e)
 
-        return item
+    except Exception:
+
+
+        return False
+
 
 
 
 
 
 def find_best_opportunities():
-
 
     try:
 
@@ -335,27 +346,20 @@ def find_best_opportunities():
         for item in results:
 
 
-            item = improve_signal_type(
+            item["opportunity_score"] = calculate_opportunity_score(
                 item
             )
-
-
-
-            opp_score = calculate_opportunity_score(
-                item
-            )
-
-
-            item["opportunity_score"] = opp_score
 
 
             item["grade"] = calculate_grade(
-                opp_score
+                item["opportunity_score"]
             )
 
 
 
-            if opp_score >= 50:
+            if is_trade_ready(
+                item
+            ):
 
 
                 opportunities.append(
@@ -364,8 +368,10 @@ def find_best_opportunities():
 
 
 
-        # Pump scanner
 
+        # -------------------------
+        # Advanced Pump Scanner
+        # -------------------------
 
         try:
 
@@ -377,14 +383,26 @@ def find_best_opportunities():
             for pump in pumps:
 
 
-                pump["opportunity_score"] = 70
-
-                pump["grade"] = "B"
-
-
-                opportunities.append(
+                pump_score = calculate_opportunity_score(
                     pump
                 )
+
+
+                pump["opportunity_score"] = pump_score
+
+
+                pump["grade"] = calculate_grade(
+                    pump_score
+                )
+
+
+
+                if pump_score >= 65:
+
+
+                    opportunities.append(
+                        pump
+                    )
 
 
 
@@ -397,18 +415,25 @@ def find_best_opportunities():
 
 
 
+
+
         opportunities.sort(
+
             key=lambda x: x.get(
                 "opportunity_score",
                 0
             ),
+
             reverse=True
+
         )
 
 
 
         logger.info(
+
             f"TOP OPPORTUNITIES FOUND: {len(opportunities)}"
+
         )
 
 
@@ -437,6 +462,7 @@ def find_best_opportunities():
         logger.exception(e)
 
         return []
+
 
 
 
