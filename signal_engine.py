@@ -1,3 +1,4 @@
+
 # signal_engine.py
 
 import ta
@@ -340,6 +341,7 @@ def analyze_signal(df):
             sell_reasons.append(
                 "MACD bearish crossover"
             )
+
         # ==========================
         # ADX TREND POWER
         # ==========================
