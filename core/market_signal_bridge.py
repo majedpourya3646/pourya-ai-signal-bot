@@ -6,6 +6,54 @@ from multi_timeframe import (
 
 from core.logger import logger
 
+from datetime import datetime
+
+
+
+VALID_SIGNALS = [
+    "BUY",
+    "SELL",
+    "STRONG BUY",
+    "STRONG SELL"
+]
+
+
+
+MIN_SCORE = 60
+
+
+
+def is_valid_signal(result):
+
+    try:
+
+        signal = result.get(
+            "signal",
+            "WAIT"
+        )
+
+        score = result.get(
+            "score",
+            0
+        )
+
+
+        if signal not in VALID_SIGNALS:
+            return False
+
+
+        if score < MIN_SCORE:
+            return False
+
+
+        return True
+
+
+    except Exception:
+
+        return False
+
+
 
 
 def analyze_market_symbols(
@@ -17,9 +65,17 @@ def analyze_market_symbols(
 
     try:
 
+
         for symbol in symbols:
 
+
             try:
+
+
+                logger.info(
+                    f"ANALYZING {symbol}"
+                )
+
 
                 result = analyze_symbol(
                     symbol
@@ -38,53 +94,83 @@ def analyze_market_symbols(
 
 
 
+                if not is_valid_signal(
+                    result
+                ):
+
+                    logger.info(
+                        f"{symbol} FILTERED OUT"
+                    )
+
+                    continue
+
+
+
+
                 results.append(
 
                     {
 
                         "symbol": symbol,
 
+
+                        "market": "FUTURES",
+
+
                         "signal": result.get(
                             "signal",
                             "WAIT"
                         ),
+
 
                         "confidence": result.get(
                             "score",
                             0
                         ),
 
+
                         "score": result.get(
                             "score",
                             0
                         ),
 
+
                         "entry": result.get(
                             "entry",
-                            result.get("price")
+                            result.get(
+                                "price"
+                            )
                         ),
+
 
                         "tp": result.get(
                             "take_profit"
                         ),
 
+
                         "sl": result.get(
                             "stop_loss"
                         ),
 
+
                         "price": result.get(
                             "price"
                         ),
+
 
                         "timeframes": result.get(
                             "timeframes",
                             []
                         ),
 
+
                         "grade": result.get(
                             "grade",
                             ""
-                        )
+                        ),
+
+
+                        "created_at": datetime.utcnow().isoformat()
 
                     }
 
@@ -94,6 +180,7 @@ def analyze_market_symbols(
 
             except Exception as e:
 
+
                 logger.error(
                     f"{symbol} ERROR {e}"
                 )
@@ -101,7 +188,7 @@ def analyze_market_symbols(
 
 
         logger.info(
-            f"MARKET SIGNALS GENERATED: {len(results)}"
+            f"VALID MARKET SIGNALS: {len(results)}"
         )
 
 
@@ -110,6 +197,7 @@ def analyze_market_symbols(
 
 
     except Exception as e:
+
 
         logger.exception(
             e
