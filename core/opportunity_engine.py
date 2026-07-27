@@ -1,5 +1,3 @@
-# core/opportunity_engine.py
-
 from core.market_signal_bridge import (
     analyze_market_symbols
 )
@@ -16,8 +14,7 @@ from core.logger import logger
 
 
 
-MIN_SCORE_TRADE = 70
-MIN_SCORE_WATCH = 50
+MIN_SIGNAL_SCORE = 45
 
 
 
@@ -28,34 +25,25 @@ def calculate_opportunity_score(item):
         score = 0
 
 
-        signal_score = float(
+        confidence = float(
             item.get(
                 "score",
-                0
+                item.get(
+                    "confidence",
+                    0
+                )
             )
             or 0
         )
 
 
-        # Technical confidence
-
-        if signal_score >= 80:
-
+        if confidence >= 75:
             score += 50
 
+        elif confidence >= 60:
+            score += 35
 
-        elif signal_score >= 70:
-
-            score += 40
-
-
-        elif signal_score >= 60:
-
-            score += 30
-
-
-        elif signal_score >= 50:
-
+        elif confidence >= 45:
             score += 20
 
 
@@ -66,114 +54,50 @@ def calculate_opportunity_score(item):
         )
 
 
-
         if signal in [
             "STRONG BUY",
             "STRONG SELL"
         ]:
-
             score += 30
-
 
         elif signal in [
             "BUY",
             "SELL"
         ]:
-
             score += 20
 
 
 
-        timeframes = item.get(
+        buy = 0
+        sell = 0
+
+
+        for tf in item.get(
             "timeframes",
             []
-        )
+        ):
 
-
-        has_4h = False
-        has_1h = False
-        has_15m = False
-
-
-        buy_count = 0
-        sell_count = 0
-
-
-
-        for tf in timeframes:
-
-
-            timeframe = str(
-                tf.get(
-                    "timeframe",
-                    ""
-                )
-            )
-
-
-            tf_signal = tf.get(
+            s = tf.get(
                 "signal",
                 ""
             )
 
 
-
-            if timeframe in [
-                "240",
-                "4h"
-            ]:
-
-                has_4h = True
+            if "BUY" in s:
+                buy += 1
 
 
-
-            if timeframe in [
-                "60",
-                "1h"
-            ]:
-
-                has_1h = True
+            if "SELL" in s:
+                sell += 1
 
 
 
-            if timeframe in [
-                "15"
-            ]:
-
-                has_15m = True
+        if buy >= 2:
+            score += 20
 
 
-
-            if "BUY" in tf_signal:
-
-                buy_count += 1
-
-
-
-            elif "SELL" in tf_signal:
-
-                sell_count += 1
-
-
-
-        # Multi timeframe bonus
-
-        if buy_count >= 2:
-
-            score += 15
-
-
-        if sell_count >= 2:
-
-            score += 15
-
-
-
-        # Higher timeframe confirmation
-
-        if has_4h and has_1h:
-
-            score += 10
+        if sell >= 2:
+            score += 20
 
 
 
@@ -181,7 +105,6 @@ def calculate_opportunity_score(item):
             score,
             100
         )
-
 
 
     except Exception as e:
@@ -193,98 +116,69 @@ def calculate_opportunity_score(item):
 
 
 
-def classify_opportunity(item):
-
-    try:
-
-        score = item.get(
-            "opportunity_score",
-            0
-        )
-
-
-        signal = item.get(
-            "signal",
-            ""
-        )
-
-
-        if signal in [
-            "STRONG BUY",
-            "STRONG SELL"
-        ] and score >= MIN_SCORE_TRADE:
-
-            return "TRADE"
-
-
-
-        if score >= MIN_SCORE_TRADE:
-
-            return "TRADE"
-
-
-
-        if score >= MIN_SCORE_WATCH:
-
-            return "WATCH"
-
-
-
-        return "IGNORE"
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return "IGNORE"
-
-
-
 
 def validate_signal(item):
 
     try:
-
-        signal = item.get(
-            "signal",
-            ""
-        )
-
 
         score = float(
             item.get(
                 "score",
                 0
             )
-            or 0
         )
 
 
-        if signal not in [
-
-            "BUY",
-
-            "SELL",
-
-            "STRONG BUY",
-
-            "STRONG SELL"
-
-        ]:
+        if score < MIN_SIGNAL_SCORE:
 
             return False
 
 
 
-        if score < 60:
-
-            return False
-
+        buy = 0
+        sell = 0
 
 
-        return True
+        for tf in item.get(
+            "timeframes",
+            []
+        ):
+
+
+            signal = tf.get(
+                "signal",
+                ""
+            )
+
+
+            if "BUY" in signal:
+
+                buy += 1
+
+
+            elif "SELL" in signal:
+
+                sell += 1
+
+
+
+        if buy >= 2:
+
+            item["signal"] = "EARLY BUY"
+
+            return True
+
+
+
+        if sell >= 2:
+
+            item["signal"] = "EARLY SELL"
+
+            return True
+
+
+
+        return False
 
 
 
@@ -298,11 +192,13 @@ def validate_signal(item):
 
 
 
+
 def find_opportunities(
     limit=20
 ):
 
     try:
+
 
         symbols = get_symbols()
 
@@ -312,24 +208,8 @@ def find_opportunities(
         )
 
 
-        if not symbols:
-
-            return []
-
-
 
         signals = analyze_market_symbols(
-            symbols
-        )
-
-
-        logger.info(
-            f"SIGNALS FOUND: {len(signals)}"
-        )
-
-
-
-        pumps = scan_advanced_pumps(
             symbols
         )
 
@@ -346,30 +226,45 @@ def find_opportunities(
             )
 
 
-            signal["status"] = classify_opportunity(
+
+            if validate_signal(
                 signal
-            )
+            ):
 
 
+                signal["confidence"] = signal[
+                    "opportunity_score"
+                ]
 
-            if signal["status"] != "IGNORE":
 
                 opportunities.append(
                     signal
                 )
 
 
+            else:
+
+
+                logger.info(
+                    f"{signal.get('symbol')} FILTERED"
+                )
+
+
+
+
+        pumps = scan_advanced_pumps(
+            symbols
+        )
+
+
 
         for pump in pumps:
 
 
-            pump_score = pump.get(
+            if pump.get(
                 "score",
                 0
-            )
-
-
-            if pump_score >= 70:
+            ) >= 75:
 
 
                 opportunities.append(
@@ -382,23 +277,18 @@ def find_opportunities(
 
                         "signal": "PUMP WATCH",
 
-                        "score": pump_score,
+                        "confidence": pump.get(
+                            "score"
+                        ),
 
-                        "confidence": pump_score,
-
-                        "opportunity_score": pump_score,
-
-                        "status": "WATCH",
-
-                        "entry": None,
-
-                        "tp": None,
-
-                        "sl": None
+                        "opportunity_score": pump.get(
+                            "score"
+                        )
 
                     }
 
                 )
+
 
 
 
@@ -427,10 +317,7 @@ def find_opportunities(
 
             logger.info(
 
-                f"{item.get('symbol')} | "
-                f"{item.get('signal')} | "
-                f"{item.get('status')} | "
-                f"SCORE={item.get('opportunity_score')}"
+                f"TOP {item['symbol']} | {item['signal']} | {item['opportunity_score']}"
 
             )
 
