@@ -15,12 +15,10 @@ from core.report_scheduler import (
 from core.logger import logger
 
 
-
 MODE = os.getenv(
     "BOT_MODE",
     "TEST"
 )
-
 
 
 def start_trading_thread():
@@ -31,22 +29,17 @@ def start_trading_thread():
 
             target=run_loop,
 
-            daemon=True
+            daemon=False
 
         )
 
-
         thread.start()
-
 
         logger.info(
             "TRADING THREAD STARTED"
         )
 
-
         return thread
-
-
 
     except Exception as e:
 
@@ -69,18 +62,13 @@ def start_report_thread():
 
         )
 
-
         thread.start()
-
 
         logger.info(
             "REPORT THREAD STARTED"
         )
 
-
         return thread
-
-
 
     except Exception as e:
 
@@ -99,16 +87,15 @@ def start_all_services():
             f"SCHEDULER MODE: {MODE}"
         )
 
-
-        start_trading_thread()
-
-
+        trading_thread = start_trading_thread()
 
         if MODE == "LIVE":
 
             start_report_thread()
 
+            while True:
 
+                time.sleep(60)
 
         if MODE == "TEST":
 
@@ -116,17 +103,11 @@ def start_all_services():
                 "TEST MODE ENABLED"
             )
 
+            if trading_thread:
+
+                trading_thread.join()
+
             return True
-
-
-
-        while True:
-
-            time.sleep(
-                60
-            )
-
-
 
     except KeyboardInterrupt:
 
@@ -134,7 +115,7 @@ def start_all_services():
             "SCHEDULER STOPPED"
         )
 
-
+        return True
 
     except Exception as e:
 
