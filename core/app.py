@@ -1,5 +1,3 @@
-# core/app.py
-
 from core.scheduler import (
     start_all_services
 )
@@ -14,6 +12,10 @@ from core.version import (
 )
 
 from core.logger import logger
+
+from telegram_sender import (
+    send_message
+)
 
 
 
@@ -46,7 +48,23 @@ def start():
             "SYSTEM READY"
         )
 
-        from telegram_sender import send_message
+
+
+        send_message(
+            """
+🤖 <b>Pourya Trader AI v2.0.0</b>
+
+✅ SYSTEM ONLINE
+
+🟢 CoinEx API: Connected
+🟢 AI Engine: Running
+🟡 Paper Trading: Enabled
+
+Waiting for opportunities...
+"""
+        )
+
+
 
         result = start_all_services()
 
@@ -88,6 +106,7 @@ def stop():
         logger.exception(e)
 
         return False
+
 
 
 
