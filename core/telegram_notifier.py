@@ -16,40 +16,33 @@ def notify_trade_opened(
 
         message = (
 
-            "🟢 معامله جدید باز شد\n\n"
+            "🟢 NEW TRADE\n\n"
 
-            f"🪙 ارز: {trade.get('symbol')}\n"
+            f"Symbol: {trade.get('symbol')}\n"
 
-            f"📈 جهت: {trade.get('side')}\n"
+            f"Side: {trade.get('side')}\n"
 
-            f"💵 ورود: {trade.get('entry')}\n"
+            f"Entry: {trade.get('entry')}\n"
 
-            f"🎯 حد سود: {trade.get('tp')}\n"
+            f"TP: {trade.get('tp')}\n"
 
-            f"🛑 حد ضرر: {trade.get('sl')}\n"
+            f"SL: {trade.get('sl')}\n"
 
-            f"🤖 اطمینان: {trade.get('confidence')}%"
+            f"Quantity: {trade.get('quantity')}\n"
+
+            f"Confidence: {trade.get('confidence')}%"
 
         )
 
-
-
-        send_message(
+        return send_message(
             message
         )
-
-
-
-        return True
-
-
 
     except Exception as e:
 
         logger.exception(e)
 
         return False
-
 
 
 
@@ -62,27 +55,21 @@ def notify_trade_closed(
 
         message = (
 
-            "🔴 معامله بسته شد\n\n"
+            "🔴 TRADE CLOSED\n\n"
 
-            f"🪙 ارز: {trade.get('symbol')}\n"
+            f"Symbol: {trade.get('symbol')}\n"
 
-            f"📌 دلیل: {trade.get('reason')}\n"
+            f"Reason: {trade.get('reason')}\n"
 
-            f"💰 سود/ضرر: {trade.get('pnl')} USDT"
+            f"Exit Price: {trade.get('exit_price', '-')}\n"
+
+            f"PNL: {trade.get('pnl')}"
 
         )
 
-
-
-        send_message(
+        return send_message(
             message
         )
-
-
-
-        return True
-
-
 
     except Exception as e:
 
@@ -93,6 +80,43 @@ def notify_trade_closed(
 
 
 
+def notify_daily_report(
+    report
+):
+
+    try:
+
+        return send_message(
+            report
+        )
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
+
+def notify_monthly_report(
+    report
+):
+
+    try:
+
+        return send_message(
+            report
+        )
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
+
+
+
 
 def notify_system(
     text
@@ -100,15 +124,9 @@ def notify_system(
 
     try:
 
-        send_message(
+        return send_message(
             text
         )
-
-
-
-        return True
-
-
 
     except Exception as e:
 
