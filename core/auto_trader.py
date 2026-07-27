@@ -9,7 +9,8 @@ from core.risk_engine import (
 )
 
 from core.order_manager import (
-    create_order
+    create_order,
+    calculate_quantity
 )
 
 from core.trade_manager import (
@@ -17,6 +18,10 @@ from core.trade_manager import (
 )
 
 from core.logger import logger
+
+from config import (
+    INITIAL_BALANCE
+)
 
 
 
@@ -30,15 +35,11 @@ def execute_opportunity(
             opportunity
         )
 
-
         opportunity["confidence"] = score
-
-
 
         valid, reason = validate_trade(
             opportunity
         )
-
 
         if not valid:
 
@@ -48,17 +49,13 @@ def execute_opportunity(
 
             return None
 
-
-
         symbol = opportunity.get(
             "symbol"
         )
 
-
         side = opportunity.get(
             "signal"
         )
-
 
         if side not in [
             "BUY",
@@ -71,21 +68,14 @@ def execute_opportunity(
 
             return None
 
-
-
-        quantity = opportunity.get(
-            "quantity",
-            0
-        )
-
-
-        entry = opportunity.get(
-            "entry",
+        entry = float(
             opportunity.get(
-                "price"
+                "entry",
+                opportunity.get(
+                    "price"
+                )
             )
         )
-
 
         tp = opportunity.get(
             "tp",
@@ -94,7 +84,6 @@ def execute_opportunity(
             )
         )
 
-
         sl = opportunity.get(
             "sl",
             opportunity.get(
@@ -102,7 +91,24 @@ def execute_opportunity(
             )
         )
 
+        quantity = opportunity.get(
+            "quantity"
+        )
 
+        if not quantity:
+
+            quantity = calculate_quantity(
+                INITIAL_BALANCE,
+                entry
+            )
+
+        if quantity <= 0:
+
+            logger.error(
+                "INVALID QUANTITY"
+            )
+
+            return None
 
         order = create_order(
 
@@ -114,8 +120,6 @@ def execute_opportunity(
 
         )
 
-
-
         if not order:
 
             logger.error(
@@ -123,8 +127,6 @@ def execute_opportunity(
             )
 
             return None
-
-
 
         saved = open_trade(
 
@@ -144,8 +146,6 @@ def execute_opportunity(
 
         )
 
-
-
         if not saved:
 
             logger.error(
@@ -154,13 +154,9 @@ def execute_opportunity(
 
             return None
 
-
-
         logger.info(
             f"TRADE OPENED {symbol}"
         )
-
-
 
         return {
 
@@ -170,11 +166,11 @@ def execute_opportunity(
 
             "confidence": score,
 
+            "quantity": quantity,
+
             "order": order
 
         }
-
-
 
     except Exception as e:
 
@@ -191,21 +187,17 @@ def execute_batch(
 
     results = []
 
-
     try:
 
         if not opportunities:
 
             return []
 
-
         for item in opportunities:
-
 
             result = execute_opportunity(
                 item
             )
-
 
             if result:
 
@@ -213,16 +205,11 @@ def execute_batch(
                     result
                 )
 
-
-
         logger.info(
             f"EXECUTED TRADES: {len(results)}"
         )
 
-
         return results
-
-
 
     except Exception as e:
 
