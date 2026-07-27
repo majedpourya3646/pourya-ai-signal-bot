@@ -11,10 +11,14 @@ from datetime import datetime
 
 
 VALID_SIGNALS = [
+
     "BUY",
     "SELL",
     "STRONG BUY",
-    "STRONG SELL"
+    "STRONG SELL",
+    "EARLY BUY",
+    "EARLY SELL"
+
 ]
 
 
@@ -32,26 +36,204 @@ def is_valid_signal(result):
             "WAIT"
         )
 
+
         score = result.get(
             "score",
             0
         )
 
 
+
         if signal not in VALID_SIGNALS:
+
             return False
+
 
 
         if score < MIN_SCORE:
+
             return False
+
 
 
         return True
 
 
-    except Exception:
+
+    except Exception as e:
+
+
+        logger.error(
+            f"SIGNAL VALIDATION ERROR: {e}"
+        )
+
 
         return False
+
+
+
+
+
+def improve_final_signal(result):
+
+    """
+    تبدیل EARLY ها به فرصت قابل بررسی
+    """
+
+    try:
+
+
+        signal = result.get(
+            "signal",
+            "WAIT"
+        )
+
+
+        timeframes = result.get(
+            "timeframes",
+            []
+        )
+
+
+        buy_votes = 0
+
+        sell_votes = 0
+
+        strong_votes = 0
+
+
+
+        for tf in timeframes:
+
+
+            tf_signal = tf.get(
+                "signal",
+                "WAIT"
+            )
+
+
+            tf_score = tf.get(
+                "score",
+                0
+            )
+
+
+
+            if tf_signal in [
+
+                "BUY",
+                "STRONG BUY",
+                "EARLY BUY"
+
+            ]:
+
+                buy_votes += 1
+
+
+
+            if tf_signal in [
+
+                "SELL",
+                "STRONG SELL",
+                "EARLY SELL"
+
+            ]:
+
+                sell_votes += 1
+
+
+
+            if tf_score >= 70:
+
+                strong_votes += 1
+
+
+
+        score = result.get(
+            "score",
+            0
+        )
+
+
+
+        # تقویت سیگنال صعودی
+
+        if (
+
+            signal == "WAIT"
+
+            and buy_votes >= 2
+
+            and score >= 60
+
+        ):
+
+            result["signal"] = "BUY"
+
+
+
+        elif (
+
+            signal == "EARLY BUY"
+
+            and buy_votes >= 2
+
+            and strong_votes >= 1
+
+        ):
+
+            result["signal"] = "BUY"
+
+
+
+
+
+        # تقویت سیگنال نزولی
+
+
+        elif (
+
+            signal == "WAIT"
+
+            and sell_votes >= 2
+
+            and score >= 60
+
+        ):
+
+            result["signal"] = "SELL"
+
+
+
+        elif (
+
+            signal == "EARLY SELL"
+
+            and sell_votes >= 2
+
+            and strong_votes >= 1
+
+        ):
+
+            result["signal"] = "SELL"
+
+
+
+        return result
+
+
+
+    except Exception as e:
+
+
+        logger.error(
+            f"SIGNAL IMPROVEMENT ERROR: {e}"
+        )
+
+
+        return result
+
+
 
 
 
@@ -77,9 +259,11 @@ def analyze_market_symbols(
                 )
 
 
+
                 result = analyze_symbol(
                     symbol
                 )
+
 
 
                 if not result:
@@ -88,8 +272,14 @@ def analyze_market_symbols(
 
 
 
+                result = improve_final_signal(
+                    result
+                )
+
+
+
                 logger.info(
-                    f"{symbol} RESULT: {result}"
+                    f"{symbol} RESULT AFTER AI FILTER: {result}"
                 )
 
 
@@ -98,9 +288,11 @@ def analyze_market_symbols(
                     result
                 ):
 
+
                     logger.info(
                         f"{symbol} FILTERED OUT"
                     )
+
 
                     continue
 
@@ -117,10 +309,12 @@ def analyze_market_symbols(
                         "market": "FUTURES",
 
 
+
                         "signal": result.get(
                             "signal",
                             "WAIT"
                         ),
+
 
 
                         "confidence": result.get(
@@ -129,10 +323,12 @@ def analyze_market_symbols(
                         ),
 
 
+
                         "score": result.get(
                             "score",
                             0
                         ),
+
 
 
                         "entry": result.get(
@@ -143,9 +339,11 @@ def analyze_market_symbols(
                         ),
 
 
+
                         "tp": result.get(
                             "take_profit"
                         ),
+
 
 
                         "sl": result.get(
@@ -153,9 +351,11 @@ def analyze_market_symbols(
                         ),
 
 
+
                         "price": result.get(
                             "price"
                         ),
+
 
 
                         "timeframes": result.get(
@@ -164,10 +364,12 @@ def analyze_market_symbols(
                         ),
 
 
+
                         "grade": result.get(
                             "grade",
                             ""
                         ),
+
 
 
                         "created_at": datetime.utcnow().isoformat()
@@ -192,6 +394,7 @@ def analyze_market_symbols(
         )
 
 
+
         return results
 
 
@@ -202,5 +405,6 @@ def analyze_market_symbols(
         logger.exception(
             e
         )
+
 
         return []
