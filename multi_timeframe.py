@@ -28,26 +28,22 @@ TIMEFRAME_WEIGHTS = {
 def smart_round(value):
 
     if value >= 1000:
-
         return round(value, 2)
 
     elif value >= 1:
-
         return round(value, 4)
 
     elif value >= 0.01:
-
         return round(value, 6)
 
     elif value >= 0.0001:
-
         return round(value, 8)
 
     elif value >= 0.000001:
-
         return round(value, 10)
 
     return round(value, 12)
+
 
 
 
@@ -59,7 +55,8 @@ def calculate_trade_levels(
 
     if side in [
         "BUY",
-        "STRONG BUY"
+        "STRONG BUY",
+        "EARLY BUY"
     ]:
 
         tp = entry * (
@@ -89,22 +86,19 @@ def calculate_trade_levels(
 
 
 
+
 def calculate_grade(score):
 
     if score >= 90:
-
         return "A+"
 
     if score >= 80:
-
         return "A"
 
     if score >= 70:
-
         return "B"
 
     if score >= 60:
-
         return "C"
 
     return "D"
@@ -122,29 +116,22 @@ def analyze_symbol(symbol):
 
     timeframe_results = []
 
-
     weighted_score = 0
-
 
     last_price = None
 
 
     buy_votes = 0
-
     sell_votes = 0
 
-
     early_buy_votes = 0
-
     early_sell_votes = 0
 
 
 
     for timeframe in TIMEFRAMES:
 
-
         try:
-
 
             df = get_market_data(
                 symbol,
@@ -184,10 +171,8 @@ def analyze_symbol(symbol):
 
 
             weighted_score += (
-
                 confidence *
                 TIMEFRAME_WEIGHTS[timeframe]
-
             )
 
 
@@ -217,13 +202,9 @@ def analyze_symbol(symbol):
             timeframe_results.append(
 
                 {
-
                     "timeframe": timeframe,
-
                     "signal": direction,
-
                     "score": confidence
-
                 }
 
             )
@@ -231,7 +212,6 @@ def analyze_symbol(symbol):
 
 
         except Exception as e:
-
 
             logger.error(
                 f"{symbol} {timeframe} ERROR {e}"
@@ -242,7 +222,6 @@ def analyze_symbol(symbol):
 
 
     if not timeframe_results:
-
 
         return {
 
@@ -265,24 +244,91 @@ def analyze_symbol(symbol):
 
 
 
-    # ==========================
-    # AI MULTI TIMEFRAME FILTER
-    # ==========================
-
-
     final_signal = "WAIT"
 
 
 
-    # BUY LOGIC
+
+
+    # ==========================
+    # BUY LOGIC V3
+    # ==========================
+
+
+    if (
+
+        buy_votes >= 1
+
+        and
+
+        avg_score >= 60
+
+    ):
+
+        final_signal = "BUY"
+
+
+
+    elif (
+
+        early_buy_votes >= 1
+
+        and
+
+        avg_score >= 55
+
+    ):
+
+        final_signal = "EARLY BUY"
+
+
+
+
+
+    # ==========================
+    # SELL LOGIC V3
+    # ==========================
+
+
+    elif (
+
+        sell_votes >= 1
+
+        and
+
+        avg_score >= 60
+
+    ):
+
+        final_signal = "SELL"
+
+
+
+    elif (
+
+        early_sell_votes >= 1
+
+        and
+
+        avg_score >= 55
+
+    ):
+
+        final_signal = "EARLY SELL"
+
+
+
+
 
     if (
 
         buy_votes >= 2
-        and avg_score >= 65
+
+        and
+
+        avg_score >= 75
 
     ):
-
 
         final_signal = "STRONG BUY"
 
@@ -290,82 +336,46 @@ def analyze_symbol(symbol):
 
     elif (
 
-        buy_votes >= 1
-        and early_buy_votes >= 1
-        and avg_score >= 60
-
-    ):
-
-
-        final_signal = "BUY"
-
-
-
-
-    # SELL LOGIC
-
-    elif (
-
         sell_votes >= 2
-        and avg_score <= 70
+
+        and
+
+        avg_score >= 75
 
     ):
-
 
         final_signal = "STRONG SELL"
 
-
-
-    elif (
-
-        sell_votes >= 1
-        and early_sell_votes >= 1
-        and avg_score >= 60
-
-    ):
-
-
-        final_signal = "SELL"
 
 
 
 
     result = {
 
-
         "symbol": symbol,
-
 
         "signal": final_signal,
 
-
         "score": avg_score,
-
 
         "grade": calculate_grade(
             avg_score
         ),
 
-
         "price": last_price,
-
 
         "timeframes": timeframe_results,
 
-
         "buy_votes": buy_votes,
-
 
         "sell_votes": sell_votes,
 
-
         "early_buy_votes": early_buy_votes,
-
 
         "early_sell_votes": early_sell_votes
 
-
     }
+
 
 
 
@@ -416,7 +426,6 @@ def analyze_symbol(symbol):
         f"EARLY_SELL={early_sell_votes}"
 
     )
-
 
 
     return result
