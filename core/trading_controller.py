@@ -16,7 +16,10 @@ def collect_opportunities():
 
         for item in opportunities[:20]:
 
-            signal = item.get("signal", "WAIT")
+            signal = item.get(
+                "signal",
+                "WAIT"
+            )
 
             if signal not in (
                 "BUY",
@@ -28,13 +31,16 @@ def collect_opportunities():
 
             filtered.append(item)
 
-        logger.info(f"VALID OPPORTUNITIES: {len(filtered)}")
+        logger.info(
+            f"VALID OPPORTUNITIES: {len(filtered)}"
+        )
 
         return filtered
 
     except Exception as e:
 
         logger.exception(e)
+
         return []
 
 
@@ -42,21 +48,32 @@ def run_trading_cycle():
 
     try:
 
-        logger.info("TRADING CYCLE STARTED")
+        logger.info(
+            "TRADING CYCLE STARTED"
+        )
 
         opportunities = collect_opportunities()
 
         if not opportunities:
-            logger.info("NO OPPORTUNITIES FOUND")
+
+            logger.info(
+                "NO OPPORTUNITIES FOUND"
+            )
+
             return []
 
-        trades = execute_batch(opportunities)
+        trades = execute_batch(
+            opportunities
+        )
 
-        logger.info(f"EXECUTED {len(trades)} TRADES")
+        logger.info(
+            f"EXECUTED {len(trades)} TRADES"
+        )
 
         return trades
 
     except Exception as e:
 
         logger.exception(e)
+
         return []
