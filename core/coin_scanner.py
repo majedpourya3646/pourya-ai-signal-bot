@@ -1,88 +1,69 @@
 # core/coin_scanner.py
 
-from core.market_discovery import (
-    discover_markets
-)
-
-from core.market_filters import (
-    filter_market
-)
-
+from core.market_discovery import discover_markets
+from core.market_filters import filter_market
 from core.logger import logger
 
+# فقط بازارهای معتبر و نقدشونده
+ALLOWED_SYMBOLS = {
+
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "TRXUSDT",
+    "LINKUSDT",
+    "AVAXUSDT",
+    "DOTUSDT",
+    "LTCUSDT",
+    "BCHUSDT",
+    "ATOMUSDT",
+    "UNIUSDT",
+    "APTUSDT",
+    "ARBUSDT",
+    "OPUSDT",
+    "NEARUSDT",
+    "FILUSDT",
+    "SUIUSDT",
+    "SEIUSDT",
+    "INJUSDT",
+    "FETUSDT",
+    "AAVEUSDT",
+    "TIAUSDT",
+    "WLDUSDT",
+    "TONUSDT",
+    "PEPEUSDT",
+    "SHIBUSDT",
+    "BONKUSDT",
+    "FLOKIUSDT",
+    "JUPUSDT",
+    "ENAUSDT",
+    "RENDERUSDT",
+    "ONDOUSDT",
+    "TAOUSDT",
+    "ICPUSDT",
+    "ETCUSDT",
+    "EOSUSDT"
+
+}
 
 
-
-
-def get_symbols():
+def rank_by_volume(markets):
 
     try:
 
-        markets = discover_markets()
+        return sorted(
 
+            markets,
 
+            key=lambda x: float(x.get("volume", 0) or 0),
 
-        if not markets:
-
-            logger.warning(
-                "NO MARKET DATA RECEIVED"
-            )
-
-            return []
-
-
-
-        logger.info(
-            f"RAW MARKETS COUNT: {len(markets)}"
-        )
-
-
-
-        if len(markets) > 0:
-
-            logger.info(
-                f"RAW MARKET SAMPLE: {markets[0]}"
-            )
-
-
-
-        filtered = filter_market(
-            markets
-        )
-
-        filtered = rank_by_volume(filtered)
-
-        symbols = []
-
-
-
-        for item in filtered:
-
-
-            symbol = item.get(
-                "symbol"
-            )
-
-
-            if symbol:
-
-                symbols.append(
-                    symbol
-                )
-
-
-
-        logger.info(
-
-            f"AVAILABLE SYMBOLS: {len(symbols)}"
+            reverse=True
 
         )
-
-
-
-        return symbols
-
-
 
     except Exception as e:
 
@@ -91,52 +72,35 @@ def get_symbols():
         return []
 
 
-
-
-
-def rank_by_volume(
-    markets
-):
+def get_symbols():
 
     try:
+
+        markets = discover_markets()
 
         if not markets:
 
             return []
 
+        markets = filter_market(markets)
 
+        markets = rank_by_volume(markets)
 
-        if not isinstance(
-            markets,
-            list
-        ):
+        symbols = []
 
-            return []
+        for item in markets:
 
+            symbol = item.get("symbol")
 
+            if symbol in ALLOWED_SYMBOLS:
 
-        return sorted(
+                symbols.append(symbol)
 
-            markets,
+        logger.info(f"VALID FUTURES SYMBOLS: {len(symbols)}")
 
-            key=lambda x:
+        logger.info(symbols)
 
-                float(
-
-                    x.get(
-                        "volume",
-                        0
-                    )
-
-                    or 0
-
-                ),
-
-            reverse=True
-
-        )
-
-
+        return symbols
 
     except Exception as e:
 
