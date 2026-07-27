@@ -103,6 +103,10 @@ def start_all_services():
                 "TEST MODE ENABLED"
             )
 
+    run_loop()
+
+    return True
+
             if trading_thread:
 
                 trading_thread.join()
