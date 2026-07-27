@@ -16,7 +16,7 @@ from core.logger import logger
 
 
 
-MIN_SIGNAL_SCORE = 55
+MIN_SIGNAL_SCORE = 45
 
 
 
