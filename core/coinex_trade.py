@@ -5,10 +5,7 @@ from coinex_api import coinex
 from core.logger import logger
 
 
-
 class CoinExTrade:
-
-
 
     def create_order(
         self,
@@ -19,29 +16,23 @@ class CoinExTrade:
 
         try:
 
-            if side in [
-                "BUY",
-                "LONG"
-            ]:
+            side = side.upper()
+
+            if side == "BUY":
 
                 order_side = "buy"
 
-            elif side in [
-                "SELL",
-                "SHORT"
-            ]:
+            elif side == "SELL":
 
                 order_side = "sell"
 
             else:
 
                 logger.error(
-                    f"INVALID ORDER SIDE {side}"
+                    f"INVALID SIDE {side}"
                 )
 
                 return None
-
-
 
             return coinex.create_order(
 
@@ -55,16 +46,11 @@ class CoinExTrade:
 
             )
 
-
-
         except Exception as e:
 
-            logger.exception(
-                e
-            )
+            logger.exception(e)
 
             return None
-
 
 
 
@@ -75,15 +61,10 @@ class CoinExTrade:
     ):
 
         return self.create_order(
-
             symbol,
-
             "BUY",
-
             quantity
-
         )
-
 
 
 
@@ -94,15 +75,10 @@ class CoinExTrade:
     ):
 
         return self.create_order(
-
             symbol,
-
             "SELL",
-
             quantity
-
         )
-
 
 
 
@@ -119,16 +95,11 @@ class CoinExTrade:
 
             )
 
-
-
         except Exception as e:
 
-            logger.exception(
-                e
-            )
+            logger.exception(e)
 
             return None
-
 
 
 
@@ -143,22 +114,18 @@ class CoinExTrade:
                 order_id
             )
 
-
-
         except Exception as e:
 
-            logger.exception(
-                e
-            )
+            logger.exception(e)
 
             return None
 
 
 
-
     def cancel_order(
         self,
-        order_id
+        order_id,
+        symbol=None
     ):
 
         try:
@@ -167,17 +134,11 @@ class CoinExTrade:
                 order_id
             )
 
-
-
         except Exception as e:
 
-            logger.exception(
-                e
-            )
+            logger.exception(e)
 
             return None
-
-
 
 
 coinex_trade = CoinExTrade()
