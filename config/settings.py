@@ -30,3 +30,5 @@ DRY_RUN = True
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 CHAT_ID = os.getenv("CHAT_ID")
+
+MAX_DAILY_LOSS_PERCENT = 5
