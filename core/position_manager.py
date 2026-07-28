@@ -11,15 +11,18 @@ from core.logger import logger
 
 
 
+
 def get_current_price(
     symbol
 ):
 
     try:
 
+
         ticker = coinex_trade.get_ticker(
             symbol
         )
+
 
 
         if not ticker:
@@ -28,10 +31,14 @@ def get_current_price(
 
 
 
-        price = ticker.get(
+        data = ticker.get(
             "data",
             {}
-        ).get(
+        )
+
+
+
+        price = data.get(
             "last"
         )
 
@@ -51,9 +58,13 @@ def get_current_price(
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return None
+
+
 
 
 
@@ -67,53 +78,79 @@ def calculate_pnl(
 
     try:
 
+
+        side = side.upper()
+
+
+
         if side in [
+
             "BUY",
+
             "LONG"
+
         ]:
 
-            return round(
-                (
-                    current
-                    -
-                    entry
-                )
-                *
-                quantity,
 
-                6
-            )
+            pnl = (
+
+                current
+
+                -
+
+                entry
+
+            ) * quantity
 
 
 
         elif side in [
+
             "SELL",
+
             "SHORT"
+
         ]:
 
-            return round(
-                (
-                    entry
-                    -
-                    current
-                )
-                *
-                quantity,
 
-                6
-            )
+            pnl = (
 
+                entry
+
+                -
+
+                current
+
+            ) * quantity
 
 
-        return 0
+
+        else:
+
+
+            pnl = 0
+
+
+
+        return round(
+
+            pnl,
+
+            6
+
+        )
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return 0
+
+
 
 
 
@@ -126,17 +163,22 @@ def check_tp_sl():
 
     try:
 
+
+
         trades = get_open_trades()
 
 
 
         if not trades:
 
+
             return []
 
 
 
+
         for trade in trades:
+
 
 
             symbol = trade.get(
@@ -144,173 +186,270 @@ def check_tp_sl():
             )
 
 
+
             side = trade.get(
+
                 "side",
+
                 "BUY"
+
             )
+
 
 
             entry = float(
+
                 trade.get(
+
                     "entry",
+
                     0
+
                 )
+
             )
+
 
 
             tp = float(
+
                 trade.get(
+
                     "tp",
+
                     0
+
                 )
+
             )
+
 
 
             sl = float(
+
                 trade.get(
+
                     "sl",
+
                     0
+
                 )
+
             )
+
 
 
             quantity = float(
+
                 trade.get(
+
                     "quantity",
+
                     0
+
                 )
+
             )
+
+
+
+
+            if not symbol or quantity <= 0:
+
+
+                continue
+
 
 
 
             current = get_current_price(
+
                 symbol
+
             )
 
 
 
             if not current:
 
+
                 continue
 
 
 
-            should_close = False
-
-            reason = ""
 
 
+            close_reason = None
 
-            if side in [
+
+
+
+
+            if side.upper() in [
+
                 "BUY",
+
                 "LONG"
+
             ]:
 
 
-                if current >= tp:
-
-                    should_close = True
-
-                    reason = "TAKE PROFIT"
+                if tp > 0 and current >= tp:
 
 
+                    close_reason = "TAKE PROFIT"
 
-                elif current <= sl:
 
-                    should_close = True
 
-                    reason = "STOP LOSS"
+                elif sl > 0 and current <= sl:
+
+
+                    close_reason = "STOP LOSS"
 
 
 
 
-            elif side in [
+
+
+            elif side.upper() in [
+
                 "SELL",
+
                 "SHORT"
+
             ]:
 
 
-                if current <= tp:
-
-                    should_close = True
-
-                    reason = "TAKE PROFIT"
+                if tp > 0 and current <= tp:
 
 
+                    close_reason = "TAKE PROFIT"
 
-                elif current >= sl:
 
-                    should_close = True
 
-                    reason = "STOP LOSS"
+                elif sl > 0 and current >= sl:
+
+
+                    close_reason = "STOP LOSS"
 
 
 
 
-            if not should_close:
+
+
+            if not close_reason:
+
 
                 continue
+
+
 
 
 
             result = coinex_trade.close_position(
-                symbol
+
+                symbol,
+
+                side,
+
+                quantity
+
             )
 
 
 
-            if result and result.get(
+
+
+            if not result:
+
+
+                continue
+
+
+
+
+
+            if result.get(
+
                 "code"
-            ) == 0:
+
+            ) != 0:
 
 
-                pnl = calculate_pnl(
+                logger.error(
 
-                    side,
-
-                    entry,
-
-                    current,
-
-                    quantity
+                    result
 
                 )
 
 
+                continue
 
-                close_trade(
+
+
+
+
+            pnl = calculate_pnl(
+
+                side,
+
+                entry,
+
+                current,
+
+                quantity
+
+            )
+
+
+
+            close_trade(
+
+                trade.get(
+
+                    "id"
+
+                )
+
+            )
+
+
+
+
+
+            closed.append(
+
+                {
+
+                    "symbol":
 
                     symbol,
 
-                    current,
+
+                    "reason":
+
+                    close_reason,
+
+
+                    "pnl":
 
                     pnl
 
-                )
+                }
+
+            )
 
 
 
-                closed.append(
-
-                    {
-
-                        "symbol": symbol,
-
-                        "reason": reason,
-
-                        "pnl": pnl
-
-                    }
-
-                )
 
 
+            logger.info(
 
-                logger.info(
+                f"{symbol} CLOSED {close_reason} PNL={pnl}"
 
-                    f"{symbol} CLOSED {reason} PNL={pnl}"
+            )
 
-                )
+
 
 
 
@@ -318,8 +457,11 @@ def check_tp_sl():
 
 
 
+
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return []
