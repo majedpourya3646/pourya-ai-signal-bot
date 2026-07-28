@@ -1,224 +1,272 @@
 # core/risk_engine.py
 
-from core.config_manager import (
-    get_setting
-)
+from core.logger import logger
 
 from core.trade_manager import (
     get_open_trades
 )
 
-from core.logger import logger
-
-
-
-def get_risk_settings():
-
-    try:
-
-        return {
-
-            "risk_percent": get_setting(
-                "risk_percent",
-                1
-            ),
-
-            "max_open_trades": get_setting(
-                "max_open_trades",
-                3
-            ),
-
-            "min_confidence": get_setting(
-                "min_confidence",
-                65
-            ),
-
-            "min_risk_reward": get_setting(
-                "min_risk_reward",
-                2
-            )
-
-        }
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return {}
-
-
-
-
-def check_open_limit():
-
-    try:
-
-        trades = get_open_trades()
-
-        settings = get_risk_settings()
-
-
-        return len(trades) < settings.get(
-            "max_open_trades",
-            3
-        )
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-def check_confidence(
-    confidence
-):
-
-    try:
-
-        minimum = get_setting(
-            "min_confidence",
-            65
-        )
-
-
-        return float(confidence) >= float(minimum)
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-def check_risk_reward(
-    entry,
-    tp,
-    sl
-):
-
-    try:
-
-        if not entry or not tp or not sl:
-
-            return False
-
-
-        reward = abs(
-            float(tp) -
-            float(entry)
-        )
-
-
-        risk = abs(
-            float(entry) -
-            float(sl)
-        )
-
-
-        if risk <= 0:
-
-            return False
-
-
-        ratio = reward / risk
-
-
-        minimum = get_setting(
-            "min_risk_reward",
-            2
-        )
-
-
-        return ratio >= float(minimum)
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
+from config import (
+    MAX_OPEN_TRADES,
+    MIN_CONFIDENCE,
+    MAX_DAILY_LOSS_PERCENT,
+    MIN_RISK_REWARD
+)
 
 
 
 
 def validate_trade(
-    trade
+    opportunity
 ):
 
     try:
 
-        confidence = trade.get(
-            "confidence",
-            trade.get(
-                "score",
+
+        if not opportunity:
+
+
+            return False, "EMPTY OPPORTUNITY"
+
+
+
+
+
+        symbol = opportunity.get(
+
+            "symbol"
+
+        )
+
+
+        signal = opportunity.get(
+
+            "signal"
+
+        )
+
+
+
+        confidence = float(
+
+            opportunity.get(
+
+                "confidence",
+
                 0
+
             )
+
         )
 
 
-        entry = trade.get(
-            "entry",
-            trade.get(
-                "price"
+
+        entry = float(
+
+            opportunity.get(
+
+                "entry",
+
+                opportunity.get(
+
+                    "price",
+
+                    0
+
+                )
+
             )
+
         )
 
 
-        tp = trade.get(
+
+        tp = opportunity.get(
+
             "tp",
-            trade.get(
+
+            opportunity.get(
+
                 "take_profit"
+
             )
+
         )
 
 
-        sl = trade.get(
+
+        sl = opportunity.get(
+
             "sl",
-            trade.get(
+
+            opportunity.get(
+
                 "stop_loss"
+
             )
+
         )
 
 
 
-        if not check_open_limit():
-
-            return False, "MAX OPEN TRADES"
 
 
+        if not symbol:
 
-        if not check_confidence(
-            confidence
-        ):
+
+            return False, "MISSING SYMBOL"
+
+
+
+
+
+        if signal not in [
+
+            "BUY",
+
+            "SELL",
+
+            "STRONG BUY",
+
+            "STRONG SELL",
+
+            "EARLY BUY",
+
+            "EARLY SELL"
+
+        ]:
+
+
+            return False, "INVALID SIGNAL"
+
+
+
+
+
+        if confidence < MIN_CONFIDENCE:
+
 
             return False, "LOW CONFIDENCE"
 
 
 
-        if not check_risk_reward(
-            entry,
-            tp,
-            sl
-        ):
 
-            return False, "BAD RISK REWARD"
+
+        open_trades = get_open_trades()
 
 
 
-        return True, "APPROVED"
+        if len(open_trades) >= MAX_OPEN_TRADES:
+
+
+            return False, "MAX OPEN TRADES"
+
+
+
+
+
+        for trade in open_trades:
+
+
+            if trade.get(
+
+                "symbol"
+
+            ) == symbol:
+
+
+                return False, "DUPLICATE POSITION"
+
+
+
+
+
+
+        if entry <= 0:
+
+
+            return False, "INVALID ENTRY"
+
+
+
+
+
+        if not tp or not sl:
+
+
+            return False, "MISSING TP SL"
+
+
+
+
+
+        tp = float(tp)
+
+        sl = float(sl)
+
+
+
+
+
+        risk = abs(
+
+            entry - sl
+
+        )
+
+
+        reward = abs(
+
+            tp - entry
+
+        )
+
+
+
+
+
+        if risk <= 0:
+
+
+            return False, "INVALID RISK"
+
+
+
+
+
+        risk_reward = reward / risk
+
+
+
+
+
+        if risk_reward < MIN_RISK_REWARD:
+
+
+            return False, "LOW RISK REWARD"
+
+
+
+
+
+        logger.info(
+
+            f"TRADE VALIDATED {symbol} RR={risk_reward:.2f}"
+
+        )
+
+
+
+        return True, "OK"
+
+
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return False, str(e)
