@@ -6,6 +6,9 @@ from core.logger import logger
 
 
 
+
+
+
 def calculate_volume_power(
     df
 ):
@@ -13,9 +16,12 @@ def calculate_volume_power(
     try:
 
 
-        if len(df) < 20:
+        if df is None or len(df) < 20:
+
 
             return 0
+
+
 
 
 
@@ -26,6 +32,7 @@ def calculate_volume_power(
         )
 
 
+
         avg_volume = float(
 
             df["volume"].iloc[-20:-1].mean()
@@ -34,9 +41,14 @@ def calculate_volume_power(
 
 
 
-        if avg_volume == 0:
+
+
+        if avg_volume <= 0:
+
 
             return 0
+
+
 
 
 
@@ -50,15 +62,18 @@ def calculate_volume_power(
 
 
 
+
+
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return 0
+
+
+
 
 
 
@@ -68,6 +83,15 @@ def calculate_price_change(
 ):
 
     try:
+
+
+        if df is None or len(df) < 20:
+
+
+            return 0
+
+
+
 
 
         old_price = float(
@@ -85,31 +109,40 @@ def calculate_price_change(
 
 
 
-        if old_price == 0:
+
+
+        if old_price <= 0:
+
 
             return 0
 
 
 
-        return round(
+
+
+        change = (
 
             (
 
-                (
-
-                    new_price - old_price
-
-                )
-
-                /
+                new_price -
 
                 old_price
 
             )
 
-            *
+            /
 
-            100,
+            old_price
+
+        ) * 100
+
+
+
+
+
+        return round(
+
+            change,
 
             2
 
@@ -117,15 +150,18 @@ def calculate_price_change(
 
 
 
+
+
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return 0
+
+
+
 
 
 
@@ -135,6 +171,7 @@ def detect_advanced_pump(
 ):
 
     try:
+
 
 
         df = get_market_data(
@@ -147,20 +184,33 @@ def detect_advanced_pump(
 
 
 
-        if df.empty:
+
+
+        if df is None or df.empty:
+
 
             return None
 
 
 
+
+
+
         change = calculate_price_change(
+
             df
+
         )
+
 
 
         volume_power = calculate_volume_power(
+
             df
+
         )
+
+
 
 
 
@@ -168,53 +218,181 @@ def detect_advanced_pump(
 
 
 
+        reasons = []
+
+
+
+
+
         if change >= 2:
 
-            score += 40
+
+
+            score += 35
+
+
+            reasons.append(
+
+                "PRICE MOMENTUM"
+
+            )
+
+
+
 
 
 
         if volume_power >= 2:
 
+
+
             score += 40
+
+
+            reasons.append(
+
+                "VOLUME SPIKE"
+
+            )
+
+
+
 
 
 
         if change > 0:
 
-            score += 20
+
+
+            score += 15
+
+
+            reasons.append(
+
+                "POSITIVE MOVE"
+
+            )
+
+
+
+
+
+
+        if volume_power >= 1.5 and change >= 1:
+
+
+
+            score += 10
+
+
+            reasons.append(
+
+                "EARLY PUMP"
+
+            )
+
+
+
 
 
 
         if score < 60:
 
+
             return None
+
+
+
+
+
+        signal = "BUY"
+
+
 
 
 
         return {
 
-            "symbol": symbol,
 
-            "score": score,
 
-            "change": change,
+            "symbol":
 
-            "volume_power": volume_power
+            symbol,
+
+
+
+            "signal":
+
+            signal,
+
+
+
+            "confidence":
+
+            score,
+
+
+
+            "score":
+
+            score,
+
+
+
+            "entry":
+
+            float(
+
+                df["close"].iloc[-1]
+
+            ),
+
+
+
+            "price":
+
+            float(
+
+                df["close"].iloc[-1]
+
+            ),
+
+
+
+            "change":
+
+            change,
+
+
+
+            "volume_power":
+
+            volume_power,
+
+
+
+            "reasons":
+
+            reasons
+
+
 
         }
+
+
 
 
 
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return None
+
+
+
 
 
 
@@ -227,35 +405,83 @@ def scan_advanced_pumps(
 
 
 
-    for symbol in symbols:
-
-
-        result = detect_advanced_pump(
-            symbol
-        )
+    try:
 
 
 
-        if result:
+        if not symbols:
 
 
-            results.append(
-                result
+            return []
+
+
+
+
+
+        for symbol in symbols:
+
+
+
+            result = detect_advanced_pump(
+
+                symbol
+
             )
 
 
 
-    results.sort(
+            if result:
 
-        key=lambda x: x.get(
-            "score",
-            0
-        ),
 
-        reverse=True
+                results.append(
 
-    )
+                    result
+
+                )
 
 
 
-    return results
+
+
+
+        results.sort(
+
+            key=lambda x:
+
+            x.get(
+
+                "score",
+
+                0
+
+            ),
+
+            reverse=True
+
+        )
+
+
+
+
+
+        logger.info(
+
+            f"ADVANCED PUMPS FOUND: {len(results)}"
+
+        )
+
+
+
+        return results
+
+
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return []
