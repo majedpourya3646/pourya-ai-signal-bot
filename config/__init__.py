@@ -89,6 +89,8 @@ REQUEST_TIMEOUT = 15
 
 MAX_RETRIES = 3
 
+MIN_RISK_REWARD = 2.0
+
 
 # ==========================================
 # AI Filters
