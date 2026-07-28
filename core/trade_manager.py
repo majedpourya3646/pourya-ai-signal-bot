@@ -1,10 +1,80 @@
 # core/trade_manager.py
 
-from core.database_manager import (
-    execute_query
-)
+import sqlite3
+import os
+from datetime import datetime
 
 from core.logger import logger
+
+
+
+DB_PATH = "data/trades.db"
+
+
+
+
+def init_db():
+
+    try:
+
+        os.makedirs(
+            "data",
+            exist_ok=True
+        )
+
+
+        conn = sqlite3.connect(
+            DB_PATH
+        )
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trades (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                symbol TEXT,
+
+                side TEXT,
+
+                entry REAL,
+
+                tp REAL,
+
+                sl REAL,
+
+                quantity REAL,
+
+                confidence REAL,
+
+                status TEXT,
+
+                created_at TEXT,
+
+                closed_at TEXT DEFAULT NULL
+
+            )
+            """
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+
 
 
 
@@ -20,7 +90,22 @@ def open_trade(
 
     try:
 
-        execute_query(
+
+        init_db()
+
+
+
+        conn = sqlite3.connect(
+            DB_PATH
+        )
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
             """
             INSERT INTO trades
             (
@@ -31,146 +116,78 @@ def open_trade(
                 sl,
                 quantity,
                 confidence,
-                status
+                status,
+                created_at
             )
+
             VALUES
-            (?, ?, ?, ?, ?, ?, ?, 'OPEN')
-            """,
             (
-                symbol,
-                side,
-                entry,
-                tp,
-                sl,
-                quantity,
-                confidence
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?
             )
+
+            """,
+
+            (
+
+                symbol,
+
+                side,
+
+                float(entry),
+
+                float(tp)
+                if tp
+                else 0,
+
+                float(sl)
+                if sl
+                else 0,
+
+                float(quantity),
+
+                float(confidence),
+
+                "OPEN",
+
+                datetime.utcnow().isoformat()
+
+            )
+
         )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        logger.info(
+
+            f"TRADE SAVED {symbol}"
+
+        )
+
+
 
         return True
 
-    except Exception as e:
 
-        logger.exception(e)
-
-        return False
-
-
-
-
-
-def get_trade(
-    symbol
-):
-
-    try:
-
-        result = execute_query(
-            """
-            SELECT
-                symbol,
-                side,
-                entry,
-                tp,
-                sl,
-                quantity,
-                confidence,
-                status
-            FROM trades
-            WHERE symbol=?
-            AND status='OPEN'
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (
-                symbol,
-            )
-        )
-
-        if not result:
-
-            return None
-
-        row = result[0]
-
-        return {
-
-            "symbol": row[0],
-
-            "side": row[1],
-
-            "entry": row[2],
-
-            "tp": row[3],
-
-            "sl": row[4],
-
-            "quantity": row[5],
-
-            "confidence": row[6],
-
-            "status": row[7]
-
-        }
 
     except Exception as e:
 
-        logger.exception(e)
-
-        return None
-
-
-
-
-
-def can_buy(
-    symbol
-):
-
-    try:
-
-        return get_trade(
-            symbol
-        ) is None
-
-    except Exception as e:
 
         logger.exception(e)
 
-        return False
-
-
-
-
-
-def close_trade(
-    symbol,
-    exit_price,
-    pnl
-):
-
-    try:
-
-        execute_query(
-            """
-            UPDATE trades
-            SET
-                status='CLOSED',
-                pnl=?
-            WHERE symbol=?
-            AND status='OPEN'
-            """,
-            (
-                pnl,
-                symbol
-            )
-        )
-
-        return True
-
-    except Exception as e:
-
-        logger.exception(e)
 
         return False
 
@@ -182,52 +199,80 @@ def get_open_trades():
 
     try:
 
-        rows = execute_query(
-            """
-            SELECT
-                symbol,
-                side,
-                entry,
-                tp,
-                sl,
-                quantity,
-                confidence
-            FROM trades
-            WHERE status='OPEN'
-            """
+
+        init_db()
+
+
+
+        conn = sqlite3.connect(
+            DB_PATH
         )
 
-        trades = []
 
-        for row in rows:
+        cursor = conn.cursor()
 
-            trades.append(
 
-                {
 
-                    "symbol": row[0],
+        cursor.execute(
 
-                    "side": row[1],
+            """
+            SELECT *
 
-                    "entry": row[2],
+            FROM trades
 
-                    "tp": row[3],
+            WHERE status='OPEN'
 
-                    "sl": row[4],
+            """
 
-                    "quantity": row[5],
+        )
 
-                    "confidence": row[6]
 
-                }
 
-            )
+        rows = cursor.fetchall()
 
-        return trades
+
+
+        conn.close()
+
+
+
+        return [
+
+            {
+
+                "id": row[0],
+
+                "symbol": row[1],
+
+                "side": row[2],
+
+                "entry": row[3],
+
+                "tp": row[4],
+
+                "sl": row[5],
+
+                "quantity": row[6],
+
+                "confidence": row[7],
+
+                "status": row[8],
+
+                "created_at": row[9]
+
+            }
+
+            for row in rows
+
+        ]
+
+
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return []
 
@@ -235,8 +280,118 @@ def get_open_trades():
 
 
 
-def total_open_trades():
 
-    return len(
-        get_open_trades()
-    )
+
+def close_trade(
+    trade_id
+):
+
+    try:
+
+
+        conn = sqlite3.connect(
+            DB_PATH
+        )
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+            UPDATE trades
+
+            SET
+
+            status='CLOSED',
+
+            closed_at=?
+
+            WHERE id=?
+
+            """,
+
+            (
+
+                datetime.utcnow().isoformat(),
+
+                trade_id
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+def get_trade_history():
+
+    try:
+
+
+        conn = sqlite3.connect(
+            DB_PATH
+        )
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+            SELECT *
+
+            FROM trades
+
+            ORDER BY id DESC
+
+            """
+
+        )
+
+
+
+        rows = cursor.fetchall()
+
+
+
+        conn.close()
+
+
+
+        return rows
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return []
