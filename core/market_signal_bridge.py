@@ -8,53 +8,108 @@ from core.logger import logger
 
 from datetime import datetime
 
+from config import (
+    MIN_CONFIDENCE
+)
+
+
 
 
 VALID_SIGNALS = [
+
     "BUY",
+
     "SELL",
+
     "STRONG BUY",
+
     "STRONG SELL",
+
     "EARLY BUY",
+
     "EARLY SELL",
+
 ]
 
 
-MIN_SCORE = 55
 
 
 
-def is_valid_signal(result):
+def is_valid_signal(
+    result
+):
 
     try:
 
+
+        if not result:
+
+
+            return False
+
+
+
+
         signal = result.get(
+
             "signal",
+
             "WAIT"
+
         )
 
-        score = result.get(
-            "score",
-            0
+
+
+        score = float(
+
+            result.get(
+
+                "score",
+
+                result.get(
+
+                    "confidence",
+
+                    0
+
+                )
+
+            )
+
         )
+
+
+
 
 
         if signal not in VALID_SIGNALS:
 
+
+            return False
+
+
+
+
+
+        if score < MIN_CONFIDENCE:
+
+
             return False
 
 
-        if score < MIN_SCORE:
 
-            return False
 
 
         return True
 
 
+
+
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return False
 
@@ -62,34 +117,27 @@ def is_valid_signal(result):
 
 
 
-def normalize_signal(signal):
+
+def normalize_signal(
+    signal
+):
 
     try:
 
-        mapping = {
 
-            "STRONG BUY": "STRONG BUY",
-
-            "STRONG SELL": "STRONG SELL",
-
-            "BUY": "BUY",
-
-            "SELL": "SELL",
-
-            "EARLY BUY": "EARLY BUY",
-
-            "EARLY SELL": "EARLY SELL",
-
-        }
+        if signal in VALID_SIGNALS:
 
 
-        return mapping.get(
-            signal,
-            "WAIT"
-        )
+            return signal
+
+
+
+        return "WAIT"
+
 
 
     except Exception:
+
 
         return "WAIT"
 
@@ -97,180 +145,397 @@ def normalize_signal(signal):
 
 
 
-def analyze_market_symbols(symbols):
+
+
+
+def build_signal_item(
+    symbol,
+    result
+):
+
+    try:
+
+
+        signal = normalize_signal(
+
+            result.get(
+
+                "signal",
+
+                "WAIT"
+
+            )
+
+        )
+
+
+
+        score = float(
+
+            result.get(
+
+                "score",
+
+                result.get(
+
+                    "confidence",
+
+                    0
+
+                )
+
+            )
+
+        )
+
+
+
+
+
+        return {
+
+
+            "symbol":
+
+            symbol,
+
+
+
+            "market":
+
+            "FUTURES",
+
+
+
+            "signal":
+
+            signal,
+
+
+
+            "confidence":
+
+            score,
+
+
+
+            "score":
+
+            score,
+
+
+
+            "entry":
+
+            result.get(
+
+                "entry",
+
+                result.get(
+
+                    "price"
+
+                )
+
+            ),
+
+
+
+            "price":
+
+            result.get(
+
+                "price"
+
+            ),
+
+
+
+            "tp":
+
+            result.get(
+
+                "tp",
+
+                result.get(
+
+                    "take_profit"
+
+                )
+
+            ),
+
+
+
+            "sl":
+
+            result.get(
+
+                "sl",
+
+                result.get(
+
+                    "stop_loss"
+
+                )
+
+            ),
+
+
+
+            "take_profit":
+
+            result.get(
+
+                "take_profit"
+
+            ),
+
+
+
+            "stop_loss":
+
+            result.get(
+
+                "stop_loss"
+
+            ),
+
+
+
+            "timeframes":
+
+            result.get(
+
+                "timeframes",
+
+                []
+
+            ),
+
+
+
+            "grade":
+
+            result.get(
+
+                "grade",
+
+                ""
+
+            ),
+
+
+
+            "reasons":
+
+            result.get(
+
+                "reasons",
+
+                []
+
+            ),
+
+
+
+            "created_at":
+
+            datetime.utcnow().isoformat()
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
+
+
+
+
+
+
+
+def analyze_market_symbols(
+    symbols
+):
+
 
     results = []
+
 
 
     try:
 
 
+
+        if not symbols:
+
+
+            return []
+
+
+
+
+
         for symbol in symbols:
+
 
 
             try:
 
 
+
                 logger.info(
+
                     f"ANALYZING {symbol}"
+
                 )
+
+
 
 
 
                 result = analyze_symbol(
+
                     symbol
+
                 )
+
+
 
 
 
                 if not result:
 
+
                     continue
 
 
 
+
+
+
                 logger.info(
-                    f"{symbol} RESULT AFTER AI FILTER: {result}"
+
+                    f"{symbol} RESULT {result}"
+
                 )
+
+
 
 
 
                 if not is_valid_signal(
+
                     result
+
                 ):
 
 
+
                     logger.info(
-                        f"{symbol} FILTERED OUT"
+
+                        f"{symbol} FILTERED"
+
                     )
+
 
                     continue
 
 
 
 
-                signal = normalize_signal(
-                    result.get(
-                        "signal",
-                        "WAIT"
-                    )
+
+                item = build_signal_item(
+
+                    symbol,
+
+                    result
+
                 )
 
 
 
-                score = result.get(
-                    "score",
-                    result.get(
-                        "confidence",
-                        0
-                    )
-                )
 
 
-
-                item = {
-
-
-                    "symbol": symbol,
+                if not item:
 
 
-                    "market": "FUTURES",
+                    continue
 
 
-                    "signal": signal,
-
-
-                    "confidence": score,
-
-
-                    "score": score,
-
-
-                    "entry": result.get(
-                        "entry",
-                        result.get(
-                            "price"
-                        )
-                    ),
-
-
-                    "price": result.get(
-                        "price"
-                    ),
-
-
-                    "tp": result.get(
-                        "take_profit"
-                    ),
-
-
-                    "sl": result.get(
-                        "stop_loss"
-                    ),
-
-
-                    "take_profit": result.get(
-                        "take_profit"
-                    ),
-
-
-                    "stop_loss": result.get(
-                        "stop_loss"
-                    ),
-
-
-                    "timeframes": result.get(
-                        "timeframes",
-                        []
-                    ),
-
-
-                    "grade": result.get(
-                        "grade",
-                        ""
-                    ),
-
-
-                    "reasons": result.get(
-                        "reasons",
-                        []
-                    ),
-
-
-                    "created_at": datetime.utcnow().isoformat()
-
-                }
 
 
 
                 results.append(
+
                     item
+
                 )
+
+
 
 
 
                 logger.info(
-                    f"{symbol} ACCEPTED | {signal} | SCORE={score}"
+
+                    f"{symbol} ACCEPTED | {item['signal']} | SCORE={item['score']}"
+
                 )
+
+
 
 
 
             except Exception as e:
 
 
-                logger.error(
-                    f"{symbol} ERROR {e}"
-                )
+
+                logger.exception(e)
 
 
 
-        logger.info(
-            f"VALID MARKET SIGNALS: {len(results)}"
+
+
+        results.sort(
+
+            key=lambda x:
+
+            x.get(
+
+                "confidence",
+
+                0
+
+            ),
+
+            reverse=True
+
         )
 
 
 
+
+
+        logger.info(
+
+            f"VALID MARKET SIGNALS: {len(results)}"
+
+        )
+
+
+
+
+
         return results
+
+
 
 
 
