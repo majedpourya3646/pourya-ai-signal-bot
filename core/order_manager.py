@@ -8,48 +8,138 @@ from core.config_manager import (
 
 from core.logger import logger
 
+from config import (
+    LEVERAGE
+)
+
 
 
 def calculate_quantity(
     balance,
-    price
+    price,
+    stop_loss=None
 ):
 
     try:
 
-        risk = get_setting(
-            "risk_percent",
-            1
+
+        risk = float(
+            get_setting(
+                "risk_percent",
+                1
+            )
         )
 
 
-        amount = (
-            float(balance)
+
+        balance = float(
+            balance
+        )
+
+
+        price = float(
+            price
+        )
+
+
+
+        risk_amount = (
+
+            balance
+
             *
-            float(risk)
+
+            risk
+
             /
+
             100
+
         )
 
 
-        quantity = (
-            amount
-            /
-            float(price)
-        )
+
+        if stop_loss:
+
+
+            stop_loss = float(
+                stop_loss
+            )
+
+
+            risk_distance = abs(
+
+                price
+
+                -
+
+                stop_loss
+
+            )
+
+
+            if risk_distance > 0:
+
+
+                quantity = (
+
+                    risk_amount
+
+                    /
+
+                    risk_distance
+
+                )
+
+            else:
+
+
+                quantity = (
+
+                    risk_amount
+
+                    /
+
+                    price
+
+                )
+
+
+
+        else:
+
+
+            quantity = (
+
+                risk_amount
+
+                /
+
+                price
+
+            )
+
 
 
         return round(
+
             quantity,
+
             6
+
         )
+
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return 0
+
+
 
 
 
@@ -57,60 +147,120 @@ def calculate_quantity(
 def create_order(
     symbol,
     side,
-    quantity
+    quantity,
+    leverage=LEVERAGE
 ):
 
     try:
 
+
+
+        side = side.upper()
+
+
+
         if side not in [
+
             "BUY",
+
             "SELL"
+
         ]:
 
+
             logger.error(
+
                 f"INVALID ORDER SIDE: {side}"
+
             )
+
 
             return None
 
 
 
+
         paper = get_setting(
+
             "paper_trading",
+
             True
+
         )
 
 
 
         if paper:
 
+
             logger.info(
+
                 f"PAPER ORDER {symbol} {side} {quantity}"
+
             )
 
 
             return {
 
-                "status": "PAPER",
 
-                "symbol": symbol,
+                "code":
 
-                "side": side,
+                0,
 
-                "quantity": quantity
+
+                "status":
+
+                "PAPER",
+
+
+                "data":
+
+                {
+
+
+                    "symbol":
+
+                    symbol,
+
+
+                    "side":
+
+                    side,
+
+
+                    "quantity":
+
+                    quantity,
+
+
+                    "leverage":
+
+                    leverage,
+
+
+                    "order_id":
+
+                    "PAPER"
+
+
+                }
+
 
             }
 
 
 
 
+
         result = coinex_trade.create_order(
 
-            symbol,
+            market=symbol,
 
-            side,
+            side=side,
 
-            quantity
+            amount=quantity,
+
+            leverage=leverage
 
         )
 
@@ -118,37 +268,33 @@ def create_order(
 
         if not result:
 
+
             logger.error(
-                "EMPTY ORDER RESPONSE"
+
+                "ORDER FAILED"
+
             )
+
 
             return None
 
 
 
-        if result.get(
-            "code"
-        ) != 0:
 
-            logger.error(
-                result
-            )
+        return result
 
-            return None
-
-
-
-        return result.get(
-            "data"
-        )
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return None
+
+
 
 
 
@@ -159,6 +305,7 @@ def cancel_order(
 ):
 
     try:
+
 
         result = coinex_trade.cancel_order(
 
@@ -175,6 +322,8 @@ def cancel_order(
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return False
