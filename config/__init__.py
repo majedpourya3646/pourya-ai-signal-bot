@@ -105,3 +105,7 @@ USE_RSI_FILTER = True
 USE_MACD_FILTER = True
 
 USE_ATR_FILTER = True
+
+from .settings import *
+
+MAX_DAILY_LOSS_PERCENT = 5
