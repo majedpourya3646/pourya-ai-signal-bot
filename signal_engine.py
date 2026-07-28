@@ -1,4 +1,3 @@
-
 # signal_engine.py
 
 import ta
@@ -14,14 +13,12 @@ from core.logger import logger
 
 
 
-# =========================================
-# SIGNAL ENGINE V3
-# Multi Indicator AI Scoring System
-# =========================================
 
 
-
-def safe_value(value, default=0):
+def safe_value(
+    value,
+    default=0
+):
 
     try:
 
@@ -29,7 +26,9 @@ def safe_value(value, default=0):
 
             return default
 
+
         return float(value)
+
 
     except:
 
@@ -39,9 +38,13 @@ def safe_value(value, default=0):
 
 
 
-def calculate_indicators(df):
+
+def calculate_indicators(
+    df
+):
 
     try:
+
 
         close = df["close"]
 
@@ -50,7 +53,7 @@ def calculate_indicators(df):
         low = df["low"]
 
 
-        # EMA
+
 
         df["ema20"] = ta.trend.EMAIndicator(
             close,
@@ -58,10 +61,12 @@ def calculate_indicators(df):
         ).ema_indicator()
 
 
+
         df["ema50"] = ta.trend.EMAIndicator(
             close,
             window=50
         ).ema_indicator()
+
 
 
         df["ema200"] = ta.trend.EMAIndicator(
@@ -71,7 +76,6 @@ def calculate_indicators(df):
 
 
 
-        # RSI
 
         df["rsi"] = ta.momentum.RSIIndicator(
             close,
@@ -80,7 +84,6 @@ def calculate_indicators(df):
 
 
 
-        # MACD
 
         macd = ta.trend.MACD(
             close
@@ -95,7 +98,6 @@ def calculate_indicators(df):
 
 
 
-        # ADX
 
         adx = ta.trend.ADXIndicator(
             high,
@@ -109,22 +111,26 @@ def calculate_indicators(df):
 
 
 
-        # Volume
-
         df["volume_avg"] = (
+
             df["volume"]
+
             .rolling(20)
+
             .mean()
+
         )
 
 
 
-        # Momentum
-
         df["momentum"] = (
+
             close
+
             -
+
             close.shift(10)
+
         )
 
 
@@ -135,7 +141,9 @@ def calculate_indicators(df):
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return df
 
@@ -145,28 +153,37 @@ def calculate_indicators(df):
 
 
 
-def analyze_signal(df):
+def analyze_signal(
+    df
+):
 
     try:
 
 
         if df.empty or len(df) < 200:
 
+
             return {
 
-                "signal": "WAIT",
+                "signal":
+                "WAIT",
 
-                "confidence": 0,
+                "confidence":
+                0,
 
-                "reasons": []
+                "reasons":
+                []
 
             }
+
+
 
 
 
         df = calculate_indicators(
             df
         )
+
 
 
         last = df.iloc[-1]
@@ -180,15 +197,13 @@ def analyze_signal(df):
         sell_score = 0
 
 
+
         buy_reasons = []
 
         sell_reasons = []
 
 
 
-        # ==========================
-        # EMA TREND
-        # ==========================
 
 
         if last["ema20"] > last["ema50"]:
@@ -209,6 +224,7 @@ def analyze_signal(df):
             sell_reasons.append(
                 "EMA20 below EMA50"
             )
+
 
 
 
@@ -237,10 +253,6 @@ def analyze_signal(df):
 
 
 
-        # ==========================
-        # RSI
-        # ==========================
-
 
         rsi = safe_value(
             last["rsi"]
@@ -258,18 +270,14 @@ def analyze_signal(df):
             )
 
 
-
         elif 32 <= rsi <= 50:
 
 
-            sell_score += 15
+            sell_score += 10
 
             sell_reasons.append(
                 "RSI bearish zone"
             )
-
-
-
 
 
         elif rsi > 75:
@@ -285,9 +293,6 @@ def analyze_signal(df):
 
 
 
-        # ==========================
-        # MACD
-        # ==========================
 
 
         if (
@@ -342,9 +347,9 @@ def analyze_signal(df):
                 "MACD bearish crossover"
             )
 
-        # ==========================
-        # ADX TREND POWER
-        # ==========================
+
+
+
 
 
         adx = safe_value(
@@ -352,10 +357,12 @@ def analyze_signal(df):
         )
 
 
+
         if adx >= 25:
 
 
-            if buy_score >= sell_score:
+            if buy_score > sell_score:
+
 
                 buy_score += 10
 
@@ -364,7 +371,8 @@ def analyze_signal(df):
                 )
 
 
-            else:
+            elif sell_score > buy_score:
+
 
                 sell_score += 10
 
@@ -376,9 +384,6 @@ def analyze_signal(df):
 
 
 
-        # ==========================
-        # VOLUME SPIKE
-        # ==========================
 
 
         volume = safe_value(
@@ -396,8 +401,23 @@ def analyze_signal(df):
 
 
             volume_ratio = (
+
                 volume /
+
                 avg_volume
+
+            )
+
+
+
+            candle_positive = (
+
+                last["close"]
+
+                >
+
+                last["open"]
+
             )
 
 
@@ -405,13 +425,14 @@ def analyze_signal(df):
             if volume_ratio >= 1.5:
 
 
-                if buy_score >= sell_score:
+
+                if candle_positive:
 
 
                     buy_score += 15
 
                     buy_reasons.append(
-                        "Volume spike"
+                        "Bullish volume spike"
                     )
 
 
@@ -421,16 +442,12 @@ def analyze_signal(df):
                     sell_score += 15
 
                     sell_reasons.append(
-                        "Selling volume spike"
+                        "Bearish volume spike"
                     )
 
 
 
 
-
-        # ==========================
-        # MOMENTUM
-        # ==========================
 
 
         momentum = safe_value(
@@ -462,35 +479,42 @@ def analyze_signal(df):
 
 
 
-        # ==========================
-        # BREAKOUT CHECK
-        # ==========================
 
 
         recent_high = (
+
             df["high"]
+
             .rolling(20)
+
             .max()
+
             .iloc[-2]
+
         )
 
 
         recent_low = (
+
             df["low"]
+
             .rolling(20)
+
             .min()
+
             .iloc[-2]
+
         )
 
 
 
-        current_price = safe_value(
+        price = safe_value(
             last["close"]
         )
 
 
 
-        if current_price > recent_high:
+        if price > recent_high:
 
 
             buy_score += 15
@@ -500,8 +524,7 @@ def analyze_signal(df):
             )
 
 
-
-        elif current_price < recent_low:
+        elif price < recent_low:
 
 
             sell_score += 15
@@ -514,14 +537,26 @@ def analyze_signal(df):
 
 
 
-        # ==========================
-        # FINAL DECISION
-        # ==========================
+
+
+        difference = abs(
+
+            buy_score
+
+            -
+
+            sell_score
+
+        )
+
 
 
         confidence = max(
+
             buy_score,
+
             sell_score
+
         )
 
 
@@ -532,7 +567,15 @@ def analyze_signal(df):
 
 
 
-        if (
+        if difference < 15:
+
+
+            signal = "WAIT"
+
+
+
+
+        elif (
 
             buy_score >= MIN_CONFIDENCE
 
@@ -546,6 +589,7 @@ def analyze_signal(df):
             signal = "BUY"
 
             reasons = buy_reasons
+
 
 
 
@@ -568,9 +612,6 @@ def analyze_signal(df):
 
 
 
-        # ==========================
-        # SIGNAL QUALITY
-        # ==========================
 
 
         if signal == "BUY":
@@ -580,11 +621,9 @@ def analyze_signal(df):
 
                 signal = "STRONG BUY"
 
-
             elif confidence >= 70:
 
                 signal = "BUY"
-
 
             else:
 
@@ -601,15 +640,14 @@ def analyze_signal(df):
 
                 signal = "STRONG SELL"
 
-
             elif confidence >= 70:
 
                 signal = "SELL"
 
-
             else:
 
                 signal = "EARLY SELL"
+
 
 
 
@@ -623,14 +661,23 @@ def analyze_signal(df):
 
         return {
 
-            "signal": signal,
 
-            "confidence": round(
+            "signal":
+
+            signal,
+
+
+            "confidence":
+
+            round(
                 confidence,
                 2
             ),
 
-            "reasons": reasons,
+
+            "reasons":
+
+            reasons
 
         }
 
@@ -641,18 +688,26 @@ def analyze_signal(df):
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
+
 
 
         return {
 
-            "signal": "WAIT",
 
-            "confidence": 0,
+            "signal":
 
-            "reasons": []
+            "WAIT",
+
+
+            "confidence":
+
+            0,
+
+
+            "reasons":
+
+            []
 
         }
 
@@ -662,15 +717,21 @@ def analyze_signal(df):
 
 
 
-def get_signal(symbol):
+def get_signal(
+    symbol
+):
 
     try:
 
 
         df = get_market_data(
+
             symbol,
+
             interval="15"
+
         )
+
 
 
         return analyze_signal(
@@ -682,17 +743,21 @@ def get_signal(symbol):
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return {
 
-            "signal": "WAIT",
+            "signal":
 
-            "confidence": 0,
+            "WAIT",
 
-            "reasons": []
+            "confidence":
+
+            0,
+
+            "reasons":
+
+            []
 
         }
