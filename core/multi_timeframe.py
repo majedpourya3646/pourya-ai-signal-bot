@@ -21,19 +21,11 @@ from config import (
 
 TIMEFRAME_WEIGHTS = {
 
-    "15":
+    "15": 0.25,
 
-        0.25,
+    "60": 0.35,
 
-
-    "60":
-
-        0.35,
-
-
-    "240":
-
-        0.40
+    "240": 0.40
 
 }
 
@@ -53,26 +45,27 @@ def calculate_target(
     try:
 
 
+        if not price:
+
+            return None, None
+
+
+
         if side == "BUY":
 
 
             tp = price * (
 
-                1
-
-                +
+                1 +
 
                 DEFAULT_TP / 100
 
             )
 
 
-
             sl = price * (
 
-                1
-
-                -
+                1 -
 
                 DEFAULT_SL / 100
 
@@ -85,21 +78,16 @@ def calculate_target(
 
             tp = price * (
 
-                1
-
-                -
+                1 -
 
                 DEFAULT_TP / 100
 
             )
 
 
-
             sl = price * (
 
-                1
-
-                +
+                1 +
 
                 DEFAULT_SL / 100
 
@@ -127,6 +115,9 @@ def calculate_target(
 
 
 
+
+
+
 def analyze_symbol(
     symbol
 ):
@@ -143,12 +134,7 @@ def analyze_symbol(
         last_price = None
 
 
-
-
-
         timeframe_results = {}
-
-
 
 
 
@@ -168,9 +154,30 @@ def analyze_symbol(
 
 
 
+
+
+            logger.info(
+
+                f"MARKET DATA {symbol} TF={tf} COUNT={len(candles)}"
+
+            )
+
+
+
+
+
             if not candles:
 
+
+                logger.warning(
+
+                    f"NO CANDLES {symbol} TF={tf}"
+
+                )
+
+
                 continue
+
 
 
 
@@ -185,9 +192,21 @@ def analyze_symbol(
 
 
 
+
+
             if not result:
 
+
+                logger.warning(
+
+                    f"NO SIGNAL RESULT {symbol} TF={tf}"
+
+                )
+
+
                 continue
+
+
 
 
 
@@ -207,31 +226,36 @@ def analyze_symbol(
 
 
 
+
+
             total_score += weighted
 
 
 
 
 
-            if result.get(
+            signal = result.get(
 
                 "signal"
 
-            ) == "BUY":
+            )
+
+
+
+
+
+            if signal == "BUY":
 
 
                 buy_score += weighted
 
 
 
-            elif result.get(
-
-                "signal"
-
-            ) == "SELL":
+            elif signal == "SELL":
 
 
                 sell_score += weighted
+
 
 
 
@@ -253,10 +277,45 @@ def analyze_symbol(
 
 
 
+            logger.info(
+
+                f"SIGNAL {symbol} TF={tf} {signal} CONF={confidence}"
+
+            )
+
+
+
+
+
+
+
+
+
+        if not timeframe_results:
+
+
+            logger.warning(
+
+                f"NO TIMEFRAME RESULT {symbol}"
+
+            )
+
+
+            return None
+
+
 
 
 
         if total_score < 50:
+
+
+            logger.info(
+
+                f"LOW SCORE {symbol} SCORE={total_score}"
+
+            )
+
 
             return None
 
@@ -272,7 +331,6 @@ def analyze_symbol(
             final_signal = "BUY"
 
 
-
             confidence = buy_score
 
 
@@ -283,12 +341,18 @@ def analyze_symbol(
             final_signal = "SELL"
 
 
-
             confidence = sell_score
 
 
 
         else:
+
+
+            logger.info(
+
+                f"NO DIRECTION {symbol}"
+
+            )
 
 
             return None
@@ -312,8 +376,7 @@ def analyze_symbol(
 
 
 
-
-        return {
+        result = {
 
 
             "symbol":
@@ -321,11 +384,9 @@ def analyze_symbol(
                 symbol,
 
 
-
             "signal":
 
                 final_signal,
-
 
 
             "confidence":
@@ -339,11 +400,9 @@ def analyze_symbol(
                 ),
 
 
-
             "entry":
 
                 last_price,
-
 
 
             "tp":
@@ -351,11 +410,9 @@ def analyze_symbol(
                 tp,
 
 
-
             "sl":
 
                 sl,
-
 
 
             "timeframes":
@@ -363,6 +420,23 @@ def analyze_symbol(
                 timeframe_results
 
         }
+
+
+
+
+
+        logger.info(
+
+            f"FINAL ANALYSIS {result}"
+
+        )
+
+
+
+
+
+        return result
+
 
 
 
