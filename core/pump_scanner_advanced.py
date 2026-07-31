@@ -1,50 +1,30 @@
 # core/pump_scanner_advanced.py
 
-from market import get_market_data
-
 from core.logger import logger
 
+from core.market import (
+    get_market_data
+)
+
+from config import (
+    SYMBOLS
+)
 
 
 
 
 
-def calculate_volume_power(
-    df
+
+
+
+def calculate_pump_score(
+    candles
 ):
 
     try:
 
 
-        if df is None or len(df) < 20:
-
-
-            return 0
-
-
-
-
-
-        current_volume = float(
-
-            df["volume"].iloc[-1]
-
-        )
-
-
-
-        avg_volume = float(
-
-            df["volume"].iloc[-20:-1].mean()
-
-        )
-
-
-
-
-
-        if avg_volume <= 0:
-
+        if len(candles) < 20:
 
             return 0
 
@@ -52,87 +32,29 @@ def calculate_volume_power(
 
 
 
-        return round(
+        current = candles[-1]
 
-            current_volume / avg_volume,
-
-            2
-
-        )
+        previous = candles[-10]
 
 
 
 
 
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return 0
-
-
-
-
-
-
-
-def calculate_price_change(
-    df
-):
-
-    try:
-
-
-        if df is None or len(df) < 20:
-
-
-            return 0
-
-
-
-
-
-        old_price = float(
-
-            df["close"].iloc[-20]
-
-        )
-
-
-        new_price = float(
-
-            df["close"].iloc[-1]
-
-        )
-
-
-
-
-
-        if old_price <= 0:
-
-
-            return 0
-
-
-
-
-
-        change = (
+        price_change = (
 
             (
 
-                new_price -
+                current["close"]
 
-                old_price
+                -
+
+                previous["close"]
 
             )
 
             /
 
-            old_price
+            previous["close"]
 
         ) * 100
 
@@ -140,15 +62,96 @@ def calculate_price_change(
 
 
 
-        return round(
 
-            change,
+        volumes = [
 
-            2
+            x["volume"]
+
+            for x in candles[-20:]
+
+        ]
+
+
+
+        avg_volume = sum(
+
+            volumes
+
+        ) / len(
+
+            volumes
 
         )
 
 
+
+        volume_score = 0
+
+
+
+
+
+        if current["volume"] > avg_volume * 2:
+
+
+            volume_score = 40
+
+
+
+        elif current["volume"] > avg_volume * 1.5:
+
+
+            volume_score = 25
+
+
+
+
+
+
+
+        price_score = 0
+
+
+
+        if abs(price_change) >= 5:
+
+
+            price_score = 40
+
+
+
+        elif abs(price_change) >= 3:
+
+
+            price_score = 25
+
+
+
+
+
+
+
+        momentum_score = 20
+
+
+
+
+
+        return min(
+
+            price_score
+
+            +
+
+            volume_score
+
+            +
+
+            momentum_score,
+
+            100
+
+        )
 
 
 
@@ -166,74 +169,43 @@ def calculate_price_change(
 
 
 
-def detect_advanced_pump(
-    symbol
-):
+def scan_advanced_pumps():
 
     try:
 
 
-
-        df = get_market_data(
-
-            symbol,
-
-            interval="15"
-
-        )
+        results = []
 
 
 
 
 
-        if df is None or df.empty:
-
-
-            return None
+        for symbol in SYMBOLS:
 
 
 
+            candles = get_market_data(
+
+                symbol,
+
+                "15"
+
+            )
 
 
 
-        change = calculate_price_change(
-
-            df
-
-        )
+            if not candles:
 
 
-
-        volume_power = calculate_volume_power(
-
-            df
-
-        )
+                continue
 
 
 
 
 
-        score = 0
+            score = calculate_pump_score(
 
-
-
-        reasons = []
-
-
-
-
-
-        if change >= 2:
-
-
-
-            score += 35
-
-
-            reasons.append(
-
-                "PRICE MOMENTUM"
+                candles
 
             )
 
@@ -241,203 +213,35 @@ def detect_advanced_pump(
 
 
 
+            if score >= 50:
 
-        if volume_power >= 2:
-
-
-
-            score += 40
-
-
-            reasons.append(
-
-                "VOLUME SPIKE"
-
-            )
-
-
-
-
-
-
-        if change > 0:
-
-
-
-            score += 15
-
-
-            reasons.append(
-
-                "POSITIVE MOVE"
-
-            )
-
-
-
-
-
-
-        if volume_power >= 1.5 and change >= 1:
-
-
-
-            score += 10
-
-
-            reasons.append(
-
-                "EARLY PUMP"
-
-            )
-
-
-
-
-
-
-        if score < 60:
-
-
-            return None
-
-
-
-
-
-        signal = "BUY"
-
-
-
-
-
-        return {
-
-
-
-            "symbol":
-
-            symbol,
-
-
-
-            "signal":
-
-            signal,
-
-
-
-            "confidence":
-
-            score,
-
-
-
-            "score":
-
-            score,
-
-
-
-            "entry":
-
-            float(
-
-                df["close"].iloc[-1]
-
-            ),
-
-
-
-            "price":
-
-            float(
-
-                df["close"].iloc[-1]
-
-            ),
-
-
-
-            "change":
-
-            change,
-
-
-
-            "volume_power":
-
-            volume_power,
-
-
-
-            "reasons":
-
-            reasons
-
-
-
-        }
-
-
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-def scan_advanced_pumps(
-    symbols
-):
-
-    results = []
-
-
-
-    try:
-
-
-
-        if not symbols:
-
-
-            return []
-
-
-
-
-
-        for symbol in symbols:
-
-
-
-            result = detect_advanced_pump(
-
-                symbol
-
-            )
-
-
-
-            if result:
 
 
                 results.append(
 
-                    result
+                    {
+
+
+                        "symbol":
+
+                            symbol,
+
+
+
+                        "pump_score":
+
+                            score,
+
+
+
+                        "price":
+
+                            candles[-1]["close"]
+
+                    }
 
                 )
+
 
 
 
@@ -448,13 +252,7 @@ def scan_advanced_pumps(
 
             key=lambda x:
 
-            x.get(
-
-                "score",
-
-                0
-
-            ),
+            x["pump_score"],
 
             reverse=True
 
@@ -464,17 +262,7 @@ def scan_advanced_pumps(
 
 
 
-        logger.info(
-
-            f"ADVANCED PUMPS FOUND: {len(results)}"
-
-        )
-
-
-
         return results
-
-
 
 
 
