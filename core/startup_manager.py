@@ -3,63 +3,74 @@
 from core.logger import logger
 
 from core.database_manager import (
-    init_database
-)
-
-from core.user_manager import (
-    init_user_database
-)
-
-from core.profit_manager import (
-    init_profit_database
-)
-
-from core.subscription_manager import (
-    init_subscription_database
-)
-
-from core.payment_manager import (
-    init_payment_database
-)
-
-from core.config_manager import (
-    initialize_default_settings
-)
-
-from core.security_manager import (
-    security_status
-)
-
-from core.recovery_manager import (
-    start_recovery
+    initialize_database
 )
 
 from core.health_monitor import (
     run_health_check
 )
 
-from core.backup_manager import (
-    create_backup_folder,
-    create_database_backup
+from telegram_sender import (
+    send_message
+)
+
+from config import (
+    BOT_NAME,
+    PAPER_TRADING,
+    MARKET_TYPE
 )
 
 
 
 
 
-SYSTEM_STATUS = {
+SYSTEM_READY = False
 
-    "initialized": False,
 
-    "database": False,
 
-    "security": False,
 
-    "recovery": False,
 
-    "health": False
 
-}
+
+
+
+def check_configuration():
+
+    try:
+
+
+        required = [
+
+            BOT_NAME,
+
+            MARKET_TYPE
+
+        ]
+
+
+
+        for item in required:
+
+
+            if not item:
+
+                return False
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
 
 
 
@@ -67,76 +78,170 @@ SYSTEM_STATUS = {
 
 def initialize_system():
 
-    global SYSTEM_STATUS
+    global SYSTEM_READY
+
 
     try:
 
+
         logger.info(
-            "INITIALIZING SYSTEM..."
+
+            "SYSTEM INITIALIZATION STARTED"
+
         )
 
-        # Database
-        if not init_database():
-            logger.error("Database initialization failed")
+
+
+
+
+        if not check_configuration():
+
+
+            logger.error(
+
+                "CONFIGURATION ERROR"
+
+            )
+
+
             return False
 
-        init_user_database()
-        init_profit_database()
-        init_subscription_database()
-        init_payment_database()
 
-        SYSTEM_STATUS["database"] = True
 
-        # Config
-        initialize_default_settings()
 
-        # Backup
-        create_backup_folder()
-        create_database_backup()
 
-        # Security
-        security = security_status()
+        if not initialize_database():
 
-        SYSTEM_STATUS["security"] = security.get(
-            "safe",
-            False
-        )
 
-        # Recovery
-        SYSTEM_STATUS["recovery"] = start_recovery()
+            logger.error(
 
-        # Health
-        run_health_check()
+                "DATABASE INITIALIZATION FAILED"
 
-        SYSTEM_STATUS["health"] = True
+            )
 
-        SYSTEM_STATUS["initialized"] = all(
 
-            [
+            return False
 
-                SYSTEM_STATUS["database"],
 
-                SYSTEM_STATUS["security"],
 
-                SYSTEM_STATUS["recovery"],
 
-                SYSTEM_STATUS["health"]
 
-            ]
 
-        )
+
+        health = run_health_check()
+
+
+
+        if not health.get(
+
+            "online"
+
+        ):
+
+
+            logger.warning(
+
+                f"PARTIAL HEALTH STATUS {health}"
+
+            )
+
+
+
+
+
+
+
+        send_start_message()
+
+
+
+        SYSTEM_READY = True
+
+
 
         logger.info(
-            "SYSTEM INITIALIZATION COMPLETED"
+
+            "SYSTEM READY"
+
         )
 
-        return SYSTEM_STATUS["initialized"]
+
+
+        return True
+
+
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return False
+
+
+
+
+
+
+
+def send_start_message():
+
+    try:
+
+
+        mode = (
+
+            "PAPER"
+
+            if PAPER_TRADING
+
+            else
+
+            "LIVE"
+
+        )
+
+
+
+        message = f"""
+
+<b>🤖 {BOT_NAME}</b>
+
+
+✅ System Started
+
+
+⚙️ Market:
+{MARKET_TYPE}
+
+
+📝 Mode:
+{mode}
+
+
+🟢 Engine Ready
+
+"""
+
+
+
+        send_message(
+
+            message
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+
+
 
 
 
@@ -144,23 +249,33 @@ def initialize_system():
 
 def shutdown_system():
 
+    global SYSTEM_READY
+
+
     try:
 
+
+        SYSTEM_READY = False
+
+
+
         logger.info(
-            "SYSTEM SHUTDOWN STARTED"
+
+            "SYSTEM SHUTDOWN COMPLETE"
+
         )
 
-        create_database_backup()
 
-        logger.info(
-            "SYSTEM SHUTDOWN COMPLETED"
-        )
 
         return True
 
+
+
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return False
 
@@ -168,6 +283,15 @@ def shutdown_system():
 
 
 
+
+
 def system_status():
 
-    return SYSTEM_STATUS.copy()
+    return {
+
+
+        "ready":
+
+            SYSTEM_READY
+
+    }
