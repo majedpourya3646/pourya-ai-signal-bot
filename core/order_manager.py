@@ -7,10 +7,8 @@ from core.coinex_trade import (
 )
 
 from config import (
-    PAPER_TRADING,
-    LEVERAGE
+    PAPER_TRADING
 )
-
 
 
 
@@ -28,12 +26,8 @@ def create_order(
 
 
         logger.info(
-
             f"CREATING ORDER {symbol} {side}"
-
         )
-
-
 
 
 
@@ -41,15 +35,11 @@ def create_order(
 
 
             logger.info(
-
                 f"PAPER ORDER | {symbol} | {side} | {quantity}"
-
             )
 
 
-
             return {
-
 
                 "status":
 
@@ -83,16 +73,13 @@ def create_order(
 
 
 
-
         result = coinex_trade.create_order(
 
             symbol,
 
             side,
 
-            quantity,
-
-            LEVERAGE
+            quantity
 
         )
 
@@ -104,9 +91,7 @@ def create_order(
 
 
             logger.error(
-
                 "COINEX ORDER FAILED"
-
             )
 
 
@@ -116,16 +101,13 @@ def create_order(
 
 
 
-
         logger.info(
-
             f"LIVE ORDER CREATED {result}"
-
         )
 
 
-
         return result
+
 
 
 
@@ -144,6 +126,9 @@ def create_order(
 
 
 
+
+
+
 def close_order(
     symbol,
     side,
@@ -153,11 +138,8 @@ def close_order(
     try:
 
 
-
         logger.info(
-
             f"CLOSING ORDER {symbol}"
-
         )
 
 
@@ -168,9 +150,7 @@ def close_order(
 
 
             logger.info(
-
                 f"PAPER CLOSE | {symbol}"
-
             )
 
 
@@ -199,9 +179,7 @@ def close_order(
 
 
             logger.info(
-
                 f"POSITION CLOSED {symbol}"
-
             )
 
 
@@ -231,6 +209,9 @@ def close_order(
 
 
 
+
+
+
 def validate_order(
     symbol,
     quantity
@@ -241,14 +222,13 @@ def validate_order(
 
         if not symbol:
 
-
             return False
 
 
 
 
-        if float(quantity) <= 0:
 
+        if float(quantity) <= 0:
 
             return False
 
@@ -261,6 +241,7 @@ def validate_order(
 
 
 
+
     except Exception as e:
 
 
@@ -268,6 +249,9 @@ def validate_order(
 
 
         return False
+
+
+
 
 
 
@@ -287,7 +271,6 @@ def get_order_status(
 
             return {
 
-
                 "status":
 
                     "filled"
@@ -303,6 +286,7 @@ def get_order_status(
             order_id
 
         )
+
 
 
 
