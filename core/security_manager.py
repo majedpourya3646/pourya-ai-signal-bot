@@ -1,355 +1,65 @@
 # core/security_manager.py
 
-import hashlib
-import secrets
-from datetime import datetime
+import os
 
 from core.logger import logger
 
-from core.database_manager import (
-    insert_log
+from core.config_manager import (
+    get_setting
 )
 
 
 
 
 
-def hash_data(
-    data
-):
+SECURITY_STATUS = {
+
+    "safe": False,
+
+    "checks": {}
+
+}
+
+
+
+
+
+
+
+
+def check_environment():
 
     try:
 
 
-        return hashlib.sha256(
-
-            str(data)
-            .encode(
-                "utf-8"
-            )
-
-        ).hexdigest()
+        result = {}
 
 
 
-    except Exception as e:
+        required = [
 
+            "BOT_TOKEN",
 
-        logger.exception(e)
+            "COINEX_API_KEY",
 
+            "COINEX_SECRET_KEY"
 
-        return None
-
-
-
-
-
+        ]
 
 
 
-def generate_security_token():
-
-    try:
+        for item in required:
 
 
-        return secrets.token_hex(
-            32
-        )
+            result[item] = bool(
 
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-
-def validate_api_credentials(
-    api_key,
-    secret_key
-):
-
-    try:
-
-
-        if not api_key or not secret_key:
-
-
-            security_event(
-
-                "INVALID_API_CREDENTIALS",
-
-                "Missing API credentials"
+                os.getenv(item)
 
             )
 
 
-            return False
 
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def security_event(
-    event,
-    details
-):
-
-    try:
-
-
-        insert_log(
-
-            event,
-
-            details
-
-        )
-
-
-
-        logger.warning(
-
-            f"SECURITY EVENT: {event}"
-
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def check_user_permission(
-    user
-):
-
-    try:
-
-
-        if not user:
-
-
-            return False
-
-
-
-        if not user.get(
-            "active",
-            0
-        ):
-
-
-            security_event(
-
-                "BLOCKED_USER",
-
-                user
-
-            )
-
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def validate_trade_request(
-    user,
-    symbol,
-    quantity
-):
-
-    try:
-
-
-        if not check_user_permission(
-            user
-        ):
-
-
-            return False
-
-
-
-        if not symbol:
-
-
-            security_event(
-
-                "INVALID_SYMBOL",
-
-                symbol
-
-            )
-
-
-            return False
-
-
-
-        if float(quantity) <= 0:
-
-
-            security_event(
-
-                "INVALID_QUANTITY",
-
-                quantity
-
-            )
-
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def mask_sensitive_data(
-    data
-):
-
-    try:
-
-
-        text = str(data)
-
-
-
-        if len(text) <= 6:
-
-            return "***"
-
-
-
-        return (
-
-            text[:3]
-
-            +
-
-            "***"
-
-            +
-
-            text[-3:]
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return "***"
-
-
-
-
-
-
-
-
-def security_status():
-
-    try:
-
-
-        return {
-
-
-            "security":
-
-                "ACTIVE",
-
-
-            "timestamp":
-
-                datetime.utcnow()
-                .isoformat()
-
-
-        }
+        return result
 
 
 
@@ -360,3 +70,297 @@ def security_status():
 
 
         return {}
+
+
+
+
+
+
+
+
+def check_api_keys():
+
+    try:
+
+
+        api_key = os.getenv(
+
+            "COINEX_API_KEY"
+
+        )
+
+
+        secret = os.getenv(
+
+            "COINEX_SECRET_KEY"
+
+        )
+
+
+
+        return bool(
+
+            api_key
+
+            and
+
+            secret
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def check_trading_safety():
+
+    try:
+
+
+        paper = get_setting(
+
+            "paper_trading",
+
+            True
+
+        )
+
+
+
+        risk = float(
+
+            get_setting(
+
+                "risk_percent",
+
+                1
+
+            )
+
+        )
+
+
+
+        if not paper and risk > 5:
+
+
+            return False
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def check_database_security():
+
+    try:
+
+
+        path = "data/pourya_trader.db"
+
+
+
+        return os.path.exists(
+
+            path
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def security_status():
+
+    global SECURITY_STATUS
+
+
+
+    try:
+
+
+        checks = {
+
+
+            "environment":
+
+                check_environment(),
+
+
+            "api_keys":
+
+                check_api_keys(),
+
+
+            "trading":
+
+                check_trading_safety(),
+
+
+            "database":
+
+                check_database_security()
+
+
+        }
+
+
+
+        safe = all(
+
+            [
+
+                checks["api_keys"],
+
+                checks["trading"]
+
+            ]
+
+        )
+
+
+
+        SECURITY_STATUS = {
+
+
+            "safe":
+
+                safe,
+
+
+            "checks":
+
+                checks
+
+
+        }
+
+
+
+        logger.info(
+
+            f"SECURITY CHECK {SECURITY_STATUS}"
+
+        )
+
+
+
+        return SECURITY_STATUS
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {
+
+
+            "safe":
+
+                False
+
+        }
+
+
+
+
+
+
+
+
+def is_safe():
+
+    return SECURITY_STATUS.get(
+
+        "safe",
+
+        False
+
+    )
+
+
+
+
+
+
+
+
+def emergency_lock():
+
+    try:
+
+
+        logger.warning(
+
+            "EMERGENCY SECURITY LOCK ENABLED"
+
+        )
+
+
+
+        set_value = get_setting(
+
+            "trading_mode",
+
+            "MANUAL"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
