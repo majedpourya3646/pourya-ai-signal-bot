@@ -1,71 +1,44 @@
 # config.py
 
 import os
-
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
-
-
-
-
-
 # ===========================
-# CoinEx
+# MetaTrader 5
 # ===========================
 
-BASE_URL = "https://api.coinex.com/v2"
+MT5_LOGIN = int(os.getenv("MT5_LOGIN", "0"))
 
-
-COINEX_API_KEY = os.getenv(
-
-    "COINEX_API_KEY",
-
+MT5_PASSWORD = os.getenv(
+    "MT5_PASSWORD",
     ""
-
 )
 
-
-COINEX_SECRET_KEY = os.getenv(
-
-    "COINEX_SECRET_KEY",
-
+MT5_SERVER = os.getenv(
+    "MT5_SERVER",
     ""
-
 )
 
-
-
-
-
+MT5_PATH = os.getenv(
+    "MT5_PATH",
+    ""
+)
 
 # ===========================
 # Telegram
 # ===========================
 
 BOT_TOKEN = os.getenv(
-
     "BOT_TOKEN",
-
     ""
-
 )
-
 
 CHAT_ID = os.getenv(
-
     "CHAT_ID",
-
     ""
-
 )
-
-
-
-
-
 
 # ===========================
 # Request
@@ -75,39 +48,39 @@ REQUEST_TIMEOUT = 20
 
 MAX_RETRIES = 3
 
-
-
-
-
-
 # ===========================
 # Trading
 # ===========================
 
-PAPER_TRADING = True
-
-
-MARKET_TYPE = "FUTURES"
-
+PAPER_TRADING = False
 
 ORDER_TYPE = "market"
 
-
 LEVERAGE = 10
 
-
-RISK_PER_TRADE = 1
-
+RISK_PER_TRADE = 1.0
 
 MAX_OPEN_TRADES = 3
 
-
 MIN_CONFIDENCE = 60
 
+AUTO_TRADING = True
 
+ALLOW_BUY = True
 
+ALLOW_SELL = True
 
+# ===========================
+# Position Size
+# ===========================
 
+DEFAULT_LOT = 0.01
+
+USE_DYNAMIC_LOT = True
+
+MAX_LOT = 5.0
+
+MIN_LOT = 0.01
 
 # ===========================
 # TP / SL
@@ -115,13 +88,15 @@ MIN_CONFIDENCE = 60
 
 DEFAULT_TP = 5.0
 
-
 DEFAULT_SL = 2.0
 
+USE_TRAILING_STOP = True
 
+TRAILING_STOP_POINTS = 300
 
+BREAK_EVEN = True
 
-
+BREAK_EVEN_POINTS = 150
 
 # ===========================
 # Risk
@@ -129,13 +104,7 @@ DEFAULT_SL = 2.0
 
 MIN_RISK_REWARD = 2.0
 
-
 MAX_DAILY_LOSS_PERCENT = 5
-
-
-
-
-
 
 # ===========================
 # Balance
@@ -143,44 +112,23 @@ MAX_DAILY_LOSS_PERCENT = 5
 
 INITIAL_BALANCE = 1000.0
 
-
-
-
-
-
 # ===========================
 # User / Profit
 # ===========================
 
 DEFAULT_USER_PROFIT_SHARE = 70
 
-
-
-
-
-
 # ===========================
 # Symbols
 # ===========================
 
 SYMBOLS = [
-
-    "BTCUSDT",
-
-    "ETHUSDT",
-
-    "SOLUSDT",
-
-    "XRPUSDT",
-
-    "DOGEUSDT"
-
+    "BTCUSD",
+    "ETHUSD",
+    "XAUUSD",
+    "US30",
+    "NAS100"
 ]
-
-
-
-
-
 
 # ===========================
 # TimeFrame
@@ -188,21 +136,11 @@ SYMBOLS = [
 
 TIMEFRAME = "15"
 
-
 TIMEFRAMES = [
-
     "15",
-
     "60",
-
     "240"
-
 ]
-
-
-
-
-
 
 # ===========================
 # Scheduler
@@ -210,13 +148,7 @@ TIMEFRAMES = [
 
 SCHEDULER_INTERVAL = 60
 
-
 SCHEDULER_MODE = "RUNNING"
-
-
-
-
-
 
 # ===========================
 # Bot
@@ -224,5 +156,4 @@ SCHEDULER_MODE = "RUNNING"
 
 BOT_NAME = "Pourya Trader AI"
 
-
-BOT_VERSION = "2.0.0"
+BOT_VERSION = "3.0.0 MT5"
