@@ -1,241 +1,60 @@
 # core/startup_manager.py
 
-import os
-
 from core.logger import logger
+
+from core.database_manager import (
+    initialize_database
+)
 
 from core.config_manager import (
     ensure_config
 )
 
-from core.trade_manager import (
-    init_trade_database
+from core.recovery_manager import (
+    start_recovery
+)
+
+from core.security_manager import (
+    security_status
+)
+
+from core.backup_manager import (
+    create_backup_folder
 )
 
 from core.user_manager import (
     init_user_database
 )
 
-from core.version import (
-    version_string
+from core.subscription_manager import (
+    init_subscription_database
 )
 
-from coinex_trade import (
-    coinex_trade
-)
-
-from telegram_sender import (
-    send_message
+from core.payment_manager import (
+    init_payment_database
 )
 
 
 
 
 
-def check_directories():
+SYSTEM_READY = False
+
+
+
+
+
+
+def check_database():
 
     try:
 
 
-        folders = [
+        result = initialize_database()
 
-            "data",
 
-            "logs",
 
-            "core"
-
-        ]
-
-
-
-        for folder in folders:
-
-
-            if not os.path.exists(folder):
-
-                os.makedirs(
-                    folder
-                )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-def initialize_database():
-
-    try:
-
-
-        trade_db = init_trade_database()
-
-
-        user_db = init_user_database()
-
-
-
-        return all([
-
-            trade_db,
-
-            user_db
-
-        ])
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-def test_coinex_connection():
-
-    try:
-
-
-        result = coinex_trade.get_server_time()
-
-
-
-        if result:
-
-
-            logger.info(
-
-                "COINEX CONNECTION OK"
-
-            )
-
-
-            return True
-
-
-
-        return False
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-def test_telegram():
-
-    try:
-
-
-        result = send_message(
-
-            """
-🤖 Pourya Trader AI
-
-Startup Test
-
-System initialization completed.
-
-"""
-
-        )
-
-
-        return bool(
-            result
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-def initialize_system():
-
-    try:
-
-
-        logger.info(
-
-            "INITIALIZING SYSTEM"
-
-        )
-
-
-
-        if not check_directories():
-
-
-            logger.error(
-
-                "DIRECTORY INIT FAILED"
-
-            )
-
-
-            return False
-
-
-
-
-
-        if not ensure_config():
-
-
-            logger.error(
-
-                "CONFIG INIT FAILED"
-
-            )
-
-
-            return False
-
-
-
-
-
-        if not initialize_database():
+        if not result:
 
 
             logger.error(
@@ -245,54 +64,8 @@ def initialize_system():
             )
 
 
-            return False
 
-
-
-
-
-        coinex_status = test_coinex_connection()
-
-
-
-        if not coinex_status:
-
-
-            logger.warning(
-
-                "COINEX CONNECTION FAILED"
-
-            )
-
-
-
-        telegram_status = test_telegram()
-
-
-
-        if not telegram_status:
-
-
-            logger.warning(
-
-                "TELEGRAM CONNECTION FAILED"
-
-            )
-
-
-
-
-
-        logger.info(
-
-            f"SYSTEM READY {version_string()}"
-
-        )
-
-
-
-        return True
-
+        return result
 
 
 
@@ -303,6 +76,284 @@ def initialize_system():
 
 
         return False
+
+
+
+
+
+
+
+
+def check_configuration():
+
+    try:
+
+
+        return ensure_config()
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def initialize_users():
+
+    try:
+
+
+        return init_user_database()
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def initialize_business_modules():
+
+    try:
+
+
+        subscription = (
+
+            init_subscription_database()
+
+        )
+
+
+        payment = (
+
+            init_payment_database()
+
+        )
+
+
+
+        return (
+
+            subscription
+
+            and
+
+            payment
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def run_security_check():
+
+    try:
+
+
+        status = security_status()
+
+
+
+        logger.info(
+
+            f"SECURITY STATUS {status}"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def initialize_system():
+
+    global SYSTEM_READY
+
+
+    try:
+
+
+        logger.info(
+
+            "SYSTEM INITIALIZATION STARTED"
+
+        )
+
+
+
+        steps = [
+
+            (
+
+                "CONFIG",
+
+                check_configuration
+
+            ),
+
+
+            (
+
+                "DATABASE",
+
+                check_database
+
+            ),
+
+
+            (
+
+                "USERS",
+
+                initialize_users
+
+            ),
+
+
+            (
+
+                "BUSINESS",
+
+                initialize_business_modules
+
+            ),
+
+
+            (
+
+                "BACKUP",
+
+                create_backup_folder
+
+            ),
+
+
+            (
+
+                "SECURITY",
+
+                run_security_check
+
+            ),
+
+
+            (
+
+                "RECOVERY",
+
+                start_recovery
+
+            )
+
+        ]
+
+
+
+        for name, function in steps:
+
+
+
+            result = function()
+
+
+
+            if not result:
+
+
+                logger.error(
+
+                    f"STARTUP FAILED AT {name}"
+
+                )
+
+
+                return False
+
+
+
+            logger.info(
+
+                f"{name} READY"
+
+            )
+
+
+
+        SYSTEM_READY = True
+
+
+
+        logger.info(
+
+            "SYSTEM READY"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
 
 
 
@@ -311,32 +362,21 @@ def initialize_system():
 
 def shutdown_system():
 
+    global SYSTEM_READY
+
+
     try:
 
 
         logger.info(
 
-            "SYSTEM SHUTDOWN STARTED"
+            "SYSTEM SHUTDOWN"
 
         )
 
 
 
-        # در نسخه بعد:
-
-        # ذخیره وضعیت معاملات
-
-        # بستن سرویس‌ها
-
-        # ارسال گزارش خاموشی
-
-
-
-        logger.info(
-
-            "SYSTEM SHUTDOWN COMPLETED"
-
-        )
+        SYSTEM_READY = False
 
 
 
@@ -351,3 +391,21 @@ def shutdown_system():
 
 
         return False
+
+
+
+
+
+
+
+
+def system_status():
+
+    return {
+
+
+        "ready":
+
+            SYSTEM_READY
+
+    }
