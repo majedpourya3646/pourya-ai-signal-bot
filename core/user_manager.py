@@ -1,112 +1,16 @@
 # core/user_manager.py
 
-import sqlite3
-
 from datetime import datetime
 
 from core.logger import logger
 
-
-
-
-
-DB_PATH = "data/pourya_trader.db"
-
-
-
-
-
-
-
-
-def get_connection():
-
-    try:
-
-        return sqlite3.connect(
-
-            DB_PATH
-
-        )
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return None
-
-
-
-
-
-
-
-
-def init_user_database():
-
-    try:
-
-        conn = get_connection()
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            CREATE TABLE IF NOT EXISTS users
-
-            (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                telegram_id TEXT UNIQUE,
-
-                username TEXT,
-
-                email TEXT,
-
-                phone TEXT,
-
-                trading_mode TEXT DEFAULT 'MANUAL',
-
-                notification_level TEXT DEFAULT 'BASIC',
-
-                user_profit_percent REAL DEFAULT 50,
-
-                active INTEGER DEFAULT 1,
-
-                created_at TEXT
-
-            )
-
-            """
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
+from core.database_manager import (
+    get_connection
+)
+
+from config import (
+    DEFAULT_USER_PROFIT_SHARE
+)
 
 
 
@@ -119,6 +23,7 @@ def create_user(
 
     try:
 
+
         conn = get_connection()
 
         cursor = conn.cursor()
@@ -129,7 +34,43 @@ def create_user(
 
             """
 
-            INSERT OR IGNORE INTO users
+            SELECT id
+
+            FROM users
+
+            WHERE telegram_id=?
+
+            """,
+
+            (
+
+                str(telegram_id),
+
+            )
+
+        )
+
+
+
+        exists = cursor.fetchone()
+
+
+
+        if exists:
+
+            conn.close()
+
+            return exists[0]
+
+
+
+
+
+        cursor.execute(
+
+            """
+
+            INSERT INTO users
 
             (
 
@@ -137,11 +78,19 @@ def create_user(
 
                 username,
 
+                trading_mode,
+
+                profit_percent,
+
+                active,
+
                 created_at
 
             )
 
-            VALUES (?,?,?)
+            VALUES
+
+            (?,?,?,?,?,?)
 
             """,
 
@@ -151,12 +100,21 @@ def create_user(
 
                 username,
 
-                datetime.utcnow()
-                .isoformat()
+                "MANUAL",
+
+                DEFAULT_USER_PROFIT_SHARE,
+
+                1,
+
+                datetime.utcnow().isoformat()
 
             )
 
         )
+
+
+
+        user_id = cursor.lastrowid
 
 
 
@@ -166,16 +124,17 @@ def create_user(
 
 
 
-        return True
+        return user_id
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return False
 
+        return False
 
 
 
@@ -188,6 +147,7 @@ def get_user(
 ):
 
     try:
+
 
         conn = get_connection()
 
@@ -225,71 +185,21 @@ def get_user(
 
 
 
-        if not row:
+        if row:
 
-            return None
-
-
-
-        return {
+            return dict(row)
 
 
-            "id":
 
-                row[0],
-
-
-            "telegram_id":
-
-                row[1],
-
-
-            "username":
-
-                row[2],
-
-
-            "email":
-
-                row[3],
-
-
-            "phone":
-
-                row[4],
-
-
-            "trading_mode":
-
-                row[5],
-
-
-            "notification_level":
-
-                row[6],
-
-
-            "user_profit_percent":
-
-                row[7],
-
-
-            "active":
-
-                row[8],
-
-
-            "created_at":
-
-                row[9]
-
-        }
+        return None
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return None
 
@@ -299,38 +209,33 @@ def get_user(
 
 
 
-
-def update_user_setting(
+def update_trading_mode(
     telegram_id,
-    key,
-    value
+    mode
 ):
 
     try:
 
-        allowed = [
 
-            "username",
+        mode = str(
 
-            "email",
+            mode
 
-            "phone",
-
-            "trading_mode",
-
-            "notification_level",
-
-            "user_profit_percent",
-
-            "active"
-
-        ]
+        ).upper()
 
 
 
-        if key not in allowed:
+        if mode not in [
+
+            "AUTO",
+
+            "MANUAL"
+
+        ]:
 
             return False
+
+
 
 
 
@@ -340,25 +245,21 @@ def update_user_setting(
 
 
 
-        query = f"""
-
-        UPDATE users
-
-        SET {key}=?
-
-        WHERE telegram_id=?
-
-        """
-
-
-
         cursor.execute(
 
-            query,
+            """
+
+            UPDATE users
+
+            SET trading_mode=?
+
+            WHERE telegram_id=?
+
+            """,
 
             (
 
-                value,
+                mode,
 
                 str(telegram_id)
 
@@ -380,7 +281,9 @@ def update_user_setting(
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return False
 
@@ -390,10 +293,190 @@ def update_user_setting(
 
 
 
-
-def get_all_users():
+def update_profit_share(
+    telegram_id,
+    percent
+):
 
     try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            UPDATE users
+
+            SET profit_percent=?
+
+            WHERE telegram_id=?
+
+            """,
+
+            (
+
+                float(percent),
+
+                str(telegram_id)
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def deactivate_user(
+    telegram_id
+):
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            UPDATE users
+
+            SET active=0
+
+            WHERE telegram_id=?
+
+            """,
+
+            (
+
+                str(telegram_id),
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def activate_user(
+    telegram_id
+):
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            UPDATE users
+
+            SET active=1
+
+            WHERE telegram_id=?
+
+            """,
+
+            (
+
+                str(telegram_id),
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def get_active_users():
+
+    try:
+
 
         conn = get_connection()
 
@@ -425,81 +508,20 @@ def get_all_users():
 
 
 
-        return rows
+        return [
+
+            dict(row)
+
+            for row in rows
+
+        ]
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return []
-
-
-
-
-
-
-
-
-def deactivate_user(
-    telegram_id
-):
-
-    try:
-
-        return update_user_setting(
-
-            telegram_id,
-
-            "active",
-
-            0
-
-        )
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-
-
-
-
-def set_profit_share(
-    telegram_id,
-    percent
-):
-
-    try:
-
-        if percent < 0 or percent > 100:
-
-            return False
-
-
-
-        return update_user_setting(
-
-            telegram_id,
-
-            "user_profit_percent",
-
-            percent
-
-        )
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
