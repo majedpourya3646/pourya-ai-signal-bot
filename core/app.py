@@ -2,132 +2,41 @@
 
 import time
 
-from core.scheduler import (
-    start_all_services
-)
+from core.logger import logger
 
 from core.startup_manager import (
     initialize_system,
     shutdown_system
 )
 
-from core.version import (
-    version_string
-)
-
-from core.logger import logger
-
-from core.config_manager import (
-    get_setting
-)
-
-from telegram_sender import (
-    send_message
+from core.scheduler import (
+    start_all_services,
+    stop_all_services
 )
 
 
 
-APPLICATION_STATUS = {
-
-    "running": False,
-
-    "started_at": None
-
-}
 
 
-
-def send_startup_report():
-
-    try:
+RUNNING = False
 
 
-        paper = get_setting(
-            "paper_trading",
-            True
-        )
-
-
-        mode = (
-            "PAPER"
-            if paper
-            else
-            "REAL"
-        )
-
-
-        message = f"""
-
-🤖 <b>Pourya Trader AI</b>
-
-Version:
-{version_string()}
-
-
-✅ SYSTEM ONLINE
-
-
-🟢 Trading Engine: Ready
-
-🟢 Risk Engine: Ready
-
-🟢 Database: Connected
-
-🟢 Scheduler: Running
-
-
-Mode:
-{mode}
-
-
-Waiting for opportunities...
-
-"""
-
-
-        send_message(
-            message
-        )
-
-
-    except Exception as e:
-
-        logger.exception(e)
 
 
 
 def start():
 
+    global RUNNING
+
+
     try:
 
 
         logger.info(
-            "STARTING POURYA TRADER AI"
+
+            "POURYA TRADER AI STARTING"
+
         )
-
-
-
-        logger.info(
-            version_string()
-        )
-
-
-
-        emergency = get_setting(
-            "emergency_mode",
-            False
-        )
-
-
-        if emergency:
-
-
-            logger.error(
-                "SYSTEM BLOCKED - EMERGENCY MODE"
-            )
-
-
-            return False
 
 
 
@@ -135,7 +44,9 @@ def start():
 
 
             logger.error(
-                "STARTUP FAILED"
+
+                "SYSTEM INITIALIZATION FAILED"
+
             )
 
 
@@ -143,35 +54,33 @@ def start():
 
 
 
-        APPLICATION_STATUS["running"] = True
+
+
+        if not start_all_services():
+
+
+            logger.error(
+
+                "SERVICES START FAILED"
+
+            )
+
+
+            return False
+
+
+
+
+
+        RUNNING = True
 
 
 
         logger.info(
-            "SYSTEM READY"
+
+            "POURYA TRADER AI ONLINE"
+
         )
-
-
-
-        send_startup_report()
-
-
-
-        result = start_all_services()
-
-
-
-        if not result:
-
-
-            logger.error(
-                "SERVICE START FAILED"
-            )
-
-
-            stop()
-
-            return False
 
 
 
@@ -190,17 +99,86 @@ def start():
 
 
 
-def stop():
+
+
+
+def run():
 
     try:
 
 
-        logger.info(
-            "STOPPING APPLICATION"
+        if not start():
+
+            return False
+
+
+
+
+
+        while RUNNING:
+
+
+            time.sleep(
+
+                10
+
+            )
+
+
+
+        return True
+
+
+
+    except KeyboardInterrupt:
+
+
+        logger.warning(
+
+            "STOP SIGNAL RECEIVED"
+
         )
 
 
-        APPLICATION_STATUS["running"] = False
+        stop()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        stop()
+
+
+
+        return False
+
+
+
+
+
+
+
+def stop():
+
+    global RUNNING
+
+
+    try:
+
+
+        RUNNING = False
+
+
+
+        stop_all_services()
 
 
 
@@ -208,21 +186,12 @@ def stop():
 
 
 
-        send_message(
-            """
-🤖 <b>Pourya Trader AI</b>
-
-🔴 SYSTEM OFFLINE
-
-All services stopped safely.
-"""
-        )
-
-
-
         logger.info(
-            "APPLICATION STOPPED"
+
+            "POURYA TRADER AI STOPPED"
+
         )
+
 
 
         return True
@@ -241,13 +210,15 @@ All services stopped safely.
 
 
 
-def get_status():
-
-    return APPLICATION_STATUS
 
 
+def status():
+
+    return {
 
 
-if __name__ == "__main__":
+        "running":
 
-    start()
+            RUNNING
+
+    }
