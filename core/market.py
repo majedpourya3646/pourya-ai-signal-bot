@@ -1,48 +1,30 @@
 # core/market.py
 
-import requests
+import pandas as pd
 
 from core.logger import logger
 
-from config import (
-    BASE_URL,
-    MARKET_TYPE,
-    REQUEST_TIMEOUT
+from core.mt5_connector import (
+    get_rates
 )
 
 
 
+TIMEFRAME_MAP = {
 
+    "1": "1",
 
-if MARKET_TYPE == "FUTURES":
+    "5": "5",
 
-    KLINE_URL = BASE_URL + "/futures/kline"
+    "15": "15",
 
-    TICKER_URL = BASE_URL + "/futures/ticker"
+    "30": "30",
 
+    "60": "60",
 
-else:
+    "240": "240",
 
-    KLINE_URL = BASE_URL + "/spot/kline"
-
-    TICKER_URL = BASE_URL + "/spot/ticker"
-
-
-
-
-
-
-
-
-INTERVAL_MAP = {
-
-    "15": "15min",
-
-    "60": "1hour",
-
-    "240": "4hour",
-
-    "1D": "1day"
+    "1440": "1440"
 
 }
 
@@ -50,395 +32,103 @@ INTERVAL_MAP = {
 
 
 
-
-
-
-
 def get_market_data(
     symbol,
-    interval="15",
-    limit=200
+    timeframe="15",
+    count=200
 ):
 
     try:
 
-
-        params = {
-
-
-            "market":
-
-                symbol,
-
-
-            "period":
-
-                INTERVAL_MAP.get(
-
-                    interval,
-
-                    "15min"
-
-                ),
-
-
-            "limit":
-
-                limit
-
-        }
-
-
-
-
-        response = requests.get(
-
-            KLINE_URL,
-
-            params=params,
-
-            timeout=REQUEST_TIMEOUT
-
+        logger.info(
+            f"MARKET DATA {symbol} TF={timeframe} COUNT={count}"
         )
 
 
+        rates = get_rates(
+            symbol,
+            timeframe,
+            count
+        )
 
-        data = response.json()
 
-
-
-        if data.get("code") != 0:
-
+        if rates is None:
 
             logger.error(
-
-                f"KLINE ERROR {data}"
-
+                f"NO MARKET DATA {symbol}"
             )
-
-
-            return []
-
-
-
-
-
-        candles = []
-
-
-
-        raw_data = data.get(
-
-            "data",
-
-            []
-
-        )
-
-
-
-
-
-        for item in raw_data:
-
-
-
-            try:
-
-
-                # CoinEx جدید - Dictionary
-
-                if isinstance(
-
-                    item,
-
-                    dict
-
-                ):
-
-
-                    candles.append(
-
-                        {
-
-
-                            "time":
-
-                                item.get(
-
-                                    "created_at",
-
-                                    item.get(
-
-                                        "time",
-
-                                        0
-
-                                    )
-
-                                ),
-
-
-                            "open":
-
-                                float(
-
-                                    item.get(
-
-                                        "open",
-
-                                        0
-
-                                    )
-
-                                ),
-
-
-                            "close":
-
-                                float(
-
-                                    item.get(
-
-                                        "close",
-
-                                        0
-
-                                    )
-
-                                ),
-
-
-                            "high":
-
-                                float(
-
-                                    item.get(
-
-                                        "high",
-
-                                        0
-
-                                    )
-
-                                ),
-
-
-                            "low":
-
-                                float(
-
-                                    item.get(
-
-                                        "low",
-
-                                        0
-
-                                    )
-
-                                ),
-
-
-                            "volume":
-
-                                float(
-
-                                    item.get(
-
-                                        "volume",
-
-                                        0
-
-                                    )
-
-                                )
-
-                        }
-
-                    )
-
-
-
-
-
-                # CoinEx قدیمی - List
-
-                elif isinstance(
-
-                    item,
-
-                    list
-
-                ):
-
-
-                    candles.append(
-
-                        {
-
-
-                            "time":
-
-                                item[0],
-
-
-                            "open":
-
-                                float(item[1]),
-
-
-                            "close":
-
-                                float(item[2]),
-
-
-                            "high":
-
-                                float(item[3]),
-
-
-                            "low":
-
-                                float(item[4]),
-
-
-                            "volume":
-
-                                float(item[5])
-
-                        }
-
-                    )
-
-
-
-
-
-            except Exception as e:
-
-
-                logger.error(
-
-                    f"CANDLE PARSE ERROR {item} {e}"
-
-                )
-
-
-
-                continue
-
-
-
-
-
-
-        return candles
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
-
-
-
-
-
-
-
-
-
-def get_latest_price(
-    symbol
-):
-
-    try:
-
-
-        params = {
-
-
-            "market":
-
-                symbol
-
-        }
-
-
-
-        response = requests.get(
-
-            TICKER_URL,
-
-            params=params,
-
-            timeout=REQUEST_TIMEOUT
-
-        )
-
-
-
-        data = response.json()
-
-
-
-        if data.get("code") != 0:
-
 
             return None
 
 
 
-
-
-        ticker = data.get(
-
-            "data"
-
+        df = pd.DataFrame(
+            rates
         )
 
 
 
-        if isinstance(
-
-            ticker,
-
-            list
-
-        ):
-
-
-            ticker = ticker[0]
-
-
-
-
-
-        return float(
-
-            ticker.get(
-
-                "last"
-
-            )
-
+        df["time"] = pd.to_datetime(
+            df["time"],
+            unit="s"
         )
+
+
+
+        df.rename(
+            columns={
+
+                "open": "open",
+
+                "high": "high",
+
+                "low": "low",
+
+                "close": "close",
+
+                "tick_volume": "volume"
+
+            },
+            inplace=True
+        )
+
+
+
+        df = df[
+
+            [
+
+                "time",
+
+                "open",
+
+                "high",
+
+                "low",
+
+                "close",
+
+                "volume"
+
+            ]
+
+        ]
+
+
+
+        return df
 
 
 
     except Exception as e:
 
 
-        logger.exception(e)
+        logger.error(
+            f"MARKET DATA ERROR {e}"
+        )
 
 
         return None
-
-
 
 
 
@@ -448,8 +138,36 @@ def get_current_price(
     symbol
 ):
 
-    return get_latest_price(
+    try:
 
-        symbol
+        df = get_market_data(
+            symbol,
+            "15",
+            2
+        )
 
-    )
+
+        if df is None:
+
+            return None
+
+
+
+        price = float(
+            df.iloc[-1]["close"]
+        )
+
+
+        return price
+
+
+
+    except Exception as e:
+
+
+        logger.error(
+            f"CURRENT PRICE ERROR {e}"
+        )
+
+
+        return None
