@@ -1,3 +1,4 @@
+
 # core/signal_engine.py
 
 import pandas as pd
@@ -22,13 +23,9 @@ def prepare_dataframe(
 
     try:
 
-
         df = pd.DataFrame(
-
             candles
-
         )
-
 
 
         if df.empty:
@@ -36,6 +33,26 @@ def prepare_dataframe(
             return None
 
 
+
+        required_columns = [
+
+            "close",
+            "high",
+            "low",
+            "volume"
+
+        ]
+
+
+        for column in required_columns:
+
+            if column not in df.columns:
+
+                logger.warning(
+                    f"MISSING COLUMN {column}"
+                )
+
+                return None
 
 
 
@@ -55,9 +72,7 @@ def prepare_dataframe(
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return None
 
@@ -76,7 +91,7 @@ def calculate_indicators(
 
         df["ema20"] = EMAIndicator(
 
-            df["close"],
+            close=df["close"],
 
             window=20
 
@@ -86,7 +101,7 @@ def calculate_indicators(
 
         df["ema50"] = EMAIndicator(
 
-            df["close"],
+            close=df["close"],
 
             window=50
 
@@ -96,7 +111,7 @@ def calculate_indicators(
 
         df["ema200"] = EMAIndicator(
 
-            df["close"],
+            close=df["close"],
 
             window=200
 
@@ -106,14 +121,14 @@ def calculate_indicators(
 
 
 
+
         rsi = RSIIndicator(
 
-            df["close"],
+            close=df["close"],
 
             window=14
 
         )
-
 
 
         df["rsi"] = rsi.rsi()
@@ -125,10 +140,9 @@ def calculate_indicators(
 
         macd = MACD(
 
-            df["close"]
+            close=df["close"]
 
         )
-
 
 
         df["macd"] = macd.macd()
@@ -139,21 +153,31 @@ def calculate_indicators(
 
 
 
+
         adx = ADXIndicator(
 
-            df["high"],
+            high=df["high"],
 
-            df["low"],
+            low=df["low"],
 
-            df["close"]
+            close=df["close"]
 
         )
-
 
 
         df["adx"] = adx.adx()
 
 
+
+
+
+        df = df.dropna()
+
+
+
+        if df.empty:
+
+            return None
 
 
 
@@ -163,11 +187,152 @@ def calculate_indicators(
 
     except Exception as e:
 
+        logger.exception(e)
+
+        return None
+
+def calculate_signal_score(
+    last
+):
+
+    try:
+
+
+        buy_score = 0
+
+        sell_score = 0
+
+
+
+
+
+        # EMA TREND
+
+        if last["ema20"] > last["ema50"]:
+
+            buy_score += 20
+
+
+        elif last["ema20"] < last["ema50"]:
+
+            sell_score += 20
+
+
+
+
+
+        # EMA 200 FILTER
+
+        if last["close"] > last["ema200"]:
+
+            buy_score += 15
+
+
+        elif last["close"] < last["ema200"]:
+
+            sell_score += 15
+
+
+
+
+
+
+        # RSI
+
+        if last["rsi"] < 30:
+
+            buy_score += 15
+
+
+        elif last["rsi"] > 70:
+
+            sell_score += 15
+
+
+        elif 45 <= last["rsi"] <= 55:
+
+            buy_score += 5
+
+            sell_score += 5
+
+
+
+
+
+
+
+        # MACD
+
+        if last["macd"] > last["macd_signal"]:
+
+            buy_score += 20
+
+
+        elif last["macd"] < last["macd_signal"]:
+
+            sell_score += 20
+
+
+
+
+
+
+        # ADX TREND STRENGTH
+
+        if last["adx"] > 20:
+
+            if last["ema20"] > last["ema50"]:
+
+                buy_score += 10
+
+            else:
+
+                sell_score += 10
+
+
+
+
+
+
+        # VOLUME
+
+        return {
+
+
+            "buy_score":
+
+                buy_score,
+
+
+            "sell_score":
+
+                sell_score
+
+        }
+
+
+
+    except Exception as e:
+
 
         logger.exception(e)
 
 
-        return None
+        return {
+
+
+            "buy_score":
+
+                0,
+
+
+            "sell_score":
+
+                0
+
+        }
+
+
 
 
 
@@ -198,6 +363,7 @@ def analyze_signal(
 
 
 
+
         df = calculate_indicators(
 
             df
@@ -214,116 +380,75 @@ def analyze_signal(
 
 
 
+
         last = df.iloc[-1]
 
 
 
-        score = 0
+
+
+        scores = calculate_signal_score(
+
+            last
+
+        )
+
+
+
+        buy_score = scores.get(
+
+            "buy_score",
+
+            0
+
+        )
+
+
+        sell_score = scores.get(
+
+            "sell_score",
+
+            0
+
+        )
+
+
+
+
 
         signal = None
 
+        confidence = max(
 
+            buy_score,
 
+            sell_score
 
+        )
 
 
-        # Trend
 
-        if last["ema20"] > last["ema50"]:
 
-            score += 15
 
+        if buy_score > sell_score:
 
+            signal = "BUY"
 
-        if last["close"] > last["ema200"]:
 
-            score += 15
 
+        elif sell_score > buy_score:
 
+            signal = "SELL"
 
 
 
 
-        # RSI
 
-        if 40 < last["rsi"] < 70:
+        logger.info(
 
-            score += 15
+            f"SIGNAL SCORE BUY={buy_score} SELL={sell_score}"
 
-
-
-
-
-        elif last["rsi"] < 30:
-
-            score += 10
-
-
-
-
-
-
-        # MACD
-
-        if last["macd"] > last["macd_signal"]:
-
-            score += 15
-
-
-
-
-
-
-        # ADX
-
-        if last["adx"] > 20:
-
-            score += 15
-
-
-
-
-
-
-        # Volume
-
-        avg_volume = df["volume"].mean()
-
-
-
-        if last["volume"] > avg_volume:
-
-            score += 10
-
-
-
-
-
-
-        if score >= 60:
-
-
-            if (
-
-                last["ema20"]
-
-                >
-
-                last["ema50"]
-
-            ):
-
-
-                signal = "BUY"
-
-
-
-            else:
-
-
-                signal = "SELL"
-
-
+        )
 
 
 
@@ -337,17 +462,15 @@ def analyze_signal(
                 signal,
 
 
-
             "confidence":
 
                 min(
 
-                    score,
+                    confidence,
 
                     100
 
                 ),
-
 
 
             "price":
@@ -359,22 +482,24 @@ def analyze_signal(
                 ),
 
 
-
             "rsi":
 
-                float(
+                round(
 
-                    last["rsi"]
+                    float(last["rsi"]),
+
+                    2
 
                 ),
 
 
-
             "adx":
 
-                float(
+                round(
 
-                    last["adx"]
+                    float(last["adx"]),
+
+                    2
 
                 )
 
@@ -387,5 +512,41 @@ def analyze_signal(
 
         logger.exception(e)
 
+
+        return None
+
+# signal_engine.py END
+
+
+def get_signal_direction(
+    candles
+):
+
+    try:
+
+        result = analyze_signal(
+
+            candles
+
+        )
+
+
+        if not result:
+
+            return None
+
+
+
+        return result.get(
+
+            "signal"
+
+        )
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
 
         return None
