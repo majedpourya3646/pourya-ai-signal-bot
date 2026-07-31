@@ -15,12 +15,12 @@ class CoinExTrade:
 
         try:
 
-            side = side.lower()
+            side = side.upper()
 
 
             if side not in [
-                "buy",
-                "sell"
+                "BUY",
+                "SELL"
             ]:
 
                 logger.error(
@@ -31,42 +31,57 @@ class CoinExTrade:
 
 
 
+            order_side = side.lower()
+
+
+
             logger.info(
-                f"COINEX ORDER {symbol} {side} QTY={quantity}"
+                f"COINEX ORDER {symbol} {order_side} QTY={quantity}"
             )
 
 
+            result = coinex.create_futures_order(
 
-            params = {
+                market=symbol,
 
-                "market": symbol,
+                side=order_side,
 
-                "market_type": "FUTURES",
-
-                "side": side,
-
-                "type": "market",
-
-                "amount": str(quantity)
-
-            }
-
-
-
-            result = coinex._request(
-
-                "POST",
-
-                "/futures/order",
-
-                params
+                amount=quantity
 
             )
 
 
 
+            if not result:
+
+
+                logger.error(
+                    "EMPTY COINEX RESPONSE"
+                )
+
+                return None
+
+
+
+            code = result.get(
+                "code"
+            )
+
+
+
+            if code != 0:
+
+
+                logger.error(
+                    f"COINEX ORDER FAILED {result}"
+                )
+
+                return None
+
+
+
             logger.info(
-                f"COINEX RESPONSE {result}"
+                f"COINEX ORDER SUCCESS {result}"
             )
 
 
@@ -75,6 +90,7 @@ class CoinExTrade:
 
 
         except Exception as e:
+
 
             logger.exception(e)
 
@@ -89,10 +105,15 @@ class CoinExTrade:
         quantity
     ):
 
+
         return self.create_order(
+
             symbol,
-            "buy",
+
+            "BUY",
+
             quantity
+
         )
 
 
@@ -104,10 +125,15 @@ class CoinExTrade:
         quantity
     ):
 
+
         return self.create_order(
+
             symbol,
-            "sell",
+
+            "SELL",
+
             quantity
+
         )
 
 
@@ -118,30 +144,45 @@ class CoinExTrade:
         symbol
     ):
 
+
         try:
 
 
-            params = {
-
-                "market": symbol,
-
-                "market_type": "FUTURES"
-
-            }
-
-
-            return coinex._request(
+            result = coinex._request(
 
                 "POST",
 
                 "/futures/close-position",
 
-                params
+                body={
+
+                    "market":
+                    symbol
+
+                },
+
+                private=True
 
             )
 
 
+            if result.get("code") != 0:
+
+
+                logger.error(
+                    f"CLOSE FAILED {result}"
+                )
+
+                return None
+
+
+
+            return result
+
+
+
         except Exception as e:
+
 
             logger.exception(e)
 
@@ -150,10 +191,13 @@ class CoinExTrade:
 
 
 
+
     def get_order(
         self,
-        order_id
+        order_id,
+        symbol
     ):
+
 
         try:
 
@@ -164,16 +208,24 @@ class CoinExTrade:
 
                 "/futures/order-status",
 
-                {
+                params={
 
-                    "order_id": order_id
+                    "market":
+                    symbol,
 
-                }
+
+                    "order_id":
+                    order_id
+
+                },
+
+                private=True
 
             )
 
 
         except Exception as e:
+
 
             logger.exception(e)
 
@@ -186,42 +238,28 @@ class CoinExTrade:
     def cancel_order(
         self,
         order_id,
-        symbol=None
+        symbol
     ):
+
 
         try:
 
 
-            params = {
+            return coinex.cancel_order(
 
-                "order_id": order_id
+                order_id,
 
-            }
-
-
-            if symbol:
-
-                params["market"] = symbol
-
-
-
-            return coinex._request(
-
-                "POST",
-
-                "/futures/cancel-order",
-
-                params
+                symbol
 
             )
 
 
         except Exception as e:
 
+
             logger.exception(e)
 
             return None
-
 
 
 
