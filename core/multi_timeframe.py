@@ -1,14 +1,14 @@
 # core/multi_timeframe.py
 
-from core.logger import logger
-
 from core.market import (
-    get_multi_timeframe_data
+    get_market_data
 )
 
 from core.signal_engine import (
     analyze_signal
 )
+
+from core.logger import logger
 
 from config import (
     DEFAULT_TP,
@@ -21,14 +21,105 @@ from config import (
 
 TIMEFRAME_WEIGHTS = {
 
-    "15": 0.25,
+    "15":
 
-    "60": 0.35,
+        0.25,
 
-    "240": 0.40
+
+    "60":
+
+        0.35,
+
+
+    "240":
+
+        0.40
 
 }
 
+
+
+
+
+
+
+
+
+def calculate_target(
+    price,
+    side
+):
+
+    try:
+
+
+        if side == "BUY":
+
+
+            tp = price * (
+
+                1
+
+                +
+
+                DEFAULT_TP / 100
+
+            )
+
+
+
+            sl = price * (
+
+                1
+
+                -
+
+                DEFAULT_SL / 100
+
+            )
+
+
+
+        else:
+
+
+            tp = price * (
+
+                1
+
+                -
+
+                DEFAULT_TP / 100
+
+            )
+
+
+
+            sl = price * (
+
+                1
+
+                +
+
+                DEFAULT_SL / 100
+
+            )
+
+
+
+
+
+        return round(tp, 6), round(sl, 6)
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None, None
 
 
 
@@ -43,61 +134,41 @@ def analyze_symbol(
     try:
 
 
-        market_data = get_multi_timeframe_data(
-
-            symbol
-
-        )
-
-
-
-        if not market_data:
-
-            return None
-
-
-
-
-
-        results = {}
-
-
-
         total_score = 0
-
-
 
         buy_score = 0
 
         sell_score = 0
 
-
-
-        confidence = 0
+        last_price = None
 
 
 
 
 
-        for timeframe, df in market_data.items():
+        timeframe_results = {}
 
 
 
-            if df is None:
-
-                continue
 
 
 
-            signal = analyze_signal(
 
-                df
+        for tf, weight in TIMEFRAME_WEIGHTS.items():
+
+
+
+            candles = get_market_data(
+
+                symbol,
+
+                tf
 
             )
 
 
 
-            if not signal:
+            if not candles:
 
                 continue
 
@@ -105,9 +176,26 @@ def analyze_symbol(
 
 
 
-            weight = TIMEFRAME_WEIGHTS.get(
 
-                timeframe,
+            result = analyze_signal(
+
+                candles
+
+            )
+
+
+
+            if not result:
+
+                continue
+
+
+
+
+
+            confidence = result.get(
+
+                "confidence",
 
                 0
 
@@ -115,70 +203,64 @@ def analyze_symbol(
 
 
 
-            results[timeframe] = signal
+            weighted = confidence * weight
+
+
+
+            total_score += weighted
 
 
 
 
 
-            score = (
-
-                signal.get(
-
-                    "confidence",
-
-                    0
-
-                )
-
-                *
-
-                weight
-
-            )
-
-
-
-            total_score += score
-
-
-
-
-
-            if signal.get(
+            if result.get(
 
                 "signal"
 
             ) == "BUY":
 
 
-                buy_score += score
+                buy_score += weighted
 
 
 
-            elif signal.get(
+            elif result.get(
 
                 "signal"
 
             ) == "SELL":
 
 
-                sell_score += score
+                sell_score += weighted
+
+
+
+
+
+            last_price = result.get(
+
+                "price"
+
+            )
+
+
+
+
+
+            timeframe_results[tf] = result
 
 
 
 
 
 
-        if not results:
+
+
+        if total_score < 50:
 
             return None
 
 
-
-
-
-        final_signal = "WAIT"
 
 
 
@@ -186,65 +268,28 @@ def analyze_symbol(
 
         if buy_score > sell_score:
 
+
             final_signal = "BUY"
+
+
+
+            confidence = buy_score
 
 
 
         elif sell_score > buy_score:
 
+
             final_signal = "SELL"
 
 
 
-
-
-        final_confidence = round(
-
-            max(
-
-                buy_score,
-
-                sell_score
-
-            ),
-
-            2
-
-        )
+            confidence = sell_score
 
 
 
+        else:
 
-
-        last_data = results.get(
-
-            "15"
-
-        )
-
-
-
-        if not last_data:
-
-            last_data = list(
-
-                results.values()
-
-            )[0]
-
-
-
-
-
-        entry = last_data.get(
-
-            "entry"
-
-        )
-
-
-
-        if not entry:
 
             return None
 
@@ -253,56 +298,15 @@ def analyze_symbol(
 
 
 
-        if final_signal == "BUY":
 
+        tp, sl = calculate_target(
 
-            tp = entry * (
+            last_price,
 
-                1 +
+            final_signal
 
-                DEFAULT_TP / 100
+        )
 
-            )
-
-
-            sl = entry * (
-
-                1 -
-
-                DEFAULT_SL / 100
-
-            )
-
-
-
-        elif final_signal == "SELL":
-
-
-            tp = entry * (
-
-                1 -
-
-                DEFAULT_TP / 100
-
-            )
-
-
-            sl = entry * (
-
-                1 +
-
-                DEFAULT_SL / 100
-
-            )
-
-
-
-        else:
-
-
-            tp = None
-
-            sl = None
 
 
 
@@ -326,13 +330,19 @@ def analyze_symbol(
 
             "confidence":
 
-                final_confidence,
+                round(
+
+                    confidence,
+
+                    2
+
+                ),
 
 
 
             "entry":
 
-                entry,
+                last_price,
 
 
 
@@ -350,33 +360,10 @@ def analyze_symbol(
 
             "timeframes":
 
-                results,
-
-
-
-            "buy_score":
-
-                round(
-
-                    buy_score,
-
-                    2
-
-                ),
-
-
-
-            "sell_score":
-
-                round(
-
-                    sell_score,
-
-                    2
-
-                )
+                timeframe_results
 
         }
+
 
 
 
@@ -388,73 +375,3 @@ def analyze_symbol(
 
 
         return None
-
-
-
-
-
-
-
-
-
-def analyze_symbols(
-    symbols
-):
-
-    try:
-
-
-        results = []
-
-
-
-        for symbol in symbols:
-
-
-            analysis = analyze_symbol(
-
-                symbol
-
-            )
-
-
-
-            if analysis:
-
-                results.append(
-
-                    analysis
-
-                )
-
-
-
-        results.sort(
-
-            key=lambda x:
-
-                x.get(
-
-                    "confidence",
-
-                    0
-
-                ),
-
-            reverse=True
-
-        )
-
-
-
-        return results
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
