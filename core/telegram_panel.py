@@ -3,53 +3,102 @@
 from core.logger import logger
 
 from core.user_manager import (
-    create_user,
     get_user,
     update_user_setting
 )
 
 from core.trade_manager import (
-    get_open_trades
+    get_open_trades,
+    get_trade_history
 )
 
-from core.config_manager import (
-    get_all_settings
+from core.subscription_manager import (
+    get_subscription,
+    check_subscription
+)
+
+from core.report_manager import (
+    get_performance_summary
 )
 
 
 
 
-def register_user(
-    telegram_id,
-    username=None
-):
 
-    try:
+def main_menu():
 
+    return {
 
-        return create_user(
-
-            telegram_id,
-
-            username
-
-        )
+        "buttons":[
 
 
-    except Exception as e:
+            {
+
+                "text":
+                "📊 وضعیت معاملات",
+
+                "action":
+                "trades"
+
+            },
 
 
-        logger.exception(e)
+            {
+
+                "text":
+                "💰 گزارش سود",
+
+                "action":
+                "profit"
+
+            },
 
 
-        return False
+            {
+
+                "text":
+                "⚙️ تنظیمات",
+
+                "action":
+                "settings"
+
+            },
+
+
+            {
+
+                "text":
+                "🚀 معاملات پیشنهادی",
+
+                "action":
+                "offers"
+
+            },
+
+
+            {
+
+                "text":
+                "⭐ اشتراک",
+
+                "action":
+                "subscription"
+
+            }
+
+
+        ]
+
+    }
 
 
 
 
 
 
-def get_user_status(
+
+
+def get_user_dashboard(
     telegram_id
 ):
 
@@ -57,67 +106,72 @@ def get_user_status(
 
 
         user = get_user(
+
             telegram_id
+
         )
+
 
 
         if not user:
 
-            return {
 
-                "status":
-                    "USER NOT FOUND"
-
-            }
+            return "کاربر ثبت نشده است"
 
 
 
-        return {
+        subscription = get_subscription(
+
+            telegram_id
+
+        )
 
 
-            "username":
 
-                user.get(
-                    "username"
-                ),
+        stats = get_performance_summary()
 
 
-            "mode":
 
-                user.get(
-                    "trading_mode"
-                ),
+        return f"""
 
-
-            "risk":
-
-                user.get(
-                    "risk_percent"
-                ),
+🤖 Pourya Trader AI
 
 
-            "leverage":
+👤 کاربر:
 
-                user.get(
-                    "leverage"
-                ),
+{user.get('username')}
 
 
-            "profit_share":
+⚙️ حالت:
 
-                user.get(
-                    "user_profit_percent"
-                ),
+{user.get('trading_mode')}
 
 
-            "notifications":
+📢 پیام‌ها:
 
-                user.get(
-                    "notification_level"
-                )
+{user.get('notification_level')}
 
 
-        }
+💰 سهم سود:
+
+{user.get('user_profit_percent')}%
+
+
+📈 معاملات:
+
+{stats.get('total')}
+
+
+🎯 موفقیت:
+
+{stats.get('win_rate')}%
+
+
+⭐ اشتراک:
+
+{subscription.get('plan') if subscription else 'FREE'}
+
+"""
 
 
 
@@ -127,14 +181,16 @@ def get_user_status(
         logger.exception(e)
 
 
-        return {}
+        return ""
 
 
 
 
 
 
-def get_open_positions():
+
+
+def get_open_position_view():
 
     try:
 
@@ -143,50 +199,41 @@ def get_open_positions():
 
 
 
-        result = []
+        if not trades:
+
+
+            return "معامله بازی وجود ندارد"
+
+
+
+        message = "📊 معاملات باز:\n\n"
 
 
 
         for trade in trades:
 
 
-            result.append(
+            message += f"""
 
-                {
+🪙 {trade.get('symbol')}
 
-                    "symbol":
+📈 {trade.get('side')}
 
-                        trade.get(
-                            "symbol"
-                        ),
+💵 ورود:
+{trade.get('entry')}
 
+🎯 TP:
+{trade.get('tp')}
 
-                    "side":
-
-                        trade.get(
-                            "side"
-                        ),
+🛑 SL:
+{trade.get('sl')}
 
 
-                    "entry":
-
-                        trade.get(
-                            "entry"
-                        ),
+"""
 
 
-                    "quantity":
 
-                        trade.get(
-                            "quantity"
-                        )
-
-                }
-
-            )
-
-
-        return result
+        return message
 
 
 
@@ -196,97 +243,53 @@ def get_open_positions():
         logger.exception(e)
 
 
-        return []
+        return ""
 
 
 
 
 
 
-def update_user_mode(
+
+
+def update_notification_setting(
     telegram_id,
     mode
 ):
 
-    try:
+    return update_user_setting(
 
+        telegram_id,
 
-        if mode not in [
+        "notification_level",
 
-            "AUTO",
+        mode
 
-            "MANUAL"
-
-        ]:
-
-            return False
-
-
-
-        return update_user_setting(
-
-            telegram_id,
-
-            "trading_mode",
-
-            mode
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
+    )
 
 
 
 
 
 
-def update_notification_level(
+
+
+def update_trading_mode(
     telegram_id,
-    level
+    mode
 ):
 
-    try:
+    return update_user_setting(
+
+        telegram_id,
+
+        "trading_mode",
+
+        mode
+
+    )
 
 
-        if level not in [
-
-            "BASIC",
-
-            "DETAILED"
-
-        ]:
-
-            return False
-
-
-
-        return update_user_setting(
-
-            telegram_id,
-
-            "notification_level",
-
-            level
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
 
 
 
@@ -298,76 +301,57 @@ def update_profit_share(
     percent
 ):
 
-    try:
+    return update_user_setting(
 
+        telegram_id,
 
-        percent = float(
-            percent
-        )
+        "user_profit_percent",
 
+        percent
 
-        if percent < 0 or percent > 100:
-
-            return False
-
-
-
-        return update_user_setting(
-
-            telegram_id,
-
-            "user_profit_percent",
-
-            percent
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
+    )
 
 
 
 
 
 
-def system_information():
+
+
+def subscription_view(
+    telegram_id
+):
 
     try:
 
 
-        settings = get_all_settings()
+        active = check_subscription(
+
+            telegram_id
+
+        )
+
+
+
+        subscription = get_subscription(
+
+            telegram_id
+
+        )
 
 
 
         return {
 
 
-            "trading":
+            "active":
 
-                settings.get(
-                    "trading_enabled"
-                ),
+                active,
 
 
-            "paper":
+            "subscription":
 
-                settings.get(
-                    "paper_trading"
-                ),
-
-
-            "mode":
-
-                settings.get(
-                    "trading_mode"
-                )
+                subscription
 
 
         }
