@@ -1,7 +1,7 @@
 # core/trade_manager.py
 
 import sqlite3
-import os
+
 from datetime import datetime
 
 from core.logger import logger
@@ -13,19 +13,37 @@ DB_PATH = "data/trades.db"
 
 
 
-def init_db():
+def get_connection():
 
     try:
 
-        os.makedirs(
-            "data",
-            exist_ok=True
-        )
-
-
-        conn = sqlite3.connect(
+        return sqlite3.connect(
             DB_PATH
         )
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
+
+
+
+
+
+
+def init_trade_database():
+
+    try:
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return False
+
 
 
         cursor = conn.cursor()
@@ -44,139 +62,42 @@ def init_db():
 
                 entry REAL,
 
+                exit REAL,
+
                 tp REAL,
 
                 sl REAL,
 
                 quantity REAL,
 
+                leverage REAL,
+
                 confidence REAL,
 
-                status TEXT,
+                pnl REAL DEFAULT 0,
+
+                pnl_percent REAL DEFAULT 0,
+
+                user_profit REAL DEFAULT 0,
+
+                software_profit REAL DEFAULT 0,
+
+                status TEXT DEFAULT 'OPEN',
+
+                reason TEXT,
 
                 created_at TEXT,
 
-                closed_at TEXT DEFAULT NULL
+                closed_at TEXT
 
             )
             """
         )
 
 
-
         conn.commit()
 
         conn.close()
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-
-
-
-
-def open_trade(
-    symbol,
-    side,
-    entry,
-    tp,
-    sl,
-    quantity,
-    confidence
-):
-
-    try:
-
-
-        init_db()
-
-
-
-        conn = sqlite3.connect(
-            DB_PATH
-        )
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-            INSERT INTO trades
-            (
-                symbol,
-                side,
-                entry,
-                tp,
-                sl,
-                quantity,
-                confidence,
-                status,
-                created_at
-            )
-
-            VALUES
-            (
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?
-            )
-
-            """,
-
-            (
-
-                symbol,
-
-                side,
-
-                float(entry),
-
-                float(tp)
-                if tp
-                else 0,
-
-                float(sl)
-                if sl
-                else 0,
-
-                float(quantity),
-
-                float(confidence),
-
-                "OPEN",
-
-                datetime.utcnow().isoformat()
-
-            )
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        logger.info(
-
-            f"TRADE SAVED {symbol}"
-
-        )
-
 
 
         return True
@@ -195,18 +116,124 @@ def open_trade(
 
 
 
+
+def open_trade(
+    symbol,
+    side,
+    entry,
+    tp,
+    sl,
+    quantity,
+    confidence,
+    leverage=1
+):
+
+    try:
+
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return False
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+            INSERT INTO trades
+
+            (
+                symbol,
+                side,
+                entry,
+                tp,
+                sl,
+                quantity,
+                leverage,
+                confidence,
+                status,
+                created_at
+            )
+
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+
+            """,
+
+            (
+
+                symbol,
+
+                side,
+
+                entry,
+
+                tp,
+
+                sl,
+
+                quantity,
+
+                leverage,
+
+                confidence,
+
+                "OPEN",
+
+                datetime.utcnow().isoformat()
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        logger.info(
+            f"TRADE SAVED {symbol} {side}"
+        )
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
 def get_open_trades():
 
     try:
 
 
-        init_db()
+        conn = get_connection()
 
 
+        if not conn:
 
-        conn = sqlite3.connect(
-            DB_PATH
-        )
+            return []
+
 
 
         cursor = conn.cursor()
@@ -227,8 +254,48 @@ def get_open_trades():
         )
 
 
-
         rows = cursor.fetchall()
+
+
+
+        columns = [
+
+            "id",
+            "symbol",
+            "side",
+            "entry",
+            "exit",
+            "tp",
+            "sl",
+            "quantity",
+            "leverage",
+            "confidence",
+            "pnl",
+            "pnl_percent",
+            "user_profit",
+            "software_profit",
+            "status",
+            "reason",
+            "created_at",
+            "closed_at"
+
+        ]
+
+
+
+        trades = []
+
+
+        for row in rows:
+
+            trades.append(
+                dict(
+                    zip(
+                        columns,
+                        row
+                    )
+                )
+            )
 
 
 
@@ -236,35 +303,7 @@ def get_open_trades():
 
 
 
-        return [
-
-            {
-
-                "id": row[0],
-
-                "symbol": row[1],
-
-                "side": row[2],
-
-                "entry": row[3],
-
-                "tp": row[4],
-
-                "sl": row[5],
-
-                "quantity": row[6],
-
-                "confidence": row[7],
-
-                "status": row[8],
-
-                "created_at": row[9]
-
-            }
-
-            for row in rows
-
-        ]
+        return trades
 
 
 
@@ -281,17 +320,24 @@ def get_open_trades():
 
 
 
-
 def close_trade(
-    trade_id
+    trade_id,
+    exit_price=None,
+    pnl=0,
+    pnl_percent=0,
+    reason="CLOSED"
 ):
 
     try:
 
 
-        conn = sqlite3.connect(
-            DB_PATH
-        )
+        conn = get_connection()
+
+
+        if not conn:
+
+            return False
+
 
 
         cursor = conn.cursor()
@@ -305,7 +351,15 @@ def close_trade(
 
             SET
 
-            status='CLOSED',
+            exit=?,
+
+            pnl=?,
+
+            pnl_percent=?,
+
+            status=?,
+
+            reason=?,
 
             closed_at=?
 
@@ -314,6 +368,16 @@ def close_trade(
             """,
 
             (
+
+                exit_price,
+
+                pnl,
+
+                pnl_percent,
+
+                "CLOSED",
+
+                reason,
 
                 datetime.utcnow().isoformat(),
 
@@ -347,14 +411,95 @@ def close_trade(
 
 
 
-def get_trade_history():
+
+def update_profit_share(
+    trade_id,
+    user_profit,
+    software_profit
+):
 
     try:
 
 
-        conn = sqlite3.connect(
-            DB_PATH
+        conn = get_connection()
+
+
+        if not conn:
+
+            return False
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+            UPDATE trades
+
+            SET
+
+            user_profit=?,
+
+            software_profit=?
+
+            WHERE id=?
+
+            """,
+
+            (
+
+                user_profit,
+
+                software_profit,
+
+                trade_id
+
+            )
+
         )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+def get_trade_history(
+    limit=50
+):
+
+    try:
+
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return []
+
 
 
         cursor = conn.cursor()
@@ -370,10 +515,15 @@ def get_trade_history():
 
             ORDER BY id DESC
 
-            """
+            LIMIT ?
+
+            """,
+
+            (
+                limit,
+            )
 
         )
-
 
 
         rows = cursor.fetchall()
