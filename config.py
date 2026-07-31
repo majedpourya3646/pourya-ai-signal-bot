@@ -1,5 +1,3 @@
-# config.py
-
 import os
 
 from dotenv import load_dotenv
@@ -9,37 +7,39 @@ load_dotenv()
 
 
 
-
-
 # ===========================
 # MetaTrader 5
 # ===========================
 
 MT5_LOGIN = int(
+
     os.getenv(
+
         "MT5_LOGIN",
+
         "0"
+
     )
+
 )
 
 
 MT5_PASSWORD = os.getenv(
+
     "MT5_PASSWORD",
+
     ""
+
 )
 
 
 MT5_SERVER = os.getenv(
+
     "MT5_SERVER",
+
     ""
+
 )
-
-
-MT5_PATH = os.getenv(
-    "MT5_PATH",
-    ""
-)
-
 
 
 
@@ -70,7 +70,6 @@ CHAT_ID = os.getenv(
 
 
 
-
 # ===========================
 # Request
 # ===========================
@@ -83,12 +82,14 @@ MAX_RETRIES = 3
 
 
 
-
 # ===========================
-# Trading
+# Trading Mode
 # ===========================
 
 PAPER_TRADING = False
+
+
+BROKER = "MT5"
 
 
 MARKET_TYPE = "FOREX"
@@ -97,40 +98,29 @@ MARKET_TYPE = "FOREX"
 ORDER_TYPE = "market"
 
 
-LEVERAGE = 10
 
+
+
+# ===========================
+# Risk Management
+# ===========================
+
+LEVERAGE = 10
 
 
 RISK_PER_TRADE = 1
 
 
-
 MAX_OPEN_TRADES = 3
-
 
 
 MIN_CONFIDENCE = 60
 
 
+MIN_RISK_REWARD = 2.0
 
 
-
-
-# ===========================
-# Lot Management
-# ===========================
-
-DEFAULT_LOT = 0.01
-
-
-MIN_LOT = 0.01
-
-
-MAX_LOT = 1.0
-
-
-USE_DYNAMIC_LOT = False
-
+MAX_DAILY_LOSS_PERCENT = 5
 
 
 
@@ -149,21 +139,6 @@ DEFAULT_SL = 2.0
 
 
 
-
-# ===========================
-# Risk
-# ===========================
-
-MIN_RISK_REWARD = 2.0
-
-
-MAX_DAILY_LOSS_PERCENT = 5
-
-
-
-
-
-
 # ===========================
 # Balance
 # ===========================
@@ -174,13 +149,11 @@ INITIAL_BALANCE = 1000.0
 
 
 
-
 # ===========================
-# User / Profit
+# Profit Sharing
 # ===========================
 
 DEFAULT_USER_PROFIT_SHARE = 70
-
 
 
 
@@ -192,15 +165,15 @@ DEFAULT_USER_PROFIT_SHARE = 70
 
 SYMBOLS = [
 
-    "BTCUSD",
-
-    "ETHUSD",
-
     "EURUSD",
 
     "GBPUSD",
 
-    "XAUUSD"
+    "USDJPY",
+
+    "XAUUSD",
+
+    "BTCUSD"
 
 ]
 
@@ -208,24 +181,22 @@ SYMBOLS = [
 
 
 
-
 # ===========================
-# TimeFrame
+# Timeframes
 # ===========================
 
-TIMEFRAME = "15"
+TIMEFRAME = "M15"
 
 
 TIMEFRAMES = [
 
-    "15",
+    "M15",
 
-    "60",
+    "H1",
 
-    "240"
+    "H4"
 
 ]
-
 
 
 
@@ -244,7 +215,6 @@ SCHEDULER_MODE = "RUNNING"
 
 
 
-
 # ===========================
 # Bot
 # ===========================
@@ -252,4 +222,4 @@ SCHEDULER_MODE = "RUNNING"
 BOT_NAME = "Pourya Trader AI"
 
 
-BOT_VERSION = "3.0.0 MT5"
+BOT_VERSION = "2.1.0-MT5"
