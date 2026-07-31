@@ -21,78 +21,38 @@ from config import (
 
 
 
-def count_open_trades():
-
-    try:
-
-        return len(
-
-            get_open_trades()
-
-        )
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return 0
-
-
-
-
-
-
-
-def check_max_open_trades():
-
-    try:
-
-
-        current = count_open_trades()
-
-
-
-        if current >= MAX_OPEN_TRADES:
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
 
 
 
 def check_confidence(
-    confidence
+    trade
 ):
 
     try:
 
 
-        return float(
+        confidence = float(
 
-            confidence
+            trade.get(
 
-        ) >= MIN_CONFIDENCE
+                "confidence",
+
+                0
+
+            )
+
+        )
 
 
 
-    except Exception:
+        return confidence >= MIN_CONFIDENCE
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
 
 
         return False
@@ -103,46 +63,20 @@ def check_confidence(
 
 
 
-def calculate_risk_reward(
-    entry,
-    tp,
-    sl
-):
+def check_trade_limit():
 
     try:
 
 
-        reward = abs(
-
-            float(tp)
-
-            -
-
-            float(entry)
-
-        )
+        trades = get_open_trades()
 
 
 
-        risk = abs(
+        return len(
 
-            float(entry)
+            trades
 
-            -
-
-            float(sl)
-
-        )
-
-
-
-        if risk == 0:
-
-            return 0
-
-
-
-        return reward / risk
+        ) < MAX_OPEN_TRADES
 
 
 
@@ -152,7 +86,7 @@ def calculate_risk_reward(
         logger.exception(e)
 
 
-        return 0
+        return False
 
 
 
@@ -161,31 +95,96 @@ def calculate_risk_reward(
 
 
 def check_risk_reward(
-    entry,
-    tp,
-    sl
+    trade
 ):
 
     try:
 
 
-        rr = calculate_risk_reward(
+        entry = float(
 
-            entry,
+            trade.get(
 
-            tp,
+                "entry",
 
-            sl
+                0
+
+            )
 
         )
 
 
 
-        return rr >= MIN_RISK_REWARD
+        tp = float(
+
+            trade.get(
+
+                "tp",
+
+                0
+
+            )
+
+        )
 
 
 
-    except Exception:
+        sl = float(
+
+            trade.get(
+
+                "sl",
+
+                0
+
+            )
+
+        )
+
+
+
+
+
+        risk = abs(
+
+            entry - sl
+
+        )
+
+
+
+        reward = abs(
+
+            tp - entry
+
+        )
+
+
+
+
+
+        if risk == 0:
+
+            return False
+
+
+
+
+
+        ratio = reward / risk
+
+
+
+
+
+        return ratio >= MIN_RISK_REWARD
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
 
 
         return False
@@ -211,7 +210,9 @@ def check_daily_loss():
 
         if profit >= 0:
 
+
             return True
+
 
 
 
@@ -225,13 +226,9 @@ def check_daily_loss():
 
 
 
-        if loss_percent >= MAX_DAILY_LOSS_PERCENT:
-
-            return False
 
 
-
-        return True
+        return loss_percent < MAX_DAILY_LOSS_PERCENT
 
 
 
@@ -250,107 +247,78 @@ def check_daily_loss():
 
 
 def validate_trade(
-    opportunity
+    trade
 ):
 
     try:
 
 
-        if not opportunity:
-
-            return False
+        checks = [
 
 
+            check_confidence(
 
-
-
-        if not check_max_open_trades():
-
-            logger.warning(
-
-                "MAX OPEN TRADES REACHED"
-
-            )
-
-            return False
-
-
-
-
-
-        if not check_confidence(
-
-            opportunity.get(
-
-                "confidence",
-
-                0
-
-            )
-
-        ):
-
-            logger.warning(
-
-                "LOW CONFIDENCE"
-
-            )
-
-            return False
-
-
-
-
-
-        if not check_risk_reward(
-
-            opportunity.get(
-
-                "entry"
+                trade
 
             ),
 
-            opportunity.get(
 
-                "tp"
+
+            check_trade_limit(),
+
+
+
+            check_risk_reward(
+
+                trade
 
             ),
 
-            opportunity.get(
 
-                "sl"
 
-            )
+            check_daily_loss()
 
-        ):
+        ]
+
+
+
+
+
+        result = all(
+
+            checks
+
+        )
+
+
+
+
+
+        if not result:
+
 
             logger.warning(
 
-                "BAD RISK REWARD"
+                f"TRADE BLOCKED {trade}"
 
             )
 
-            return False
 
 
+        else:
 
 
+            logger.info(
 
-        if not check_daily_loss():
-
-            logger.warning(
-
-                "DAILY LOSS LIMIT"
+                "TRADE APPROVED"
 
             )
 
-            return False
 
 
 
 
-
-        return True
+        return result
 
 
 
@@ -361,45 +329,3 @@ def validate_trade(
 
 
         return False
-
-
-
-
-
-
-
-def risk_summary():
-
-    try:
-
-
-        return {
-
-
-            "open_trades":
-
-                count_open_trades(),
-
-
-
-            "max_allowed":
-
-                MAX_OPEN_TRADES,
-
-
-
-            "daily_profit":
-
-                today_profit()
-
-        }
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
