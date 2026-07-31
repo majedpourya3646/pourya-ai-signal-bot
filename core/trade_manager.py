@@ -1,116 +1,12 @@
 # core/trade_manager.py
 
-import sqlite3
-
 from datetime import datetime
 
+from core.database_manager import (
+    get_connection
+)
+
 from core.logger import logger
-
-
-
-DB_PATH = "data/trades.db"
-
-
-
-
-def get_connection():
-
-    try:
-
-        return sqlite3.connect(
-            DB_PATH
-        )
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return None
-
-
-
-
-
-
-def init_trade_database():
-
-    try:
-
-        conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS trades (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                symbol TEXT,
-
-                side TEXT,
-
-                entry REAL,
-
-                exit REAL,
-
-                tp REAL,
-
-                sl REAL,
-
-                quantity REAL,
-
-                leverage REAL,
-
-                confidence REAL,
-
-                pnl REAL DEFAULT 0,
-
-                pnl_percent REAL DEFAULT 0,
-
-                user_profit REAL DEFAULT 0,
-
-                software_profit REAL DEFAULT 0,
-
-                status TEXT DEFAULT 'OPEN',
-
-                reason TEXT,
-
-                created_at TEXT,
-
-                closed_at TEXT
-
-            )
-            """
-        )
-
-
-        conn.commit()
-
-        conn.close()
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
 
 
 
@@ -125,20 +21,13 @@ def open_trade(
     sl,
     quantity,
     confidence,
-    leverage=1
+    telegram_id=None
 ):
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
@@ -147,22 +36,79 @@ def open_trade(
         cursor.execute(
 
             """
+
+            SELECT id
+
+            FROM trades
+
+            WHERE symbol=?
+
+            AND status='OPEN'
+
+            """,
+
+            (
+
+                symbol,
+
+            )
+
+        )
+
+
+
+        exists = cursor.fetchone()
+
+
+
+        if exists:
+
+            conn.close()
+
+            logger.warning(
+
+                f"TRADE ALREADY OPEN {symbol}"
+
+            )
+
+            return False
+
+
+
+
+
+
+        cursor.execute(
+
+            """
+
             INSERT INTO trades
 
             (
+
                 symbol,
+
                 side,
+
                 entry,
+
                 tp,
+
                 sl,
+
                 quantity,
-                leverage,
+
                 confidence,
+
                 status,
+
                 created_at
+
             )
 
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+            VALUES
+
+            (?,?,?,?,?,?,?,?,?)
 
             """,
 
@@ -172,17 +118,15 @@ def open_trade(
 
                 side,
 
-                entry,
+                float(entry),
 
-                tp,
+                float(tp),
 
-                sl,
+                float(sl),
 
-                quantity,
+                float(quantity),
 
-                leverage,
-
-                confidence,
+                float(confidence),
 
                 "OPEN",
 
@@ -194,6 +138,10 @@ def open_trade(
 
 
 
+        trade_id = cursor.lastrowid
+
+
+
         conn.commit()
 
         conn.close()
@@ -201,11 +149,14 @@ def open_trade(
 
 
         logger.info(
-            f"TRADE SAVED {symbol} {side}"
+
+            f"TRADE OPENED {symbol}"
+
         )
 
 
-        return True
+
+        return trade_id
 
 
 
@@ -213,107 +164,11 @@ def open_trade(
 
 
         logger.exception(e)
-
 
         return False
 
 
 
-
-
-
-def get_open_trades():
-
-    try:
-
-
-        conn = get_connection()
-
-
-        if not conn:
-
-            return []
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-            SELECT *
-
-            FROM trades
-
-            WHERE status='OPEN'
-
-            """
-
-        )
-
-
-        rows = cursor.fetchall()
-
-
-
-        columns = [
-
-            "id",
-            "symbol",
-            "side",
-            "entry",
-            "exit",
-            "tp",
-            "sl",
-            "quantity",
-            "leverage",
-            "confidence",
-            "pnl",
-            "pnl_percent",
-            "user_profit",
-            "software_profit",
-            "status",
-            "reason",
-            "created_at",
-            "closed_at"
-
-        ]
-
-
-
-        trades = []
-
-
-        for row in rows:
-
-            trades.append(
-                dict(
-                    zip(
-                        columns,
-                        row
-                    )
-                )
-            )
-
-
-
-        conn.close()
-
-
-
-        return trades
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
 
 
 
@@ -323,22 +178,13 @@ def get_open_trades():
 def close_trade(
     trade_id,
     exit_price=None,
-    pnl=0,
-    pnl_percent=0,
-    reason="CLOSED"
+    pnl=0
 ):
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
@@ -347,6 +193,7 @@ def close_trade(
         cursor.execute(
 
             """
+
             UPDATE trades
 
             SET
@@ -355,11 +202,7 @@ def close_trade(
 
             pnl=?,
 
-            pnl_percent=?,
-
-            status=?,
-
-            reason=?,
+            status='CLOSED',
 
             closed_at=?
 
@@ -371,13 +214,7 @@ def close_trade(
 
                 exit_price,
 
-                pnl,
-
-                pnl_percent,
-
-                "CLOSED",
-
-                reason,
+                float(pnl),
 
                 datetime.utcnow().isoformat(),
 
@@ -395,6 +232,14 @@ def close_trade(
 
 
 
+        logger.info(
+
+            f"TRADE CLOSED {trade_id}"
+
+        )
+
+
+
         return True
 
 
@@ -404,7 +249,6 @@ def close_trade(
 
         logger.exception(e)
 
-
         return False
 
 
@@ -412,23 +256,15 @@ def close_trade(
 
 
 
-def update_profit_share(
-    trade_id,
-    user_profit,
-    software_profit
-):
+
+
+
+def get_open_trades():
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
@@ -437,13 +273,85 @@ def update_profit_share(
         cursor.execute(
 
             """
-            UPDATE trades
 
-            SET
+            SELECT *
 
-            user_profit=?,
+            FROM trades
 
-            software_profit=?
+            WHERE status='OPEN'
+
+            ORDER BY id DESC
+
+            """
+
+        )
+
+
+
+        rows = cursor.fetchall()
+
+
+
+        conn.close()
+
+
+
+        trades = []
+
+
+
+        for row in rows:
+
+
+            trades.append(
+
+                dict(row)
+
+            )
+
+
+
+        return trades
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+        return []
+
+
+
+
+
+
+
+
+
+
+
+def get_trade(
+    trade_id
+):
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT *
+
+            FROM trades
 
             WHERE id=?
 
@@ -451,9 +359,78 @@ def update_profit_share(
 
             (
 
-                user_profit,
+                trade_id,
 
-                software_profit,
+            )
+
+        )
+
+
+
+        row = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if not row:
+
+            return None
+
+
+
+        return dict(row)
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+        return None
+
+
+
+
+
+
+
+
+
+
+
+def update_trade_pnl(
+    trade_id,
+    pnl
+):
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            UPDATE trades
+
+            SET pnl=?
+
+            WHERE id=?
+
+            """,
+
+            (
+
+                float(pnl),
 
                 trade_id
 
@@ -478,8 +455,40 @@ def update_profit_share(
 
         logger.exception(e)
 
-
         return False
+
+
+
+
+
+
+
+
+
+
+
+def count_open_positions():
+
+    try:
+
+
+        return len(
+
+            get_open_trades()
+
+        )
+
+
+
+    except Exception:
+
+
+        return 0
+
+
+
+
+
 
 
 
@@ -495,13 +504,6 @@ def get_trade_history(
 
         conn = get_connection()
 
-
-        if not conn:
-
-            return []
-
-
-
         cursor = conn.cursor()
 
 
@@ -509,6 +511,7 @@ def get_trade_history(
         cursor.execute(
 
             """
+
             SELECT *
 
             FROM trades
@@ -520,10 +523,13 @@ def get_trade_history(
             """,
 
             (
+
                 limit,
+
             )
 
         )
+
 
 
         rows = cursor.fetchall()
@@ -534,7 +540,13 @@ def get_trade_history(
 
 
 
-        return rows
+        return [
+
+            dict(row)
+
+            for row in rows
+
+        ]
 
 
 
@@ -542,6 +554,5 @@ def get_trade_history(
 
 
         logger.exception(e)
-
 
         return []
