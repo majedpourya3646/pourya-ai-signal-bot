@@ -8,7 +8,12 @@ from core.logger import logger
 
 
 
+
+
 DB_PATH = "data/pourya_trader.db"
+
+
+
 
 
 
@@ -19,7 +24,9 @@ def get_connection():
     try:
 
         return sqlite3.connect(
+
             DB_PATH
+
         )
 
 
@@ -34,19 +41,13 @@ def get_connection():
 
 
 
+
+
 def init_user_database():
 
     try:
 
-
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
@@ -56,7 +57,9 @@ def init_user_database():
 
             """
 
-            CREATE TABLE IF NOT EXISTS users (
+            CREATE TABLE IF NOT EXISTS users
+
+            (
 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
 
@@ -64,21 +67,17 @@ def init_user_database():
 
                 username TEXT,
 
-                active INTEGER DEFAULT 1,
-
-                trading_mode TEXT DEFAULT 'AUTO',
-
-                notification_level TEXT DEFAULT 'BASIC',
-
-                risk_percent REAL DEFAULT 1,
-
-                leverage REAL DEFAULT 10,
-
-                user_profit_percent REAL DEFAULT 50,
-
                 email TEXT,
 
                 phone TEXT,
+
+                trading_mode TEXT DEFAULT 'MANUAL',
+
+                notification_level TEXT DEFAULT 'BASIC',
+
+                user_profit_percent REAL DEFAULT 50,
+
+                active INTEGER DEFAULT 1,
 
                 created_at TEXT
 
@@ -102,11 +101,11 @@ def init_user_database():
 
     except Exception as e:
 
-
         logger.exception(e)
 
-
         return False
+
+
 
 
 
@@ -120,15 +119,7 @@ def create_user(
 
     try:
 
-
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
@@ -160,7 +151,8 @@ def create_user(
 
                 username,
 
-                datetime.utcnow().isoformat()
+                datetime.utcnow()
+                .isoformat()
 
             )
 
@@ -180,11 +172,11 @@ def create_user(
 
     except Exception as e:
 
-
         logger.exception(e)
 
-
         return False
+
+
 
 
 
@@ -197,10 +189,7 @@ def get_user(
 
     try:
 
-
         conn = get_connection()
-
-
 
         cursor = conn.cursor()
 
@@ -260,45 +249,39 @@ def get_user(
                 row[2],
 
 
-            "active":
+            "email":
 
                 row[3],
 
 
-            "trading_mode":
+            "phone":
 
                 row[4],
 
 
-            "notification_level":
+            "trading_mode":
 
                 row[5],
 
 
-            "risk_percent":
+            "notification_level":
 
                 row[6],
 
 
-            "leverage":
+            "user_profit_percent":
 
                 row[7],
 
 
-            "user_profit_percent":
+            "active":
 
                 row[8],
 
 
-            "email":
+            "created_at":
 
-                row[9],
-
-
-            "phone":
-
-                row[10]
-
+                row[9]
 
         }
 
@@ -306,11 +289,11 @@ def get_user(
 
     except Exception as e:
 
-
         logger.exception(e)
 
-
         return None
+
+
 
 
 
@@ -325,24 +308,21 @@ def update_user_setting(
 
     try:
 
-
         allowed = [
 
-            "active",
+            "username",
+
+            "email",
+
+            "phone",
 
             "trading_mode",
 
             "notification_level",
 
-            "risk_percent",
-
-            "leverage",
-
             "user_profit_percent",
 
-            "email",
-
-            "phone"
+            "active"
 
         ]
 
@@ -350,30 +330,31 @@ def update_user_setting(
 
         if key not in allowed:
 
-
             return False
 
 
 
         conn = get_connection()
 
-
-
         cursor = conn.cursor()
+
+
+
+        query = f"""
+
+        UPDATE users
+
+        SET {key}=?
+
+        WHERE telegram_id=?
+
+        """
 
 
 
         cursor.execute(
 
-            f"""
-
-            UPDATE users
-
-            SET {key}=?
-
-            WHERE telegram_id=?
-
-            """,
+            query,
 
             (
 
@@ -399,9 +380,7 @@ def update_user_setting(
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
 
@@ -410,14 +389,13 @@ def update_user_setting(
 
 
 
-def get_all_active_users():
+
+
+def get_all_users():
 
     try:
 
-
         conn = get_connection()
-
-
 
         cursor = conn.cursor()
 
@@ -453,9 +431,7 @@ def get_all_active_users():
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return []
 
@@ -470,33 +446,60 @@ def deactivate_user(
     telegram_id
 ):
 
-    return update_user_setting(
+    try:
 
-        telegram_id,
+        return update_user_setting(
 
-        "active",
+            telegram_id,
 
-        0
+            "active",
 
-    )
+            0
 
-
-
-
+        )
 
 
 
+    except Exception as e:
 
-def activate_user(
-    telegram_id
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+
+
+
+def set_profit_share(
+    telegram_id,
+    percent
 ):
 
-    return update_user_setting(
+    try:
 
-        telegram_id,
+        if percent < 0 or percent > 100:
 
-        "active",
+            return False
 
-        1
 
-    )
+
+        return update_user_setting(
+
+            telegram_id,
+
+            "user_profit_percent",
+
+            percent
+
+        )
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
