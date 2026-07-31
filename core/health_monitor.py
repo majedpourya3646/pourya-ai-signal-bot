@@ -1,5 +1,3 @@
-# core/health_monitor.py
-
 from datetime import datetime
 
 from core.logger import logger
@@ -8,14 +6,13 @@ from core.database_manager import (
     database_status
 )
 
-from coinex_trade import (
-    coinex_trade
-)
-
 from config import (
     BOT_TOKEN,
-    COINEX_API_KEY
+    COINEX_API_KEY,
+    COINEX_SECRET_KEY
 )
+
+
 
 
 
@@ -45,23 +42,13 @@ def check_coinex():
     try:
 
 
-        if not COINEX_API_KEY:
+        if COINEX_API_KEY and COINEX_SECRET_KEY:
 
-            return False
-
-
-
-        response = coinex_trade.get_balance()
+            return True
 
 
 
-        if response is None:
-
-            return False
-
-
-
-        return True
+        return False
 
 
 
@@ -94,7 +81,10 @@ def check_telegram():
 
 
 
-    except Exception:
+    except Exception as e:
+
+
+        logger.exception(e)
 
 
         return False
@@ -140,6 +130,7 @@ def run_health_check():
 
 
 
+
         status["online"] = all(
 
             [
@@ -154,6 +145,8 @@ def run_health_check():
 
 
 
+
+
         logger.info(
 
             f"HEALTH STATUS {status}"
@@ -163,6 +156,7 @@ def run_health_check():
 
 
         return status
+
 
 
 
@@ -185,6 +179,7 @@ def run_health_check():
                 str(e)
 
         }
+
 
 
 
