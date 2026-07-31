@@ -9,36 +9,35 @@ load_dotenv()
 
 
 
-# ===========================
-# Application
-# ===========================
-
-BOT_NAME = "Pourya Trader AI"
-
-VERSION = "2.0.0"
-
-ENVIRONMENT = os.getenv(
-    "ENVIRONMENT",
-    "PRODUCTION"
-)
 
 
 
 # ===========================
-# CoinEx API
+# CoinEx
 # ===========================
 
 BASE_URL = "https://api.coinex.com/v2"
 
+
 COINEX_API_KEY = os.getenv(
+
     "COINEX_API_KEY",
+
     ""
+
 )
 
+
 COINEX_SECRET_KEY = os.getenv(
+
     "COINEX_SECRET_KEY",
+
     ""
+
 )
+
+
+
 
 
 
@@ -47,19 +46,29 @@ COINEX_SECRET_KEY = os.getenv(
 # ===========================
 
 BOT_TOKEN = os.getenv(
+
     "BOT_TOKEN",
+
     ""
+
 )
 
+
 CHAT_ID = os.getenv(
+
     "CHAT_ID",
+
     ""
+
 )
+
+
+
 
 
 
 # ===========================
-# Request Settings
+# Request
 # ===========================
 
 REQUEST_TIMEOUT = 20
@@ -68,37 +77,20 @@ MAX_RETRIES = 3
 
 
 
-# ===========================
-# Market Settings
-# ===========================
-
-MARKET_TYPE = "FUTURES"
-
-SUPPORTED_MARKETS = [
-
-    "SPOT",
-
-    "FUTURES"
-
-]
-
-
-
-ORDER_TYPE = "market"
 
 
 
 # ===========================
-# Trading Settings
+# Trading
 # ===========================
 
 PAPER_TRADING = True
 
 
-AUTO_TRADING = True
+MARKET_TYPE = "FUTURES"
 
 
-TRADING_MODE = "AUTO"
+ORDER_TYPE = "market"
 
 
 LEVERAGE = 10
@@ -110,26 +102,15 @@ RISK_PER_TRADE = 1
 MAX_OPEN_TRADES = 3
 
 
-MIN_CONFIDENCE = 65
+MIN_CONFIDENCE = 60
+
+
+
 
 
 
 # ===========================
-# Risk Management
-# ===========================
-
-MAX_DAILY_LOSS_PERCENT = 5
-
-
-MIN_RISK_REWARD = 2.0
-
-
-MAX_POSITION_SIZE_PERCENT = 20
-
-
-
-# ===========================
-# Take Profit / Stop Loss
+# TP / SL
 # ===========================
 
 DEFAULT_TP = 5.0
@@ -139,11 +120,42 @@ DEFAULT_SL = 2.0
 
 
 
+
+
+
+# ===========================
+# Risk
+# ===========================
+
+MIN_RISK_REWARD = 2.0
+
+
+MAX_DAILY_LOSS_PERCENT = 5
+
+
+
+
+
+
 # ===========================
 # Balance
 # ===========================
 
 INITIAL_BALANCE = 1000.0
+
+
+
+
+
+
+# ===========================
+# User / Profit
+# ===========================
+
+DEFAULT_USER_PROFIT_SHARE = 70
+
+
+
 
 
 
@@ -167,22 +179,28 @@ SYMBOLS = [
 
 
 
+
+
+
 # ===========================
-# Timeframes
+# TimeFrame
 # ===========================
 
 TIMEFRAME = "15"
 
 
-TIMEFRAMES = {
+TIMEFRAMES = [
 
-    "15": "15min",
+    "15",
 
-    "60": "1hour",
+    "60",
 
-    "240": "4hour"
+    "240"
 
-}
+]
+
+
+
 
 
 
@@ -190,48 +208,21 @@ TIMEFRAMES = {
 # Scheduler
 # ===========================
 
-SCHEDULER_MODE = "TEST"
+SCHEDULER_INTERVAL = 60
 
 
-TRADING_INTERVAL = 300
+SCHEDULER_MODE = "RUNNING"
 
 
 
-# ===========================
-# Database
-# ===========================
-
-DATABASE_PATH = "data/pourya_trader.db"
 
 
 
 # ===========================
-# Backup
+# Bot
 # ===========================
 
-BACKUP_PATH = "backup"
+BOT_NAME = "Pourya Trader AI"
 
 
-MAX_BACKUPS = 10
-
-
-
-# ===========================
-# Notifications
-# ===========================
-
-EMAIL_ENABLED = False
-
-
-SMS_ENABLED = False
-
-
-
-# ===========================
-# User System
-# ===========================
-
-DEFAULT_USER_PROFIT_SHARE = 50
-
-
-DEFAULT_PLAN = "FREE"
+BOT_VERSION = "2.0.0"
