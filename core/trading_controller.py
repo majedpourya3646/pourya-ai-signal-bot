@@ -1,5 +1,7 @@
 # core/trading_controller.py
 
+from datetime import datetime
+
 from core.auto_trader import (
     execute_batch
 )
@@ -10,6 +12,10 @@ from core.opportunity_engine import (
 
 from core.trade_manager import (
     get_open_trades
+)
+
+from core.risk_engine import (
+    calculate_trade_quality
 )
 
 from core.logger import logger
@@ -24,20 +30,13 @@ from config import (
 VALID_SIGNALS = (
 
     "BUY",
-
     "SELL",
-
     "STRONG BUY",
-
     "STRONG SELL",
-
     "EARLY BUY",
-
     "EARLY SELL",
 
 )
-
-
 
 
 
@@ -65,16 +64,45 @@ def filter_duplicate_symbols(
                 continue
 
 
-
             if symbol in symbols:
 
                 continue
 
 
+            symbols.add(symbol)
 
-            symbols.add(
-                symbol
+            result.append(item)
+
+
+        return result
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return []
+
+
+
+def enrich_opportunities(
+    opportunities
+):
+
+    try:
+
+        result = []
+
+
+        for item in opportunities:
+
+
+            quality = calculate_trade_quality(
+                item
             )
+
+
+            item["quality_score"] = quality
 
 
             result.append(
@@ -82,21 +110,14 @@ def filter_duplicate_symbols(
             )
 
 
-
         return result
-
 
 
     except Exception as e:
 
-
         logger.exception(e)
 
-
         return []
-
-
-
 
 
 
@@ -105,16 +126,13 @@ def collect_opportunities():
     try:
 
 
-
         opportunities = find_best_opportunities()
 
 
 
         if not opportunities:
 
-
             return []
-
 
 
 
@@ -126,58 +144,46 @@ def collect_opportunities():
 
 
             signal = item.get(
-
                 "signal",
-
                 "WAIT"
-
             )
 
 
-
             confidence = float(
-
                 item.get(
-
                     "confidence",
-
                     0
-
                 )
-
             )
 
 
 
             if signal not in VALID_SIGNALS:
 
-
                 continue
-
 
 
 
             if confidence < MIN_CONFIDENCE:
 
-
                 continue
 
 
 
-
             filtered.append(
-
                 item
-
             )
 
 
 
+        filtered = enrich_opportunities(
+            filtered
+        )
+
+
 
         filtered = filter_duplicate_symbols(
-
             filtered
-
         )
 
 
@@ -185,12 +191,16 @@ def collect_opportunities():
         filtered.sort(
 
             key=lambda x:
+            (
+                x.get(
+                    "quality_score",
+                    0
+                ),
 
-            x.get(
-
-                "confidence",
-
-                0
+                x.get(
+                    "confidence",
+                    0
+                )
 
             ),
 
@@ -199,46 +209,33 @@ def collect_opportunities():
         )
 
 
-
         logger.info(
-
-            f"VALID OPPORTUNITIES: {len(filtered)}"
-
+            f"QUALITY OPPORTUNITIES {len(filtered)}"
         )
-
 
 
         return filtered[:MAX_OPEN_TRADES]
 
 
-
     except Exception as e:
 
-
-
         logger.exception(e)
-
 
         return []
 
 
 
-
-
-
-
 def run_trading_cycle():
+
+    cycle_time = datetime.utcnow().isoformat()
+
 
     try:
 
 
-
         logger.info(
-
-            "TRADING CYCLE STARTED"
-
+            f"TRADING CYCLE START {cycle_time}"
         )
-
 
 
 
@@ -250,15 +247,11 @@ def run_trading_cycle():
 
 
             logger.info(
-
                 "MAX OPEN TRADES REACHED"
-
             )
 
 
             return []
-
-
 
 
 
@@ -270,9 +263,7 @@ def run_trading_cycle():
 
 
             logger.info(
-
-                "NO OPPORTUNITIES FOUND"
-
+                "NO OPPORTUNITIES"
             )
 
 
@@ -280,9 +271,7 @@ def run_trading_cycle():
 
 
 
-
-
-        remaining_slots = (
+        available_slots = (
 
             MAX_OPEN_TRADES
 
@@ -295,29 +284,19 @@ def run_trading_cycle():
 
 
         opportunities = opportunities[
-
-            :remaining_slots
-
+            :available_slots
         ]
 
 
 
-
-
         trades = execute_batch(
-
             opportunities
-
         )
 
 
 
-
-
         logger.info(
-
-            f"EXECUTED {len(trades)} TRADES"
-
+            f"CYCLE FINISHED | TRADES={len(trades)}"
         )
 
 
@@ -326,13 +305,10 @@ def run_trading_cycle():
 
 
 
-
     except Exception as e:
 
 
-
         logger.exception(e)
-
 
 
         return []
