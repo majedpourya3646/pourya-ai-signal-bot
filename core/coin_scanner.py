@@ -1,141 +1,127 @@
 # core/coin_scanner.py
 
-from core.market_discovery import (
-    discover_markets
+from core.logger import logger
+
+from core.session import session
+
+from config import (
+    BASE_URL,
+    MARKET_TYPE,
+    REQUEST_TIMEOUT
 )
 
-from core.market_filters import (
-    filter_market
-)
-
-from core.logger import (
-    logger
-)
 
 
 
 
-
-ALLOWED_SYMBOLS = {
-
-    "BTCUSDT",
-
-    "ETHUSDT",
-
-    "BNBUSDT",
-
-    "SOLUSDT",
-
-    "XRPUSDT",
-
-    "DOGEUSDT",
-
-    "ADAUSDT",
-
-    "TRXUSDT",
-
-    "LINKUSDT",
-
-    "AVAXUSDT",
-
-    "DOTUSDT",
-
-    "LTCUSDT",
-
-    "BCHUSDT",
-
-    "ATOMUSDT",
-
-    "UNIUSDT",
-
-    "APTUSDT",
-
-    "ARBUSDT",
-
-    "OPUSDT",
-
-    "NEARUSDT",
-
-    "FILUSDT",
-
-    "SUIUSDT",
-
-    "SEIUSDT",
-
-    "INJUSDT",
-
-    "FETUSDT",
-
-    "AAVEUSDT",
-
-    "TIAUSDT",
-
-    "WLDUSDT",
-
-    "TONUSDT",
-
-    "PEPEUSDT",
-
-    "SHIBUSDT",
-
-    "BONKUSDT",
-
-    "FLOKIUSDT",
-
-    "JUPUSDT",
-
-    "ENAUSDT",
-
-    "RENDERUSDT",
-
-    "ONDOUSDT",
-
-    "TAOUSDT",
-
-    "ICPUSDT",
-
-    "ETCUSDT",
-
-    "EOSUSDT"
-
-}
-
-
-
-
-
-
-
-def rank_markets(
-    markets
-):
+def get_symbols():
 
     try:
 
 
-        return sorted(
+        if MARKET_TYPE == "FUTURES":
 
-            markets,
+            url = BASE_URL + "/futures/market"
 
-            key=lambda x:
 
-            float(
 
-                x.get(
+        else:
 
-                    "volume",
+            url = BASE_URL + "/spot/market"
 
-                    0
+
+
+
+
+
+        response = session.get(
+
+            url,
+
+            timeout=REQUEST_TIMEOUT
+
+        )
+
+
+
+        data = response.json()
+
+
+
+        if data.get(
+
+            "code"
+
+        ) != 0:
+
+
+            logger.error(
+
+                f"MARKET LIST ERROR {data}"
+
+            )
+
+
+            return []
+
+
+
+
+
+
+        markets = []
+
+
+
+        items = data.get(
+
+            "data",
+
+            []
+
+        )
+
+
+
+
+
+        for item in items:
+
+
+            symbol = item.get(
+
+                "market"
+
+            )
+
+
+
+            if not symbol:
+
+                continue
+
+
+
+            if symbol.endswith(
+
+                "USDT"
+
+            ):
+
+
+                markets.append(
+
+                    symbol
 
                 )
 
-                or 0
 
-            ),
 
-            reverse=True
 
-        )
+
+
+
+        return markets
 
 
 
@@ -154,192 +140,25 @@ def rank_markets(
 
 
 
-def normalize_symbol(
-    symbol
-):
+
+def get_active_symbols():
 
     try:
 
 
-        if not symbol:
+        symbols = get_symbols()
 
 
-            return None
 
+        return [
 
+            x
 
-        symbol = str(
+            for x in symbols
 
-            symbol
+            if x
 
-        ).upper().replace(
-
-            "-",
-
-            ""
-
-        ).replace(
-
-            "_",
-
-            ""
-
-        )
-
-
-
-        return symbol
-
-
-
-    except Exception:
-
-
-        return None
-
-
-
-
-
-
-
-
-def get_symbols():
-
-    try:
-
-
-
-        markets = discover_markets()
-
-
-
-        if not markets:
-
-
-            logger.info(
-
-                "NO MARKETS DISCOVERED"
-
-            )
-
-
-            return []
-
-
-
-
-
-        markets = filter_market(
-
-            markets
-
-        )
-
-
-
-
-
-        if not markets:
-
-
-            return []
-
-
-
-
-
-        markets = rank_markets(
-
-            markets
-
-        )
-
-
-
-
-
-        symbols = []
-
-
-
-
-
-        for item in markets:
-
-
-
-            symbol = normalize_symbol(
-
-                item.get(
-
-                    "symbol"
-
-                )
-
-            )
-
-
-
-            if not symbol:
-
-
-                continue
-
-
-
-
-            if symbol in ALLOWED_SYMBOLS:
-
-
-
-                symbols.append(
-
-                    symbol
-
-                )
-
-
-
-
-
-        # حذف تکراری‌ها
-
-        symbols = list(
-
-            dict.fromkeys(
-
-                symbols
-
-            )
-
-        )
-
-
-
-
-
-        logger.info(
-
-            f"VALID FUTURES SYMBOLS: {len(symbols)}"
-
-        )
-
-
-
-        logger.info(
-
-            symbols
-
-        )
-
-
-
-
-
-        return symbols
-
-
+        ]
 
 
 
