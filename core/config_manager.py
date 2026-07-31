@@ -1,14 +1,12 @@
 # core/config_manager.py
 
-import os
-import json
+from core.database_manager import (
+    save_setting,
+    get_setting
+)
 
 from core.logger import logger
 
-
-
-
-CONFIG_FILE = "data/settings.json"
 
 
 
@@ -16,132 +14,38 @@ CONFIG_FILE = "data/settings.json"
 
 DEFAULT_SETTINGS = {
 
-
-    # Trading
-
-    "trading_enabled":
-
-        True,
-
-
-    "trading_mode":
-
-        "AUTO",
-
-
-    "paper_trading":
-
-        True,
-
-
-    "scheduler_mode":
-
-        "TEST",
-
-
-    "trading_interval":
-
-        300,
-
-
-
-    # Risk
-
     "risk_percent":
-
         1,
 
-
-    "max_open_trades":
-
-        3,
-
-
-    "max_daily_loss":
-
-        5,
-
-
     "leverage":
-
         10,
 
-
-
-    # Notification
-
-    "notification_level":
-
-        "BASIC",
-
-
-    "report_channels":
-
-        [
-
-            "telegram"
-
-        ],
-
-
-    "sms_enabled":
-
-        False,
-
-
-    "email_enabled":
-
-        False,
-
-
-
-    # Profit Sharing
-
-    "user_profit_percent":
-
-        50,
-
-
-    "software_profit_percent":
-
-        50,
-
-
-
-    # Backup
-
-    "backup_enabled":
-
+    "paper_trading":
         True,
 
+    "trading_mode":
+        "AUTO",
 
+    "notification_level":
+        "BASIC",
 
-    # Monitoring
+    "scheduler_mode":
+        "TEST",
 
-    "monitor_interval":
-
-        60,
-
+    "trading_interval":
+        300,
 
     "health_check_interval":
-
         60,
 
+    "backup_interval":
+        86400,
 
+    "max_open_trades":
+        3,
 
-    # Recovery
-
-    "emergency_mode":
-
-        False,
-
-
-    # Subscription
-
-    "subscription_required":
-
-        False
-
+    "min_confidence":
+        65
 
 }
 
@@ -151,56 +55,41 @@ DEFAULT_SETTINGS = {
 
 
 
-def create_config_file():
+
+def ensure_config():
 
     try:
 
 
-        folder = os.path.dirname(
-            CONFIG_FILE
-        )
+        for key, value in DEFAULT_SETTINGS.items():
 
 
+            current = get_setting(
 
-        if folder and not os.path.exists(
-            folder
-        ):
+                key
 
-
-            os.makedirs(
-                folder
             )
 
 
 
-        if not os.path.exists(
-            CONFIG_FILE
-        ):
+            if current is None:
 
 
-            with open(
+                save_setting(
 
-                CONFIG_FILE,
+                    key,
 
-                "w",
-
-                encoding="utf-8"
-
-            ) as file:
-
-
-                json.dump(
-
-                    DEFAULT_SETTINGS,
-
-                    file,
-
-                    indent=4,
-
-                    ensure_ascii=False
+                    value
 
                 )
 
+
+
+        logger.info(
+
+            "CONFIG READY"
+
+        )
 
 
         return True
@@ -221,29 +110,22 @@ def create_config_file():
 
 
 
-def load_settings():
+
+def set_setting(
+    key,
+    value
+):
 
     try:
 
 
-        create_config_file()
+        return save_setting(
 
+            key,
 
+            value
 
-        with open(
-
-            CONFIG_FILE,
-
-            "r",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            return json.load(
-                file
-            )
+        )
 
 
 
@@ -253,40 +135,30 @@ def load_settings():
         logger.exception(e)
 
 
-        return DEFAULT_SETTINGS
+        return False
 
 
 
 
 
 
-def save_settings(
+
+
+def update_settings(
     settings
 ):
 
     try:
 
 
-        with open(
-
-            CONFIG_FILE,
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
+        for key, value in settings.items():
 
 
-            json.dump(
+            save_setting(
 
-                settings,
+                key,
 
-                file,
-
-                indent=4,
-
-                ensure_ascii=False
+                value
 
             )
 
@@ -311,7 +183,49 @@ def save_settings(
 
 
 
-def get_setting(
+def get_all_settings():
+
+    try:
+
+
+        result = {}
+
+
+
+        for key in DEFAULT_SETTINGS:
+
+
+            result[key] = get_setting(
+
+                key,
+
+                DEFAULT_SETTINGS[key]
+
+            )
+
+
+
+        return result
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
+
+
+
+
+
+
+
+
+def get_user_setting(
+    telegram_id,
     key,
     default=None
 ):
@@ -319,13 +233,9 @@ def get_setting(
     try:
 
 
-        settings = load_settings()
+        return get_setting(
 
-
-
-        return settings.get(
-
-            key,
+            f"user_{telegram_id}_{key}",
 
             default
 
@@ -348,7 +258,8 @@ def get_setting(
 
 
 
-def update_setting(
+def set_user_setting(
+    telegram_id,
     key,
     value
 ):
@@ -356,53 +267,11 @@ def update_setting(
     try:
 
 
-        settings = load_settings()
+        return save_setting(
 
+            f"user_{telegram_id}_{key}",
 
-
-        settings[key] = value
-
-
-
-        return save_settings(
-            settings
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-def get_all_settings():
-
-    return load_settings()
-
-
-
-
-
-
-
-
-def reset_settings():
-
-    try:
-
-
-        return save_settings(
-
-            DEFAULT_SETTINGS
+            value
 
         )
 
@@ -421,12 +290,24 @@ def reset_settings():
 
 
 
-def ensure_config():
+
+
+def trading_is_auto():
 
     try:
 
 
-        return create_config_file()
+        mode = get_setting(
+
+            "trading_mode",
+
+            "AUTO"
+
+        )
+
+
+
+        return mode == "AUTO"
 
 
 
@@ -437,3 +318,45 @@ def ensure_config():
 
 
         return False
+
+
+
+
+
+
+
+
+def paper_mode():
+
+    try:
+
+
+        value = get_setting(
+
+            "paper_trading",
+
+            True
+
+        )
+
+
+
+        return str(value).lower() in [
+
+            "true",
+
+            "1",
+
+            "yes"
+
+        ]
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return True
