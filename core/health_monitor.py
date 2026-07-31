@@ -1,8 +1,5 @@
 # core/health_monitor.py
 
-import time
-import os
-
 from datetime import datetime
 
 from core.logger import logger
@@ -12,15 +9,13 @@ from core.database_manager import (
 )
 
 from core.recovery_manager import (
-    enter_safe_mode
+    recovery_status
 )
 
-from core.communication_manager import (
-    send_notification
-)
+from coinex_trade import coinex_trade
 
-from coinex_trade import (
-    coinex_trade
+from telegram_sender import (
+    send_message
 )
 
 
@@ -30,27 +25,22 @@ from coinex_trade import (
 HEALTH_STATUS = {
 
 
-    "system":
+    "online":
 
-        True,
-
-
-    "database":
-
-        True,
+        False,
 
 
-    "api":
+    "last_check":
 
-        True,
+        None,
 
 
-    "internet":
+    "issues":
 
-        True
-
+        []
 
 }
+
 
 
 
@@ -63,15 +53,7 @@ def check_database():
     try:
 
 
-        status = database_status()
-
-
-
-        HEALTH_STATUS["database"] = status
-
-
-
-        return status
+        return database_status()
 
 
 
@@ -79,9 +61,6 @@ def check_database():
 
 
         logger.exception(e)
-
-
-        HEALTH_STATUS["database"] = False
 
 
         return False
@@ -93,7 +72,7 @@ def check_database():
 
 
 
-def check_exchange_api():
+def check_exchange():
 
     try:
 
@@ -106,7 +85,7 @@ def check_exchange_api():
 
 
 
-        status = bool(
+        return bool(
 
             result
 
@@ -114,11 +93,37 @@ def check_exchange_api():
 
 
 
-        HEALTH_STATUS["api"] = status
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
 
 
 
-        return status
+
+
+
+
+
+def check_recovery():
+
+    try:
+
+
+        status = recovery_status()
+
+
+
+        return status.get(
+
+            "running",
+
+            False
+
+        )
 
 
 
@@ -128,9 +133,6 @@ def check_exchange_api():
         logger.exception(e)
 
 
-        HEALTH_STATUS["api"] = False
-
-
         return False
 
 
@@ -140,112 +142,112 @@ def check_exchange_api():
 
 
 
-def check_internet():
+def check_system():
+
+    global HEALTH_STATUS
+
+
 
     try:
 
 
-        import requests
+        issues = []
 
 
 
-        response = requests.get(
-
-            "https://api.coinex.com",
-
-            timeout=5
-
-        )
+        database = check_database()
 
 
 
-        status = (
-
-            response.status_code < 500
-
-        )
+        exchange = check_exchange()
 
 
 
-        HEALTH_STATUS["internet"] = status
-
-
-
-        return status
-
-
-
-    except Exception as e:
-
-
-        logger.warning(
-
-            "INTERNET CHECK FAILED"
-
-        )
-
-
-        HEALTH_STATUS["internet"] = False
-
-
-
-        return False
+        recovery = check_recovery()
 
 
 
 
 
+        if not database:
 
 
+            issues.append(
 
-def check_disk_space():
-
-    try:
-
-
-        usage = os.statvfs(
-
-            "/"
-
-        )
-
-
-
-        free = (
-
-            usage.f_bavail
-
-            *
-
-            usage.f_frsize
-
-        )
-
-
-
-        gb = free / (
-
-            1024 ** 3
-
-        )
-
-
-
-        if gb < 1:
-
-
-            logger.warning(
-
-                "LOW DISK SPACE"
+                "DATABASE ERROR"
 
             )
 
 
-            return False
+
+        if not exchange:
+
+
+            issues.append(
+
+                "EXCHANGE CONNECTION ERROR"
+
+            )
 
 
 
-        return True
+        if not recovery:
+
+
+            issues.append(
+
+                "RECOVERY ERROR"
+
+            )
+
+
+
+
+
+        online = len(
+
+            issues
+
+        ) == 0
+
+
+
+
+
+        HEALTH_STATUS = {
+
+
+            "online":
+
+                online,
+
+
+            "last_check":
+
+                datetime.utcnow()
+                .isoformat(),
+
+
+            "issues":
+
+                issues
+
+        }
+
+
+
+        if issues:
+
+
+            send_health_alert(
+
+                issues
+
+            )
+
+
+
+        return HEALTH_STATUS
 
 
 
@@ -255,7 +257,61 @@ def check_disk_space():
         logger.exception(e)
 
 
-        return False
+        return {
+
+            "online":
+
+                False
+
+        }
+
+
+
+
+
+
+
+
+def send_health_alert(
+    issues
+):
+
+    try:
+
+
+        message = f"""
+
+⚠️ Pourya Trader AI Alert
+
+
+زمان:
+
+{datetime.now()}
+
+
+مشکلات:
+
+{issues}
+
+
+لطفاً سیستم بررسی شود.
+
+"""
+
+
+
+        send_message(
+
+            message
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
 
 
 
@@ -269,69 +325,19 @@ def run_health_check():
     try:
 
 
-        result = {
-
-
-            "database":
-
-                check_database(),
-
-
-            "api":
-
-                check_exchange_api(),
-
-
-            "internet":
-
-                check_internet(),
-
-
-            "disk":
-
-                check_disk_space(),
-
-
-            "time":
-
-                datetime.utcnow()
-                .isoformat()
-
-
-        }
+        status = check_system()
 
 
 
-        failed = []
+        logger.info(
+
+            f"HEALTH STATUS {status}"
+
+        )
 
 
 
-        for key,value in result.items():
-
-
-            if value is False:
-
-
-                failed.append(
-
-                    key
-
-                )
-
-
-
-        if failed:
-
-
-            handle_failure(
-
-                failed
-
-            )
-
-
-
-        return result
+        return status
 
 
 
@@ -342,106 +348,6 @@ def run_health_check():
 
 
         return {}
-
-
-
-
-
-
-
-
-def handle_failure(
-    failures
-):
-
-    try:
-
-
-        message = f"""
-
-⚠️ SYSTEM WARNING
-
-
-مشکل شناسایی شد:
-
-{failures}
-
-
-زمان:
-
-{datetime.now()}
-
-"""
-
-
-
-        logger.warning(
-
-            message
-
-        )
-
-
-
-        enter_safe_mode(
-
-            str(failures)
-
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def monitor_loop():
-
-    try:
-
-
-        while True:
-
-
-            status = run_health_check()
-
-
-
-            logger.info(
-
-                f"HEALTH STATUS {status}"
-
-            )
-
-
-
-            time.sleep(
-
-                60
-
-            )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
 
 
 
