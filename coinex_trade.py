@@ -1,27 +1,27 @@
 # coinex_trade.py
 
 import time
+import json
 import hmac
 import hashlib
+
 import requests
+
+from core.logger import logger
 
 from config import (
     BASE_URL,
     COINEX_API_KEY,
     COINEX_SECRET_KEY,
-    MARKET_TYPE,
-    PAPER_TRADING,
-    REQUEST_TIMEOUT
+    REQUEST_TIMEOUT,
+    MARKET_TYPE
 )
-
-from core.logger import logger
 
 
 
 
 
 class CoinExTrade:
-
 
     def __init__(self):
 
@@ -35,31 +35,58 @@ class CoinExTrade:
 
 
 
+
     def _sign(
         self,
-        payload
+        method,
+        path,
+        body=""
     ):
 
         try:
 
-            message = "&".join(
 
-                [
+            timestamp = str(
 
-                    f"{k}={payload[k]}"
+                int(
 
-                    for k in sorted(payload)
+                    time.time()
 
-                ]
+                    *
+
+                    1000
+
+                )
 
             )
 
 
-            return hmac.new(
+
+            prepared = (
+
+                method.upper()
+
+                +
+
+                path
+
+                +
+
+                body
+
+                +
+
+                timestamp
+
+            )
+
+
+
+            signature = hmac.new(
 
                 self.secret.encode(),
 
-                message.encode(),
+                prepared.encode(),
 
                 hashlib.sha256
 
@@ -67,65 +94,87 @@ class CoinExTrade:
 
 
 
+            return {
+
+                "X-COINEX-KEY":
+
+                    self.api_key,
+
+
+                "X-COINEX-SIGN":
+
+                    signature,
+
+
+                "X-COINEX-TIMESTAMP":
+
+                    timestamp,
+
+
+                "Content-Type":
+
+                    "application/json"
+
+            }
+
+
+
         except Exception as e:
+
 
             logger.exception(e)
 
-            return ""
+
+            return {}
 
 
 
 
 
 
-    def _request(
+
+
+    def request(
         self,
         method,
         path,
-        params=None
+        payload=None
     ):
 
         try:
 
 
-            if PAPER_TRADING:
-
-                return {
-
-
-                    "code":0,
-
-
-                    "data":{}
-
-
-                }
+            body = ""
 
 
 
-            if params is None:
+            if payload:
 
-                params = {}
+                body = json.dumps(
 
+                    payload,
 
+                    separators=(
 
-            timestamp = str(
+                        ",",
 
-                int(time.time()*1000)
+                        ":"
 
-            )
+                    )
 
-
-
-            params["access_id"] = self.api_key
-
-            params["tonce"] = timestamp
+                )
 
 
 
-            params["signature"] = self._sign(
 
-                params
+
+            headers = self._sign(
+
+                method,
+
+                path,
+
+                body
 
             )
 
@@ -135,81 +184,17 @@ class CoinExTrade:
 
 
 
-            if method == "GET":
-
-                response = requests.get(
-
-                    url,
-
-                    params=params,
-
-                    timeout=REQUEST_TIMEOUT
-
-                )
 
 
-            else:
+            response = requests.request(
 
-                response = requests.post(
-
-                    url,
-
-                    json=params,
-
-                    timeout=REQUEST_TIMEOUT
-
-                )
-
-
-
-            return response.json()
-
-
-
-        except Exception as e:
-
-
-            logger.exception(e)
-
-            return None
-
-
-
-
-
-
-
-
-    def get_ticker(
-        self,
-        symbol
-    ):
-
-        try:
-
-            url = (
-
-                self.base_url
-
-                +
-
-                "/spot/ticker"
-
-            )
-
-
-
-            response = requests.get(
+                method,
 
                 url,
 
-                params={
+                headers=headers,
 
-                    "market":
-
-                    symbol
-
-                },
+                data=body,
 
                 timeout=REQUEST_TIMEOUT
 
@@ -217,7 +202,35 @@ class CoinExTrade:
 
 
 
-            return response.json()
+            data = response.json()
+
+
+
+            if data.get(
+
+                "code"
+
+            ) != 0:
+
+
+                logger.error(
+
+                    f"COINEX ERROR {data}"
+
+                )
+
+
+                return None
+
+
+
+
+
+            return data.get(
+
+                "data"
+
+            )
 
 
 
@@ -226,8 +239,8 @@ class CoinExTrade:
 
             logger.exception(e)
 
-            return None
 
+            return None
 
 
 
@@ -237,79 +250,62 @@ class CoinExTrade:
 
     def create_order(
         self,
-        market,
+        symbol,
         side,
-        amount,
-        leverage=10
+        quantity,
+        leverage=1
     ):
 
         try:
 
 
-            if PAPER_TRADING:
-
-                return {
-
-                    "code":0,
-
-                    "status":"PAPER",
-
-                    "data":{
-
-                        "order_id":"PAPER",
-
-                        "market":market,
-
-                        "side":side,
-
-                        "amount":amount
-
-                    }
-
-                }
+            path = "/futures/order"
 
 
 
-            path = (
-
-                "/futures/order"
-
-                if MARKET_TYPE=="FUTURES"
-
-                else
-
-                "/spot/order"
-
-            )
+            payload = {
 
 
+                "market":
 
-            params = {
-
-
-                "market":market,
+                    symbol,
 
 
-                "side":side.lower(),
+                "side":
+
+                    side.lower(),
 
 
-                "amount":amount,
+
+                "type":
+
+                    "market",
 
 
-                "type":"market"
 
+                "amount":
+
+                    str(quantity),
+
+
+
+                "leverage":
+
+                    leverage
 
             }
 
 
 
-            return self._request(
+
+
+            return self.request(
 
                 "POST",
 
                 path,
 
-                params
+                payload
 
             )
 
@@ -320,9 +316,8 @@ class CoinExTrade:
 
             logger.exception(e)
 
+
             return None
-
-
 
 
 
@@ -344,7 +339,7 @@ class CoinExTrade:
 
                 "sell"
 
-                if side.upper()=="BUY"
+                if side == "BUY"
 
                 else
 
@@ -371,8 +366,8 @@ class CoinExTrade:
 
             logger.exception(e)
 
-            return None
 
+            return None
 
 
 
@@ -385,11 +380,27 @@ class CoinExTrade:
         try:
 
 
-            return self._request(
+            if MARKET_TYPE == "FUTURES":
+
+
+                path = "/futures/balance"
+
+
+
+            else:
+
+
+                path = "/assets/spot/balance"
+
+
+
+
+
+            return self.request(
 
                 "GET",
 
-                "/assets/spot/balance"
+                path
 
             )
 
@@ -400,42 +411,11 @@ class CoinExTrade:
 
             logger.exception(e)
 
-            return None
-
-
-
-
-
-
-
-
-    def get_open_positions(self):
-
-        try:
-
-
-            if PAPER_TRADING:
-
-                return []
-
-
-
-            return self._request(
-
-                "GET",
-
-                "/futures/pending-position"
-
-            )
-
-
-
-        except Exception as e:
-
-
-            logger.exception(e)
 
             return None
+
+
+
 
 
 
