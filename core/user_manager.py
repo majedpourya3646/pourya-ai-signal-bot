@@ -1,104 +1,25 @@
 # core/user_manager.py
 
-from core.database_manager import (
-    execute_query
-)
+import sqlite3
+
+from datetime import datetime
 
 from core.logger import logger
 
 
 
-def create_user(
-    user_id,
-    username
-):
+DB_PATH = "data/users.db"
+
+
+
+
+def get_connection():
 
     try:
 
-        execute_query(
-            """
-            INSERT INTO users
-            (
-                id,
-                username,
-                active
-            )
-            VALUES
-            (?, ?, 1)
-            """,
-            (
-                user_id,
-                username
-            )
+        return sqlite3.connect(
+            DB_PATH
         )
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-
-def get_user(
-    user_id
-):
-
-    try:
-
-        result = execute_query(
-            """
-            SELECT
-
-                id,
-
-                username,
-
-                active,
-
-                created_at
-
-            FROM users
-
-            WHERE id=?
-
-            """,
-            (
-                user_id,
-            )
-        )
-
-
-
-        if not result:
-
-            return None
-
-
-
-        row = result[0]
-
-
-
-        return {
-
-            "id": row[0],
-
-            "username": row[1],
-
-            "active": row[2],
-
-            "created_at": row[3]
-
-        }
-
 
 
     except Exception as e:
@@ -111,131 +32,411 @@ def get_user(
 
 
 
-def get_all_users():
+def init_user_database():
 
     try:
 
-        rows = execute_query(
-            """
-            SELECT
+        conn = get_connection()
 
-                id,
+
+        if not conn:
+
+            return False
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+            """
+
+            CREATE TABLE IF NOT EXISTS users (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                telegram_id TEXT UNIQUE,
+
+                username TEXT,
+
+                email TEXT,
+
+                phone TEXT,
+
+                notification_level TEXT DEFAULT 'BASIC',
+
+                user_profit_percent REAL DEFAULT 50,
+
+                risk_percent REAL DEFAULT 1,
+
+                leverage INTEGER DEFAULT 10,
+
+                trading_mode TEXT DEFAULT 'AUTO',
+
+                active INTEGER DEFAULT 1,
+
+                created_at TEXT
+
+            )
+
+            """
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+def create_user(
+    telegram_id,
+    username=None
+):
+
+    try:
+
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return False
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            INSERT OR IGNORE INTO users
+
+            (
+
+                telegram_id,
 
                 username,
 
-                active,
-
                 created_at
+
+            )
+
+            VALUES (?,?,?)
+
+            """,
+
+            (
+
+                telegram_id,
+
+                username,
+
+                datetime.utcnow().isoformat()
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+def get_user(
+    telegram_id
+):
+
+    try:
+
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return None
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT *
 
             FROM users
 
-            ORDER BY id DESC
+            WHERE telegram_id=?
 
-            """
-        )
+            """,
 
+            (
 
-
-        users = []
-
-
-
-        for row in rows:
-
-            users.append(
-
-                {
-
-                    "id": row[0],
-
-                    "username": row[1],
-
-                    "active": row[2],
-
-                    "created_at": row[3]
-
-                }
+                telegram_id,
 
             )
 
+        )
 
 
-        return users
+        row = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if not row:
+
+            return None
+
+
+
+        columns = [
+
+            "id",
+
+            "telegram_id",
+
+            "username",
+
+            "email",
+
+            "phone",
+
+            "notification_level",
+
+            "user_profit_percent",
+
+            "risk_percent",
+
+            "leverage",
+
+            "trading_mode",
+
+            "active",
+
+            "created_at"
+
+        ]
+
+
+
+        return dict(
+            zip(
+                columns,
+                row
+            )
+        )
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
+
+        return None
+
+
+
+
+
+
+def update_user_setting(
+    telegram_id,
+    key,
+    value
+):
+
+    try:
+
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return False
+
+
+
+        cursor = conn.cursor()
+
+
+
+        allowed = [
+
+            "notification_level",
+
+            "user_profit_percent",
+
+            "risk_percent",
+
+            "leverage",
+
+            "trading_mode",
+
+            "email",
+
+            "phone"
+
+        ]
+
+
+
+        if key not in allowed:
+
+            return False
+
+
+
+        cursor.execute(
+
+            f"""
+
+            UPDATE users
+
+            SET {key}=?
+
+            WHERE telegram_id=?
+
+            """,
+
+            (
+
+                value,
+
+                telegram_id
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+def get_all_active_users():
+
+    try:
+
+
+        conn = get_connection()
+
+
+        if not conn:
+
+            return []
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT *
+
+            FROM users
+
+            WHERE active=1
+
+            """
+
+        )
+
+
+
+        rows = cursor.fetchall()
+
+
+
+        conn.close()
+
+
+
+        return rows
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
 
         return []
-
-
-
-
-
-def deactivate_user(
-    user_id
-):
-
-    try:
-
-        execute_query(
-            """
-            UPDATE users
-
-            SET active=0
-
-            WHERE id=?
-
-            """,
-            (
-                user_id,
-            )
-        )
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-
-def activate_user(
-    user_id
-):
-
-    try:
-
-        execute_query(
-            """
-            UPDATE users
-
-            SET active=1
-
-            WHERE id=?
-
-            """,
-            (
-                user_id,
-            )
-        )
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
