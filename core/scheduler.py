@@ -1,13 +1,21 @@
 # core/scheduler.py
 
 import threading
+
 import time
 
 from core.logger import logger
 
-from core.trading_loop import (
-    trading_loop,
-    stop_loop
+from config import (
+    SCHEDULER_INTERVAL
+)
+
+from core.auto_trader import (
+    execute_trade
+)
+
+from core.position_manager import (
+    check_tp_sl
 )
 
 from core.health_monitor import (
@@ -22,40 +30,145 @@ from telegram_sender import (
     send_message
 )
 
-from config import (
-    SCHEDULER_MODE
-)
 
 
 
-
-
-SERVICES = []
 
 RUNNING = False
 
+THREADS = []
 
 
 
 
 
 
-def health_service():
+
+
+def trading_loop():
+
+    global RUNNING
+
+
+    logger.info(
+
+        "TRADING LOOP STARTED"
+
+    )
+
+
 
     while RUNNING:
 
+
         try:
 
-            result = run_health_check()
 
-            logger.info(
+            execute_trade()
 
-                f"HEALTH CHECK: {result}"
-
-            )
 
 
         except Exception as e:
+
+
+            logger.exception(e)
+
+
+
+        time.sleep(
+
+            SCHEDULER_INTERVAL
+
+        )
+
+
+
+
+
+
+
+
+
+def position_loop():
+
+    global RUNNING
+
+
+    logger.info(
+
+        "POSITION MONITOR STARTED"
+
+    )
+
+
+
+    while RUNNING:
+
+
+        try:
+
+
+            closed = check_tp_sl()
+
+
+
+            for trade in closed:
+
+
+                logger.info(
+
+                    f"CLOSED {trade}"
+
+                )
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+
+
+        time.sleep(
+
+            15
+
+        )
+
+
+
+
+
+
+
+
+
+def health_loop():
+
+    global RUNNING
+
+
+    logger.info(
+
+        "HEALTH MONITOR STARTED"
+
+    )
+
+
+
+    while RUNNING:
+
+
+        try:
+
+
+            run_health_check()
+
+
+
+        except Exception as e:
+
 
             logger.exception(e)
 
@@ -75,17 +188,31 @@ def health_service():
 
 
 
-def report_service():
+def report_loop():
+
+    global RUNNING
+
+
+    logger.info(
+
+        "REPORT SERVICE STARTED"
+
+    )
+
+
 
     while RUNNING:
 
+
         try:
+
 
             report = generate_report_text()
 
 
 
             if report:
+
 
                 send_message(
 
@@ -94,7 +221,9 @@ def report_service():
                 )
 
 
+
         except Exception as e:
+
 
             logger.exception(e)
 
@@ -114,63 +243,6 @@ def report_service():
 
 
 
-def start_service(
-    target,
-    name
-):
-
-    try:
-
-
-        thread = threading.Thread(
-
-            target=target,
-
-            name=name,
-
-            daemon=True
-
-        )
-
-
-        thread.start()
-
-
-
-        SERVICES.append(
-
-            thread
-
-        )
-
-
-
-        logger.info(
-
-            f"SERVICE STARTED {name}"
-
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
 def start_all_services():
 
     global RUNNING
@@ -179,45 +251,46 @@ def start_all_services():
     try:
 
 
-        if RUNNING:
-
-            return True
-
-
-
         RUNNING = True
 
 
 
-
-
-        start_service(
+        services = [
 
             trading_loop,
 
-            "TradingLoop"
+            position_loop,
 
-        )
+            health_loop,
 
+            report_loop
 
-
-        start_service(
-
-            health_service,
-
-            "HealthMonitor"
-
-        )
+        ]
 
 
 
-        start_service(
+        for service in services:
 
-            report_service,
 
-            "ReportService"
+            thread = threading.Thread(
 
-        )
+                target=service,
+
+                daemon=True
+
+            )
+
+
+
+            THREADS.append(
+
+                thread
+
+            )
+
+
+
+            thread.start()
 
 
 
@@ -225,7 +298,7 @@ def start_all_services():
 
         logger.info(
 
-            f"ALL SERVICES STARTED MODE={SCHEDULER_MODE}"
+            "ALL SERVICES STARTED"
 
         )
 
@@ -261,10 +334,6 @@ def stop_all_services():
 
 
 
-        stop_loop()
-
-
-
         logger.info(
 
             "ALL SERVICES STOPPED"
@@ -284,31 +353,3 @@ def stop_all_services():
 
 
         return False
-
-
-
-
-
-
-
-def scheduler_status():
-
-    return {
-
-
-        "running":
-
-            RUNNING,
-
-
-        "services":
-
-            [
-
-                x.name
-
-                for x in SERVICES
-
-            ]
-
-    }
