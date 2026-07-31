@@ -1,9 +1,6 @@
-# core/coinex_trade.py
-
 from coinex_api import coinex
 
 from core.logger import logger
-
 
 
 class CoinExTrade:
@@ -13,55 +10,37 @@ class CoinExTrade:
         self,
         symbol,
         side,
-        quantity,
-        leverage=None
+        quantity
     ):
 
         try:
 
-            side = side.upper()
+            side = side.lower()
+
+            logger.info(
+                f"COINEX ORDER {symbol} {side} QTY={quantity}"
+            )
 
 
-            if side not in [
-                "BUY",
-                "SELL"
-            ]:
-
-                logger.error(
-                    f"INVALID SIDE {side}"
-                )
-
-                return None
-
-
-
-            order_side = side.lower()
-
+            # CoinEx futures order endpoint
+            result = coinex.request(
+                "POST",
+                "/futures/order",
+                {
+                    "market": symbol,
+                    "side": side,
+                    "type": "market",
+                    "amount": quantity
+                }
+            )
 
 
             logger.info(
-                f"COINEX ORDER {symbol} {order_side} QTY={quantity}"
+                f"COINEX RESULT {result}"
             )
-
-
-
-            # Futures market order
-            result = coinex.place_order(
-
-                market=symbol,
-
-                side=order_side,
-
-                amount=str(quantity),
-
-                order_type="market"
-
-            )
-
 
 
             return result
-
 
 
         except Exception as e:
@@ -81,15 +60,10 @@ class CoinExTrade:
     ):
 
         return self.create_order(
-
             symbol,
-
-            "BUY",
-
+            "buy",
             quantity
-
         )
-
 
 
 
@@ -102,15 +76,10 @@ class CoinExTrade:
     ):
 
         return self.create_order(
-
             symbol,
-
-            "SELL",
-
+            "sell",
             quantity
-
         )
-
 
 
 
@@ -118,28 +87,21 @@ class CoinExTrade:
 
     def close_position(
         self,
-        symbol,
-        side=None,
-        quantity=None
+        symbol
     ):
 
         try:
 
-
-            logger.info(
-                f"CLOSE POSITION {symbol}"
-            )
-
-
-            return coinex.close_position(
-
-                market=symbol
-
+            return coinex.request(
+                "POST",
+                "/futures/close-position",
+                {
+                    "market": symbol
+                }
             )
 
 
         except Exception as e:
-
 
             logger.exception(e)
 
@@ -157,35 +119,12 @@ class CoinExTrade:
 
         try:
 
-            return coinex.get_order(
-
-                order_id
-
-            )
-
-
-        except Exception as e:
-
-            logger.exception(e)
-
-            return None
-
-
-
-
-
-
-    def get_order_status(
-        self,
-        order_id
-    ):
-
-        try:
-
-            return coinex.get_order(
-
-                order_id
-
+            return coinex.request(
+                "GET",
+                "/futures/order-status",
+                {
+                    "order_id": order_id
+                }
             )
 
 
@@ -202,16 +141,17 @@ class CoinExTrade:
 
     def cancel_order(
         self,
-        order_id,
-        symbol=None
+        order_id
     ):
 
         try:
 
-            return coinex.cancel_order(
-
-                order_id
-
+            return coinex.request(
+                "POST",
+                "/futures/cancel-order",
+                {
+                    "order_id": order_id
+                }
             )
 
 
@@ -220,8 +160,6 @@ class CoinExTrade:
             logger.exception(e)
 
             return None
-
-
 
 
 
