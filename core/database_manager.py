@@ -6,36 +6,48 @@ import os
 
 from core.logger import logger
 
-from config import DATABASE_PATH
+
+
+
+
+DB_PATH = "data/pourya_trader.db"
 
 
 
 
 
-def ensure_database_folder():
+
+
+
+
+def ensure_directory():
 
     try:
 
+
         folder = os.path.dirname(
 
-            DATABASE_PATH
+            DB_PATH
 
         )
 
 
+
         if folder and not os.path.exists(folder):
 
-            os.makedirs(folder)
+            os.makedirs(
 
+                folder
 
-        return True
+            )
+
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return False
 
 
 
@@ -48,19 +60,23 @@ def get_connection():
 
     try:
 
-        ensure_database_folder()
+
+        ensure_directory()
+
 
 
         conn = sqlite3.connect(
 
-            DATABASE_PATH,
+            DB_PATH,
 
             check_same_thread=False
 
         )
 
 
+
         conn.row_factory = sqlite3.Row
+
 
 
         return conn
@@ -69,7 +85,9 @@ def get_connection():
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return None
 
@@ -81,24 +99,20 @@ def get_connection():
 
 
 
-def init_database():
+
+def initialize_database():
 
     try:
 
+
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
 
 
-        # Trades
+
+
 
         cursor.execute(
 
@@ -116,8 +130,6 @@ def init_database():
 
                 entry REAL,
 
-                exit REAL,
-
                 tp REAL,
 
                 sl REAL,
@@ -128,9 +140,9 @@ def init_database():
 
                 pnl REAL DEFAULT 0,
 
-                status TEXT DEFAULT 'OPEN',
+                status TEXT,
 
-                created_at TEXT,
+                opened_at TEXT,
 
                 closed_at TEXT
 
@@ -144,7 +156,7 @@ def init_database():
 
 
 
-        # Users
+
 
         cursor.execute(
 
@@ -160,15 +172,11 @@ def init_database():
 
                 username TEXT,
 
-                email TEXT,
+                trading_mode TEXT,
 
-                phone TEXT,
+                profit_percent REAL,
 
-                trading_mode TEXT DEFAULT 'MANUAL',
-
-                profit_percent REAL DEFAULT 50,
-
-                active INTEGER DEFAULT 1,
+                active INTEGER,
 
                 created_at TEXT
 
@@ -182,41 +190,7 @@ def init_database():
 
 
 
-        # Profits
 
-        cursor.execute(
-
-            """
-
-            CREATE TABLE IF NOT EXISTS profits
-
-            (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                telegram_id TEXT,
-
-                trade_id INTEGER,
-
-                gross_profit REAL,
-
-                user_profit REAL,
-
-                software_profit REAL,
-
-                created_at TEXT
-
-            )
-
-            """
-
-        )
-
-
-
-
-
-        # Subscriptions
 
         cursor.execute(
 
@@ -236,7 +210,7 @@ def init_database():
 
                 expire_date TEXT,
 
-                active INTEGER DEFAULT 1
+                active INTEGER
 
             )
 
@@ -248,7 +222,7 @@ def init_database():
 
 
 
-        # Payments
+
 
         cursor.execute(
 
@@ -266,17 +240,11 @@ def init_database():
 
                 currency TEXT,
 
-                payment_method TEXT,
-
-                transaction_id TEXT,
-
                 status TEXT,
 
                 description TEXT,
 
-                created_at TEXT,
-
-                updated_at TEXT
+                created_at TEXT
 
             )
 
@@ -288,25 +256,36 @@ def init_database():
 
 
 
-        # Settings
+
 
         cursor.execute(
 
             """
 
-            CREATE TABLE IF NOT EXISTS settings
+            CREATE TABLE IF NOT EXISTS profits
 
             (
 
-                key TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-                value TEXT
+                telegram_id TEXT,
+
+                trade_id INTEGER,
+
+                gross_profit REAL,
+
+                user_profit REAL,
+
+                system_profit REAL,
+
+                created_at TEXT
 
             )
 
             """
 
         )
+
 
 
 
@@ -332,10 +311,11 @@ def init_database():
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return False
 
+        return False
 
 
 
@@ -347,16 +327,11 @@ def database_status():
 
     try:
 
+
         conn = get_connection()
 
-
-        if not conn:
-
-            return False
-
-
-
         cursor = conn.cursor()
+
 
 
         cursor.execute(
@@ -366,20 +341,24 @@ def database_status():
         )
 
 
+
         result = cursor.fetchone()
+
 
 
         conn.close()
 
 
 
-        return bool(result)
+        return result is not None
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return False
 
@@ -389,75 +368,33 @@ def database_status():
 
 
 
-
-def execute_query(
-    query,
-    params=()
-):
+def reset_database():
 
     try:
 
-        conn = get_connection()
 
+        if os.path.exists(
 
-        cursor = conn.cursor()
+            DB_PATH
 
+        ):
 
+            os.remove(
 
-        cursor.execute(
+                DB_PATH
 
-            query,
-
-            params
-
-        )
-
-
-
-        conn.commit()
+            )
 
 
 
-        result = cursor.fetchall()
-
-
-
-        conn.close()
-
-
-
-        return result
+        return initialize_database()
 
 
 
     except Exception as e:
 
-        logger.exception(e)
-
-        return []
-
-
-
-
-
-
-
-
-def backup_database():
-
-    try:
-
-        from core.backup_manager import (
-            create_database_backup
-        )
-
-
-        return create_database_backup()
-
-
-
-    except Exception as e:
 
         logger.exception(e)
+
 
         return False
