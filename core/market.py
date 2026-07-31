@@ -36,26 +36,16 @@ else:
 
 INTERVAL_MAP = {
 
-    "15":
+    "15": "15min",
 
-        "15min",
+    "60": "1hour",
 
+    "240": "4hour",
 
-    "60":
-
-        "1hour",
-
-
-    "240":
-
-        "4hour",
-
-
-    "1D":
-
-        "1day"
+    "1D": "1day"
 
 }
+
 
 
 
@@ -117,11 +107,7 @@ def get_market_data(
 
 
 
-        if data.get(
-
-            "code"
-
-        ) != 0:
+        if data.get("code") != 0:
 
 
             logger.error(
@@ -141,57 +127,208 @@ def get_market_data(
 
 
 
-        for item in data.get(
+        raw_data = data.get(
 
             "data",
 
             []
 
-        ):
-
-
-            candles.append(
-
-                {
-
-
-                    "time":
-
-                        item[0],
+        )
 
 
 
-                    "open":
-
-                        float(item[1]),
 
 
-
-                    "close":
-
-                        float(item[2]),
+        for item in raw_data:
 
 
 
-                    "high":
-
-                        float(item[3]),
+            try:
 
 
+                # CoinEx جدید - Dictionary
 
-                    "low":
+                if isinstance(
 
-                        float(item[4]),
+                    item,
+
+                    dict
+
+                ):
+
+
+                    candles.append(
+
+                        {
+
+
+                            "time":
+
+                                item.get(
+
+                                    "created_at",
+
+                                    item.get(
+
+                                        "time",
+
+                                        0
+
+                                    )
+
+                                ),
+
+
+                            "open":
+
+                                float(
+
+                                    item.get(
+
+                                        "open",
+
+                                        0
+
+                                    )
+
+                                ),
+
+
+                            "close":
+
+                                float(
+
+                                    item.get(
+
+                                        "close",
+
+                                        0
+
+                                    )
+
+                                ),
+
+
+                            "high":
+
+                                float(
+
+                                    item.get(
+
+                                        "high",
+
+                                        0
+
+                                    )
+
+                                ),
+
+
+                            "low":
+
+                                float(
+
+                                    item.get(
+
+                                        "low",
+
+                                        0
+
+                                    )
+
+                                ),
+
+
+                            "volume":
+
+                                float(
+
+                                    item.get(
+
+                                        "volume",
+
+                                        0
+
+                                    )
+
+                                )
+
+                        }
+
+                    )
 
 
 
-                    "volume":
 
-                        float(item[5])
 
-                }
+                # CoinEx قدیمی - List
 
-            )
+                elif isinstance(
+
+                    item,
+
+                    list
+
+                ):
+
+
+                    candles.append(
+
+                        {
+
+
+                            "time":
+
+                                item[0],
+
+
+                            "open":
+
+                                float(item[1]),
+
+
+                            "close":
+
+                                float(item[2]),
+
+
+                            "high":
+
+                                float(item[3]),
+
+
+                            "low":
+
+                                float(item[4]),
+
+
+                            "volume":
+
+                                float(item[5])
+
+                        }
+
+                    )
+
+
+
+
+
+            except Exception as e:
+
+
+                logger.error(
+
+                    f"CANDLE PARSE ERROR {item} {e}"
+
+                )
+
+
+
+                continue
+
+
+
 
 
 
@@ -249,11 +386,7 @@ def get_latest_price(
 
 
 
-        if data.get(
-
-            "code"
-
-        ) != 0:
+        if data.get("code") != 0:
 
 
             return None
@@ -277,6 +410,7 @@ def get_latest_price(
             list
 
         ):
+
 
             ticker = ticker[0]
 
