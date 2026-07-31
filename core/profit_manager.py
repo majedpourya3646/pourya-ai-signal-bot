@@ -8,6 +8,10 @@ from core.database_manager import (
     get_connection
 )
 
+from config import (
+    DEFAULT_USER_PROFIT_SHARE
+)
+
 
 
 
@@ -41,7 +45,7 @@ def init_profit_database():
 
                 user_profit REAL,
 
-                software_profit REAL,
+                system_profit REAL,
 
                 created_at TEXT
 
@@ -77,28 +81,29 @@ def init_profit_database():
 
 
 
-
-def calculate_profit_share(
+def calculate_profit_split(
     profit,
-    user_percent
+    user_share=DEFAULT_USER_PROFIT_SHARE
 ):
 
     try:
 
 
-        profit = float(profit)
+        profit = float(
 
-        user_percent = float(user_percent)
+            profit
+
+        )
 
 
 
-        user_profit = (
+        user_amount = (
 
             profit
 
             *
 
-            user_percent
+            float(user_share)
 
             /
 
@@ -108,13 +113,13 @@ def calculate_profit_share(
 
 
 
-        software_profit = (
+        system_amount = (
 
             profit
 
             -
 
-            user_profit
+            user_amount
 
         )
 
@@ -123,19 +128,39 @@ def calculate_profit_share(
         return {
 
 
-            "gross_profit":
+            "gross":
 
-                round(profit, 6),
+                round(
+
+                    profit,
+
+                    4
+
+                ),
 
 
-            "user_profit":
 
-                round(user_profit, 6),
+            "user":
+
+                round(
+
+                    user_amount,
+
+                    4
+
+                ),
 
 
-            "software_profit":
 
-                round(software_profit, 6)
+            "system":
+
+                round(
+
+                    system_amount,
+
+                    4
+
+                )
 
         }
 
@@ -156,13 +181,25 @@ def calculate_profit_share(
 
 
 
-def save_profit_record(
+
+def record_profit(
     telegram_id,
     trade_id,
-    profit_data
+    profit,
+    user_share=DEFAULT_USER_PROFIT_SHARE
 ):
 
     try:
+
+
+        split = calculate_profit_split(
+
+            profit,
+
+            user_share
+
+        )
+
 
 
         conn = get_connection()
@@ -187,48 +224,31 @@ def save_profit_record(
 
                 user_profit,
 
-                software_profit,
+                system_profit,
 
                 created_at
 
             )
 
-            VALUES (?,?,?,?,?,?)
+            VALUES
+
+            (?,?,?,?,?,?)
 
             """,
 
             (
 
-                str(telegram_id),
+                telegram_id,
 
                 trade_id,
 
-                profit_data.get(
+                split["gross"],
 
-                    "gross_profit",
+                split["user"],
 
-                    0
+                split["system"],
 
-                ),
-
-                profit_data.get(
-
-                    "user_profit",
-
-                    0
-
-                ),
-
-                profit_data.get(
-
-                    "software_profit",
-
-                    0
-
-                ),
-
-                datetime.utcnow()
-                .isoformat()
+                datetime.utcnow().isoformat()
 
             )
 
@@ -253,7 +273,6 @@ def save_profit_record(
 
 
         return False
-
 
 
 
@@ -288,7 +307,7 @@ def get_user_profit(
 
             (
 
-                str(telegram_id),
+                telegram_id,
 
             )
 
@@ -310,13 +329,13 @@ def get_user_profit(
 
                 float(result[0]),
 
-                6
+                4
 
             )
 
 
 
-        return 0
+        return 0.0
 
 
 
@@ -326,7 +345,7 @@ def get_user_profit(
         logger.exception(e)
 
 
-        return 0
+        return 0.0
 
 
 
@@ -334,8 +353,7 @@ def get_user_profit(
 
 
 
-
-def calculate_monthly_software_income():
+def get_system_profit():
 
     try:
 
@@ -350,11 +368,9 @@ def calculate_monthly_software_income():
 
             """
 
-            SELECT SUM(software_profit)
+            SELECT SUM(system_profit)
 
             FROM profits
-
-            WHERE created_at >= datetime('now','-30 days')
 
             """
 
@@ -376,13 +392,13 @@ def calculate_monthly_software_income():
 
                 float(result[0]),
 
-                6
+                4
 
             )
 
 
 
-        return 0
+        return 0.0
 
 
 
@@ -392,37 +408,4 @@ def calculate_monthly_software_income():
         logger.exception(e)
 
 
-        return 0
-
-
-
-
-
-
-
-
-def profit_report():
-
-    try:
-
-
-        return {
-
-
-            "software_income":
-
-                calculate_monthly_software_income()
-
-
-
-        }
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
+        return 0.0
