@@ -1,18 +1,16 @@
 # core/opportunity_engine.py
 
+from core.logger import logger
+
 from core.market_signal_bridge import (
     analyze_market_symbols
 )
 
-from core.coin_scanner import (
-    get_symbols
+from config import (
+    MIN_CONFIDENCE
 )
 
-from core.pump_scanner_advanced import (
-    scan_advanced_pumps
-)
 
-from core.logger import logger
 
 
 
@@ -27,67 +25,106 @@ def calculate_opportunity_score(
 
 
 
+
+
         confidence = float(
+
             item.get(
+
                 "confidence",
+
                 0
+
             )
+
         )
 
 
-        if confidence >= 90:
 
-            score += 40
+        buy_score = float(
 
-        elif confidence >= 80:
+            item.get(
 
-            score += 30
+                "buy_score",
 
-        elif confidence >= 70:
+                0
 
-            score += 20
+            )
 
-
-
-        volume = item.get(
-            "volume_confirm",
-            False
         )
 
 
-        if volume:
 
-            score += 15
+        sell_score = float(
 
+            item.get(
 
+                "sell_score",
 
-        trend = item.get(
-            "trend_confirm",
-            False
+                0
+
+            )
+
         )
 
 
-        if trend:
-
-            score += 15
 
 
 
-        breakout = item.get(
-            "breakout",
-            False
-        )
+        score += confidence * 0.6
 
 
-        if breakout:
+
+
+
+        if buy_score > 0 or sell_score > 0:
+
+            score += (
+
+                max(
+
+                    buy_score,
+
+                    sell_score
+
+                )
+
+                *
+
+                0.3
+
+            )
+
+
+
+
+
+        if item.get(
+
+            "entry"
+
+        ) and item.get(
+
+            "tp"
+
+        ) and item.get(
+
+            "sl"
+
+        ):
 
             score += 10
 
 
 
-        return min(
+
+
+        return round(
+
             score,
-            100
+
+            2
+
         )
 
 
@@ -104,35 +141,6 @@ def calculate_opportunity_score(
 
 
 
-def classify_opportunity(
-    score
-):
-
-    try:
-
-
-        if score >= 85:
-
-            return "HIGH"
-
-
-
-        elif score >= 70:
-
-            return "MEDIUM"
-
-
-
-        return "LOW"
-
-
-
-    except:
-
-
-        return "LOW"
-
-
 
 
 
@@ -144,17 +152,12 @@ def enrich_opportunity(
     try:
 
 
-        score = calculate_opportunity_score(
+        item["opportunity_score"] = calculate_opportunity_score(
+
             item
+
         )
 
-
-        item["opportunity_score"] = score
-
-
-        item["risk_level"] = classify_opportunity(
-            score
-        )
 
 
         return item
@@ -167,124 +170,11 @@ def enrich_opportunity(
         logger.exception(e)
 
 
-        return item
+        return None
 
 
 
 
-
-
-def get_market_opportunities():
-
-    try:
-
-
-        symbols = get_symbols()
-
-
-
-        if not symbols:
-
-            return []
-
-
-
-        results = analyze_market_symbols(
-            symbols
-        )
-
-
-
-        if not results:
-
-            return []
-
-
-
-        enriched = []
-
-
-
-        for item in results:
-
-
-            enriched.append(
-
-                enrich_opportunity(
-                    item
-                )
-
-            )
-
-
-
-        return enriched
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
-
-
-
-
-
-
-def get_explosive_opportunities():
-
-    try:
-
-
-        pumps = scan_advanced_pumps()
-
-
-
-        if not pumps:
-
-            return []
-
-
-
-        results = []
-
-
-
-        for item in pumps:
-
-
-            item = enrich_opportunity(
-                item
-            )
-
-
-            if item.get(
-                "opportunity_score",
-                0
-            ) >= 70:
-
-
-                results.append(
-                    item
-                )
-
-
-
-        return results
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
 
 
 
@@ -296,99 +186,80 @@ def find_best_opportunities():
     try:
 
 
-        opportunities = []
+        signals = analyze_market_symbols()
 
 
 
-        market = get_market_opportunities()
-
-
-
-        if market:
-
-            opportunities.extend(
-                market
-            )
-
-
-
-        explosive = get_explosive_opportunities()
-
-
-
-        if explosive:
-
-            opportunities.extend(
-                explosive
-            )
-
-
-
-        if not opportunities:
+        if not signals:
 
             return []
 
 
 
-        unique = {}
+
+
+        opportunities = []
 
 
 
-        for item in opportunities:
+        for item in signals:
 
 
-            symbol = item.get(
-                "symbol"
+
+            confidence = float(
+
+                item.get(
+
+                    "confidence",
+
+                    0
+
+                )
+
             )
 
 
-            if not symbol:
+
+            if confidence < MIN_CONFIDENCE:
 
                 continue
 
 
 
-            old = unique.get(
-                symbol
+
+
+            enriched = enrich_opportunity(
+
+                item
+
             )
 
 
 
-            if not old:
+            if enriched:
 
+                opportunities.append(
 
-                unique[symbol] = item
+                    enriched
 
-
-
-            else:
-
-
-                if item.get(
-                    "opportunity_score",
-                    0
-                ) > old.get(
-                    "opportunity_score",
-                    0
-                ):
-
-                    unique[symbol] = item
+                )
 
 
 
-        final = list(
-            unique.values()
-        )
 
 
 
-        final.sort(
+
+        opportunities.sort(
 
             key=lambda x:
 
             x.get(
+
                 "opportunity_score",
+
                 0
+
             ),
 
             reverse=True
@@ -397,14 +268,17 @@ def find_best_opportunities():
 
 
 
+
+
         logger.info(
 
-            f"BEST OPPORTUNITIES FOUND: {len(final)}"
+            f"BEST OPPORTUNITIES {len(opportunities)}"
 
         )
 
 
-        return final
+
+        return opportunities
 
 
 
@@ -415,3 +289,38 @@ def find_best_opportunities():
 
 
         return []
+
+
+
+
+
+
+
+
+
+def get_top_opportunity():
+
+    try:
+
+
+        opportunities = find_best_opportunities()
+
+
+
+        if opportunities:
+
+            return opportunities[0]
+
+
+
+        return None
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
