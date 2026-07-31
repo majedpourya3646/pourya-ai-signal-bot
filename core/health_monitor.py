@@ -8,41 +8,14 @@ from core.database_manager import (
     database_status
 )
 
-from core.recovery_manager import (
-    recovery_status
+from coinex_trade import (
+    coinex_trade
 )
 
-from coinex_trade import coinex_trade
-
-from telegram_sender import (
-    send_message
+from config import (
+    BOT_TOKEN,
+    COINEX_API_KEY
 )
-
-
-
-
-
-HEALTH_STATUS = {
-
-
-    "online":
-
-        False,
-
-
-    "last_check":
-
-        None,
-
-
-    "issues":
-
-        []
-
-}
-
-
-
 
 
 
@@ -52,16 +25,12 @@ def check_database():
 
     try:
 
-
         return database_status()
 
 
-
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
 
@@ -71,59 +40,28 @@ def check_database():
 
 
 
-
-def check_exchange():
-
-    try:
-
-
-        result = coinex_trade.get_ticker(
-
-            "BTCUSDT"
-
-        )
-
-
-
-        return bool(
-
-            result
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def check_recovery():
+def check_coinex():
 
     try:
 
 
-        status = recovery_status()
+        if not COINEX_API_KEY:
+
+            return False
 
 
 
-        return status.get(
+        response = coinex_trade.get_balance()
 
-            "running",
 
-            False
 
-        )
+        if response is None:
+
+            return False
+
+
+
+        return True
 
 
 
@@ -141,178 +79,25 @@ def check_recovery():
 
 
 
-
-def check_system():
-
-    global HEALTH_STATUS
-
-
+def check_telegram():
 
     try:
 
 
-        issues = []
+        if BOT_TOKEN:
 
+            return True
 
 
-        database = check_database()
 
+        return False
 
 
-        exchange = check_exchange()
 
+    except Exception:
 
 
-        recovery = check_recovery()
-
-
-
-
-
-        if not database:
-
-
-            issues.append(
-
-                "DATABASE ERROR"
-
-            )
-
-
-
-        if not exchange:
-
-
-            issues.append(
-
-                "EXCHANGE CONNECTION ERROR"
-
-            )
-
-
-
-        if not recovery:
-
-
-            issues.append(
-
-                "RECOVERY ERROR"
-
-            )
-
-
-
-
-
-        online = len(
-
-            issues
-
-        ) == 0
-
-
-
-
-
-        HEALTH_STATUS = {
-
-
-            "online":
-
-                online,
-
-
-            "last_check":
-
-                datetime.utcnow()
-                .isoformat(),
-
-
-            "issues":
-
-                issues
-
-        }
-
-
-
-        if issues:
-
-
-            send_health_alert(
-
-                issues
-
-            )
-
-
-
-        return HEALTH_STATUS
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {
-
-            "online":
-
-                False
-
-        }
-
-
-
-
-
-
-
-
-def send_health_alert(
-    issues
-):
-
-    try:
-
-
-        message = f"""
-
-⚠️ Pourya Trader AI Alert
-
-
-زمان:
-
-{datetime.now()}
-
-
-مشکلات:
-
-{issues}
-
-
-لطفاً سیستم بررسی شود.
-
-"""
-
-
-
-        send_message(
-
-            message
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
+        return False
 
 
 
@@ -325,7 +110,47 @@ def run_health_check():
     try:
 
 
-        status = check_system()
+        status = {
+
+
+            "database":
+
+                check_database(),
+
+
+
+            "coinex":
+
+                check_coinex(),
+
+
+
+            "telegram":
+
+                check_telegram(),
+
+
+
+            "time":
+
+                datetime.utcnow().isoformat()
+
+        }
+
+
+
+
+        status["online"] = all(
+
+            [
+
+                status["database"],
+
+                status["coinex"]
+
+            ]
+
+        )
 
 
 
@@ -347,7 +172,19 @@ def run_health_check():
         logger.exception(e)
 
 
-        return {}
+        return {
+
+
+            "online":
+
+                False,
+
+
+            "error":
+
+                str(e)
+
+        }
 
 
 
@@ -356,6 +193,28 @@ def run_health_check():
 
 
 
-def get_health_status():
+def health_summary():
 
-    return HEALTH_STATUS
+    status = run_health_check()
+
+
+    return {
+
+
+        "system":
+
+            "ONLINE"
+
+            if status.get("online")
+
+            else
+
+            "OFFLINE",
+
+
+
+        "details":
+
+            status
+
+    }
