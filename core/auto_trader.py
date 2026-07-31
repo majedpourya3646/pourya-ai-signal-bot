@@ -3,7 +3,7 @@
 from core.logger import logger
 
 from core.opportunity_engine import (
-    get_top_opportunity
+    get_best_opportunity
 )
 
 from core.risk_engine import (
@@ -11,7 +11,6 @@ from core.risk_engine import (
 )
 
 from core.order_manager import (
-    calculate_quantity,
     create_order
 )
 
@@ -19,25 +18,55 @@ from core.trade_manager import (
     open_trade
 )
 
+from telegram_sender import (
+    send_trade_alert
+)
+
 from config import (
-    INITIAL_BALANCE,
-    LEVERAGE
+    PAPER_TRADING,
+    MAX_OPEN_TRADES
+)
+
+from core.trade_manager import (
+    count_open_trades
 )
 
 
 
 
 
-def execute_auto_trade():
+
+
+
+def execute_trade():
 
     try:
 
 
-        opportunity = get_top_opportunity()
+        if count_open_trades() >= MAX_OPEN_TRADES:
+
+
+            logger.warning(
+
+                "MAX OPEN TRADES REACHED"
+
+            )
+
+
+            return None
+
+
+
+
+
+
+
+        opportunity = get_best_opportunity()
 
 
 
         if not opportunity:
+
 
             logger.info(
 
@@ -45,7 +74,10 @@ def execute_auto_trade():
 
             )
 
+
             return None
+
+
 
 
 
@@ -57,13 +89,16 @@ def execute_auto_trade():
 
         ):
 
+
             logger.warning(
 
                 "TRADE REJECTED BY RISK ENGINE"
 
             )
 
+
             return None
+
 
 
 
@@ -110,15 +145,19 @@ def execute_auto_trade():
 
 
 
+        confidence = opportunity.get(
+
+            "confidence"
+
+        )
+
+
+
 
 
         quantity = calculate_quantity(
 
-            INITIAL_BALANCE,
-
-            entry,
-
-            sl
+            entry
 
         )
 
@@ -126,47 +165,39 @@ def execute_auto_trade():
 
 
 
-        if quantity <= 0:
-
-            logger.warning(
-
-                "INVALID QUANTITY"
-
-            )
-
-            return None
 
 
+        if PAPER_TRADING:
 
 
+            logger.info(
 
-
-
-        order = create_order(
-
-            symbol,
-
-            side,
-
-            quantity,
-
-            LEVERAGE
-
-        )
-
-
-
-
-
-        if not order:
-
-            logger.error(
-
-                "ORDER FAILED"
+                f"PAPER TRADE {symbol} {side}"
 
             )
 
-            return None
+
+
+        else:
+
+
+            result = create_order(
+
+                symbol,
+
+                side,
+
+                quantity
+
+            )
+
+
+
+            if not result:
+
+
+                return None
+
 
 
 
@@ -187,13 +218,7 @@ def execute_auto_trade():
 
             quantity,
 
-            opportunity.get(
-
-                "confidence",
-
-                0
-
-            )
+            confidence
 
         )
 
@@ -201,27 +226,12 @@ def execute_auto_trade():
 
 
 
-        if not trade_id:
-
-            logger.error(
-
-                "TRADE DATABASE FAILED"
-
-            )
-
-            return None
+        trade = {
 
 
-
-
-
-        result = {
-
-
-            "trade_id":
+            "id":
 
                 trade_id,
-
 
 
             "symbol":
@@ -229,11 +239,9 @@ def execute_auto_trade():
                 symbol,
 
 
-
             "side":
 
                 side,
-
 
 
             "entry":
@@ -241,11 +249,9 @@ def execute_auto_trade():
                 entry,
 
 
-
             "tp":
 
                 tp,
-
 
 
             "sl":
@@ -253,32 +259,23 @@ def execute_auto_trade():
                 sl,
 
 
+            "confidence":
 
-            "quantity":
-
-                quantity,
-
-
-
-            "order":
-
-                order
+                confidence
 
         }
 
 
 
+        send_trade_alert(
 
-
-        logger.info(
-
-            f"AUTO TRADE OPENED {symbol}"
+            trade
 
         )
 
 
 
-        return result
+        return trade
 
 
 
@@ -296,12 +293,47 @@ def execute_auto_trade():
 
 
 
-def scan_and_trade():
+def calculate_quantity(
+    price
+):
 
     try:
 
 
-        return execute_auto_trade()
+        balance = 100
+
+
+        risk = 1
+
+
+
+        amount = (
+
+            balance
+
+            *
+
+            risk
+
+            /
+
+            100
+
+        )
+
+
+
+        quantity = amount / price
+
+
+
+        return round(
+
+            quantity,
+
+            6
+
+        )
 
 
 
@@ -311,4 +343,4 @@ def scan_and_trade():
         logger.exception(e)
 
 
-        return None
+        return 0
