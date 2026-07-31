@@ -18,15 +18,19 @@ from core.scheduler import (
 
 
 
-RUNNING = False
+
+APP_RUNNING = False
 
 
 
 
 
-def start():
 
-    global RUNNING
+
+
+def start_app():
+
+    global APP_RUNNING
 
 
     try:
@@ -34,9 +38,11 @@ def start():
 
         logger.info(
 
-            "POURYA TRADER AI STARTING"
+            "APPLICATION STARTING"
 
         )
+
+
 
 
 
@@ -56,12 +62,13 @@ def start():
 
 
 
+
         if not start_all_services():
 
 
             logger.error(
 
-                "SERVICES START FAILED"
+                "SERVICE START FAILED"
 
             )
 
@@ -72,13 +79,13 @@ def start():
 
 
 
-        RUNNING = True
+        APP_RUNNING = True
 
 
 
         logger.info(
 
-            "POURYA TRADER AI ONLINE"
+            "POURYA TRADER AI RUNNING"
 
         )
 
@@ -102,20 +109,28 @@ def start():
 
 
 
-def run():
+
+
+def run_forever():
+
+    global APP_RUNNING
+
 
     try:
 
 
-        if not start():
-
-            return False
+        if not APP_RUNNING:
 
 
+            if not start_app():
+
+                return
 
 
 
-        while RUNNING:
+
+
+        while APP_RUNNING:
 
 
             time.sleep(
@@ -126,25 +141,10 @@ def run():
 
 
 
-        return True
-
-
-
     except KeyboardInterrupt:
 
 
-        logger.warning(
-
-            "STOP SIGNAL RECEIVED"
-
-        )
-
-
-        stop()
-
-
-
-        return True
+        stop_app()
 
 
 
@@ -154,11 +154,7 @@ def run():
         logger.exception(e)
 
 
-        stop()
-
-
-
-        return False
+        stop_app()
 
 
 
@@ -166,15 +162,19 @@ def run():
 
 
 
-def stop():
+def stop_app():
 
-    global RUNNING
+    global APP_RUNNING
 
 
     try:
 
 
-        RUNNING = False
+        logger.info(
+
+            "APPLICATION STOPPING"
+
+        )
 
 
 
@@ -186,9 +186,13 @@ def stop():
 
 
 
+        APP_RUNNING = False
+
+
+
         logger.info(
 
-            "POURYA TRADER AI STOPPED"
+            "APPLICATION STOPPED"
 
         )
 
@@ -205,20 +209,3 @@ def stop():
 
 
         return False
-
-
-
-
-
-
-
-def status():
-
-    return {
-
-
-        "running":
-
-            RUNNING
-
-    }
