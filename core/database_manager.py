@@ -2,15 +2,40 @@
 
 import sqlite3
 
-from datetime import datetime
+import os
 
 from core.logger import logger
 
+from config import DATABASE_PATH
 
 
 
 
-DB_PATH = "data/pourya_trader.db"
+
+def ensure_database_folder():
+
+    try:
+
+        folder = os.path.dirname(
+
+            DATABASE_PATH
+
+        )
+
+
+        if folder and not os.path.exists(folder):
+
+            os.makedirs(folder)
+
+
+        return True
+
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
 
 
 
@@ -23,19 +48,28 @@ def get_connection():
 
     try:
 
+        ensure_database_folder()
 
-        return sqlite3.connect(
 
-            DB_PATH
+        conn = sqlite3.connect(
+
+            DATABASE_PATH,
+
+            check_same_thread=False
 
         )
 
 
+        conn.row_factory = sqlite3.Row
+
+
+        return conn
+
+
+
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return None
 
@@ -46,17 +80,15 @@ def get_connection():
 
 
 
-def initialize_database():
+
+def init_database():
 
     try:
-
 
         conn = get_connection()
 
 
-
         if not conn:
-
 
             return False
 
@@ -66,98 +98,217 @@ def initialize_database():
 
 
 
+        # Trades
 
+        cursor.execute(
 
-        tables = [
+            """
 
-        """
+            CREATE TABLE IF NOT EXISTS trades
 
-        CREATE TABLE IF NOT EXISTS logs
+            (
 
-        (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT,
 
-            event TEXT,
+                side TEXT,
 
-            details TEXT,
+                entry REAL,
 
-            created_at TEXT
+                exit REAL,
 
-        )
+                tp REAL,
 
-        """,
+                sl REAL,
 
+                quantity REAL,
 
+                confidence REAL,
 
-        """
+                pnl REAL DEFAULT 0,
 
-        CREATE TABLE IF NOT EXISTS trades
+                status TEXT DEFAULT 'OPEN',
 
-        (
+                created_at TEXT,
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            telegram_id TEXT,
-
-            symbol TEXT,
-
-            side TEXT,
-
-            entry REAL,
-
-            exit REAL,
-
-            quantity REAL,
-
-            tp REAL,
-
-            sl REAL,
-
-            pnl REAL,
-
-            status TEXT,
-
-            created_at TEXT,
-
-            closed_at TEXT
-
-        )
-
-        """,
-
-
-
-        """
-
-        CREATE TABLE IF NOT EXISTS settings
-
-        (
-
-            key TEXT PRIMARY KEY,
-
-            value TEXT
-
-        )
-
-        """,
-
-
-
-        ]
-
-
-
-
-
-        for table in tables:
-
-
-            cursor.execute(
-
-                table
+                closed_at TEXT
 
             )
+
+            """
+
+        )
+
+
+
+
+
+        # Users
+
+        cursor.execute(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS users
+
+            (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                telegram_id TEXT UNIQUE,
+
+                username TEXT,
+
+                email TEXT,
+
+                phone TEXT,
+
+                trading_mode TEXT DEFAULT 'MANUAL',
+
+                profit_percent REAL DEFAULT 50,
+
+                active INTEGER DEFAULT 1,
+
+                created_at TEXT
+
+            )
+
+            """
+
+        )
+
+
+
+
+
+        # Profits
+
+        cursor.execute(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS profits
+
+            (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                telegram_id TEXT,
+
+                trade_id INTEGER,
+
+                gross_profit REAL,
+
+                user_profit REAL,
+
+                software_profit REAL,
+
+                created_at TEXT
+
+            )
+
+            """
+
+        )
+
+
+
+
+
+        # Subscriptions
+
+        cursor.execute(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS subscriptions
+
+            (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                telegram_id TEXT UNIQUE,
+
+                plan TEXT,
+
+                start_date TEXT,
+
+                expire_date TEXT,
+
+                active INTEGER DEFAULT 1
+
+            )
+
+            """
+
+        )
+
+
+
+
+
+        # Payments
+
+        cursor.execute(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS payments
+
+            (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                telegram_id TEXT,
+
+                amount REAL,
+
+                currency TEXT,
+
+                payment_method TEXT,
+
+                transaction_id TEXT,
+
+                status TEXT,
+
+                description TEXT,
+
+                created_at TEXT,
+
+                updated_at TEXT
+
+            )
+
+            """
+
+        )
+
+
+
+
+
+        # Settings
+
+        cursor.execute(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS settings
+
+            (
+
+                key TEXT PRIMARY KEY,
+
+                value TEXT
+
+            )
+
+            """
+
+        )
+
+
 
 
 
@@ -181,286 +332,9 @@ def initialize_database():
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
-
-
-
-
-
-
-
-
-def insert_log(
-    event,
-    details
-):
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            INSERT INTO logs
-
-            (
-
-                event,
-
-                details,
-
-                created_at
-
-            )
-
-            VALUES (?,?,?)
-
-            """,
-
-            (
-
-                event,
-
-                str(details),
-
-                datetime.utcnow()
-                .isoformat()
-
-            )
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def get_logs():
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            SELECT *
-
-            FROM logs
-
-            ORDER BY id DESC
-
-            """
-
-        )
-
-
-
-        rows = cursor.fetchall()
-
-
-
-        conn.close()
-
-
-
-        return rows
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
-
-
-
-
-
-
-
-
-def save_setting(
-    key,
-    value
-):
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            INSERT OR REPLACE INTO settings
-
-            (
-
-                key,
-
-                value
-
-            )
-
-            VALUES (?,?)
-
-            """,
-
-            (
-
-                key,
-
-                str(value)
-
-            )
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def get_setting(
-    key,
-    default=None
-):
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            SELECT value
-
-            FROM settings
-
-            WHERE key=?
-
-            """,
-
-            (
-
-                key,
-
-            )
-
-        )
-
-
-
-        result = cursor.fetchone()
-
-
-
-        conn.close()
-
-
-
-        if result:
-
-
-            return result[0]
-
-
-
-        return default
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return default
 
 
 
@@ -473,30 +347,117 @@ def database_status():
 
     try:
 
-
         conn = get_connection()
 
 
+        if not conn:
 
-        if conn:
-
-
-            conn.close()
+            return False
 
 
 
-            return True
+        cursor = conn.cursor()
+
+
+        cursor.execute(
+
+            "SELECT 1"
+
+        )
+
+
+        result = cursor.fetchone()
+
+
+        conn.close()
 
 
 
-        return False
+        return bool(result)
 
 
 
     except Exception as e:
 
+        logger.exception(e)
+
+        return False
+
+
+
+
+
+
+
+
+def execute_query(
+    query,
+    params=()
+):
+
+    try:
+
+        conn = get_connection()
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            query,
+
+            params
+
+        )
+
+
+
+        conn.commit()
+
+
+
+        result = cursor.fetchall()
+
+
+
+        conn.close()
+
+
+
+        return result
+
+
+
+    except Exception as e:
 
         logger.exception(e)
 
+        return []
+
+
+
+
+
+
+
+
+def backup_database():
+
+    try:
+
+        from core.backup_manager import (
+            create_database_backup
+        )
+
+
+        return create_database_backup()
+
+
+
+    except Exception as e:
+
+        logger.exception(e)
 
         return False
