@@ -1,48 +1,288 @@
-# core/order_manager.py
+# core/position_manager.py
 
 from core.logger import logger
 
-from coinex_trade import coinex_trade
+from core.trade_manager import (
+    get_open_trades,
+    close_trade
+)
 
-from config import (
-    RISK_PER_TRADE,
-    INITIAL_BALANCE,
-    PAPER_TRADING,
-    ORDER_TYPE
+from core.market import (
+    get_current_price
+)
+
+from core.coinex_trade import (
+    coinex_trade
 )
 
 
 
 
 
-def calculate_quantity(
-    balance,
-    entry,
-    stop_loss
+
+TRAILING_STOP_ENABLED = True
+
+TRAILING_PERCENT = 1.5
+
+
+
+
+
+
+
+
+def monitor_positions():
+
+    try:
+
+
+        trades = get_open_trades()
+
+
+
+        if not trades:
+
+
+            return []
+
+
+
+
+
+        closed = []
+
+
+
+
+
+        for trade in trades:
+
+
+
+            symbol = trade.get(
+
+                "symbol"
+
+            )
+
+
+
+            side = trade.get(
+
+                "side"
+
+            )
+
+
+
+            tp = float(
+
+                trade.get(
+
+                    "tp"
+
+                )
+
+            )
+
+
+
+            sl = float(
+
+                trade.get(
+
+                    "sl"
+
+                )
+
+            )
+
+
+
+            quantity = float(
+
+                trade.get(
+
+                    "quantity"
+
+                )
+
+            )
+
+
+
+            trade_id = trade.get(
+
+                "id"
+
+            )
+
+
+
+
+
+            price = get_current_price(
+
+                symbol
+
+            )
+
+
+
+
+
+            if not price:
+
+
+                continue
+
+
+
+
+
+
+
+            should_close = False
+
+            reason = ""
+
+
+
+
+
+
+            if side == "BUY":
+
+
+                if price >= tp:
+
+
+                    should_close = True
+
+                    reason = "TAKE PROFIT"
+
+
+
+
+                elif price <= sl:
+
+
+                    should_close = True
+
+                    reason = "STOP LOSS"
+
+
+
+
+
+
+            elif side == "SELL":
+
+
+                if price <= tp:
+
+
+                    should_close = True
+
+                    reason = "TAKE PROFIT"
+
+
+
+
+                elif price >= sl:
+
+
+                    should_close = True
+
+                    reason = "STOP LOSS"
+
+
+
+
+
+
+
+
+            if should_close:
+
+
+
+                execute_close(
+
+                    trade,
+
+                    price,
+
+                    reason
+
+                )
+
+
+
+                closed.append(
+
+                    trade
+
+                )
+
+
+
+
+
+
+        return closed
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return []
+
+
+
+
+
+
+
+
+
+def execute_close(
+    trade,
+    price,
+    reason
 ):
 
     try:
 
 
-        if not balance or not entry or not stop_loss:
+        symbol = trade.get(
 
-            return 0
+            "symbol"
+
+        )
 
 
+        side = trade.get(
+
+            "side"
+
+        )
 
 
+        quantity = trade.get(
 
-        risk_amount = (
+            "quantity"
 
-            float(balance)
+        )
 
-            *
 
-            float(RISK_PER_TRADE)
+        trade_id = trade.get(
 
-            /
-
-            100
+            "id"
 
         )
 
@@ -50,13 +290,14 @@ def calculate_quantity(
 
 
 
-        distance = abs(
 
-            float(entry)
+        result = coinex_trade.close_position(
 
-            -
+            symbol,
 
-            float(stop_loss)
+            side,
+
+            quantity
 
         )
 
@@ -64,15 +305,135 @@ def calculate_quantity(
 
 
 
-        if distance <= 0:
-
-            return 0
 
 
+        if result:
 
 
 
-        quantity = risk_amount / distance
+            pnl = calculate_pnl(
+
+                trade,
+
+                price
+
+            )
+
+
+
+            close_trade(
+
+                trade_id,
+
+                price,
+
+                pnl
+
+            )
+
+
+
+            logger.info(
+
+                f"CLOSED {symbol} {reason}"
+
+            )
+
+
+
+            return True
+
+
+
+
+
+
+        return False
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def calculate_pnl(
+    trade,
+    exit_price
+):
+
+    try:
+
+
+        entry = float(
+
+            trade.get(
+
+                "entry"
+
+            )
+
+        )
+
+
+        quantity = float(
+
+            trade.get(
+
+                "quantity"
+
+            )
+
+        )
+
+
+        side = trade.get(
+
+            "side"
+
+        )
+
+
+
+
+
+        if side == "BUY":
+
+
+            pnl = (
+
+                exit_price
+
+                -
+
+                entry
+
+            ) * quantity
+
+
+
+        else:
+
+
+            pnl = (
+
+                entry
+
+                -
+
+                exit_price
+
+            ) * quantity
+
 
 
 
@@ -80,9 +441,9 @@ def calculate_quantity(
 
         return round(
 
-            quantity,
+            pnl,
 
-            6
+            4
 
         )
 
@@ -95,252 +456,3 @@ def calculate_quantity(
 
 
         return 0
-
-
-
-
-
-
-
-
-
-
-def validate_order_params(
-    symbol,
-    side,
-    quantity
-):
-
-    try:
-
-
-        if not symbol:
-
-            return False
-
-
-
-        if side not in [
-
-            "BUY",
-
-            "SELL"
-
-        ]:
-
-            return False
-
-
-
-        if float(quantity) <= 0:
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception:
-
-
-        return False
-
-
-
-
-
-
-
-
-
-
-def create_order(
-    symbol,
-    side,
-    quantity,
-    leverage=1
-):
-
-    try:
-
-
-        if not validate_order_params(
-
-            symbol,
-
-            side,
-
-            quantity
-
-        ):
-
-            logger.error(
-
-                "INVALID ORDER PARAMS"
-
-            )
-
-            return None
-
-
-
-
-
-        logger.info(
-
-            f"CREATING ORDER {symbol} {side}"
-
-        )
-
-
-
-
-
-        if PAPER_TRADING:
-
-
-            return {
-
-
-                "status":
-
-                    "PAPER",
-
-
-                "symbol":
-
-                    symbol,
-
-
-                "side":
-
-                    side,
-
-
-                "quantity":
-
-                    quantity,
-
-
-                "type":
-
-                    ORDER_TYPE,
-
-
-                "leverage":
-
-                    leverage
-
-            }
-
-
-
-
-
-        result = coinex_trade.create_order(
-
-            symbol,
-
-            side,
-
-            quantity,
-
-            leverage
-
-        )
-
-
-
-        if not result:
-
-
-            logger.error(
-
-                "EXCHANGE ORDER FAILED"
-
-            )
-
-
-            return None
-
-
-
-
-
-        return result
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-
-
-
-def close_order(
-    symbol,
-    side,
-    quantity
-):
-
-    try:
-
-
-        return coinex_trade.close_position(
-
-            symbol,
-
-            side,
-
-            quantity
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-
-
-
-def get_balance():
-
-    try:
-
-
-        return coinex_trade.get_balance()
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
