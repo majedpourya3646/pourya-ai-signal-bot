@@ -1,5 +1,6 @@
 # core/auto_trader.py
 
+
 from core.logger import logger
 
 
@@ -14,13 +15,9 @@ from core.trade_manager import (
 
 
 from config import (
-
-    MAX_OPEN_TRADES,
-
-    MIN_CONFIDENCE
-
+    MIN_CONFIDENCE,
+    MAX_OPEN_TRADES
 )
-
 
 
 
@@ -41,15 +38,7 @@ def execute_trade(
         if not opportunity:
 
 
-            logger.info(
-
-                "NO OPPORTUNITY"
-
-            )
-
-
             return None
-
 
 
 
@@ -63,13 +52,11 @@ def execute_trade(
         )
 
 
-
         signal = opportunity.get(
 
             "signal"
 
         )
-
 
 
         confidence = opportunity.get(
@@ -89,13 +76,11 @@ def execute_trade(
         )
 
 
-
         tp = opportunity.get(
 
             "tp"
 
         )
-
 
 
         sl = opportunity.get(
@@ -110,11 +95,13 @@ def execute_trade(
 
 
 
+
         logger.info(
 
-            f"TRADE CHECK {symbol} {signal} CONF={confidence}"
+            f"TRADE CHECK {symbol} CONF={confidence}"
 
         )
+
 
 
 
@@ -128,7 +115,31 @@ def execute_trade(
 
             logger.info(
 
-                f"TRADE REJECTED {symbol} CONF={confidence}"
+                f"TRADE REJECTED {symbol} LOW CONFIDENCE"
+
+            )
+
+
+            return None
+
+
+
+
+
+
+
+        open_trades = save_trade.get_open_trades()
+
+
+
+
+        if len(open_trades) >= MAX_OPEN_TRADES:
+
+
+
+            logger.info(
+
+                "MAX OPEN TRADES REACHED"
 
             )
 
@@ -142,7 +153,20 @@ def execute_trade(
 
 
 
-        result = create_order(
+        logger.info(
+
+            f"TRADE APPROVED {symbol}"
+
+        )
+
+
+
+
+
+
+
+
+        order = create_order(
 
             symbol,
 
@@ -163,7 +187,7 @@ def execute_trade(
 
 
 
-        if not result:
+        if not order:
 
 
 
@@ -183,52 +207,55 @@ def execute_trade(
 
 
 
-        trade_id = save_trade(
-
-            {
+        trade = {
 
 
-                "symbol":
+            "symbol":
 
-                    symbol,
-
-
-                "side":
-
-                    signal,
+                symbol,
 
 
-                "entry":
+            "side":
 
-                    entry,
-
-
-                "tp":
-
-                    tp,
+                signal,
 
 
-                "sl":
+            "entry":
 
-                    sl,
-
-
-                "ticket":
-
-                    result.get(
-
-                        "ticket"
-
-                    ),
+                entry,
 
 
-                "status":
+            "tp":
 
-                    "OPEN"
+                tp,
+
+
+            "sl":
+
+                sl,
+
+
+            "confidence":
+
+                confidence,
+
+
+            "status":
+
+                "OPEN"
+
+
+        }
 
 
 
-            }
+
+
+
+
+        save_trade(
+
+            trade
 
         )
 
@@ -240,29 +267,14 @@ def execute_trade(
 
         logger.info(
 
-            f"TRADE OPENED {trade_id}"
+            f"TRADE SAVED {symbol}"
 
         )
 
 
 
 
-
-        return {
-
-
-            "trade_id":
-
-                trade_id,
-
-
-            "order":
-
-                result
-
-
-
-        }
+        return trade
 
 
 
@@ -277,102 +289,6 @@ def execute_trade(
         logger.error(
 
             f"AUTO TRADER ERROR {e}"
-
-        )
-
-
-        return None
-
-
-
-
-
-
-
-
-
-
-
-
-
-def auto_trade(
-
-    opportunities
-
-):
-
-
-    try:
-
-
-
-        if not opportunities:
-
-
-            return None
-
-
-
-
-
-
-
-        sorted_items = sorted(
-
-            opportunities,
-
-            key=lambda x:
-
-                x.get(
-
-                    "confidence",
-
-                    0
-
-                ),
-
-            reverse=True
-
-        )
-
-
-
-
-
-
-
-        best = sorted_items[0]
-
-
-
-
-
-        logger.info(
-
-            f"BEST TRADE {best}"
-
-        )
-
-
-
-        return execute_trade(
-
-            best
-
-        )
-
-
-
-
-
-
-    except Exception as e:
-
-
-
-        logger.error(
-
-            f"AUTO TRADE LOOP ERROR {e}"
 
         )
 
