@@ -1,9 +1,13 @@
+# config.py
+
 import os
 
 from dotenv import load_dotenv
 
 
 load_dotenv()
+
+
 
 
 
@@ -38,20 +42,32 @@ MT5_PATH = os.getenv(
 
 
 
+
+
+
 # ===========================
 # Telegram
 # ===========================
 
 BOT_TOKEN = os.getenv(
+
     "BOT_TOKEN",
+
     ""
+
 )
 
 
 CHAT_ID = os.getenv(
+
     "CHAT_ID",
+
     ""
+
 )
+
+
+
 
 
 
@@ -65,6 +81,9 @@ MAX_RETRIES = 3
 
 
 
+
+
+
 # ===========================
 # Trading
 # ===========================
@@ -72,7 +91,7 @@ MAX_RETRIES = 3
 PAPER_TRADING = False
 
 
-MARKET_TYPE = "MT5"
+MARKET_TYPE = "FOREX"
 
 
 ORDER_TYPE = "market"
@@ -81,13 +100,39 @@ ORDER_TYPE = "market"
 LEVERAGE = 10
 
 
+
 RISK_PER_TRADE = 1
+
 
 
 MAX_OPEN_TRADES = 3
 
 
+
 MIN_CONFIDENCE = 60
+
+
+
+
+
+
+# ===========================
+# Lot Management
+# ===========================
+
+DEFAULT_LOT = 0.01
+
+
+MIN_LOT = 0.01
+
+
+MAX_LOT = 1.0
+
+
+USE_DYNAMIC_LOT = False
+
+
+
 
 
 
@@ -97,7 +142,11 @@ MIN_CONFIDENCE = 60
 
 DEFAULT_TP = 5.0
 
+
 DEFAULT_SL = 2.0
+
+
+
 
 
 
@@ -112,6 +161,9 @@ MAX_DAILY_LOSS_PERCENT = 5
 
 
 
+
+
+
 # ===========================
 # Balance
 # ===========================
@@ -120,20 +172,17 @@ INITIAL_BALANCE = 1000.0
 
 
 
+
+
+
 # ===========================
-# Lot Management
+# User / Profit
 # ===========================
 
-DEFAULT_LOT = 0.01
+DEFAULT_USER_PROFIT_SHARE = 70
 
 
-USE_DYNAMIC_LOT = True
 
-
-MIN_LOT = 0.01
-
-
-MAX_LOT = 5.0
 
 
 
@@ -147,13 +196,16 @@ SYMBOLS = [
 
     "ETHUSD",
 
-    "XAUUSD",
-
     "EURUSD",
 
-    "GBPUSD"
+    "GBPUSD",
+
+    "XAUUSD"
 
 ]
+
+
+
 
 
 
@@ -176,6 +228,9 @@ TIMEFRAMES = [
 
 
 
+
+
+
 # ===========================
 # Scheduler
 # ===========================
@@ -187,6 +242,9 @@ SCHEDULER_MODE = "RUNNING"
 
 
 
+
+
+
 # ===========================
 # Bot
 # ===========================
@@ -194,4 +252,4 @@ SCHEDULER_MODE = "RUNNING"
 BOT_NAME = "Pourya Trader AI"
 
 
-BOT_VERSION = "2.1.0 MT5"
+BOT_VERSION = "3.0.0 MT5"
