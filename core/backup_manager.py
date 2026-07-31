@@ -1,6 +1,7 @@
 # core/backup_manager.py
 
 import os
+
 import shutil
 
 from datetime import datetime
@@ -11,19 +12,11 @@ from core.logger import logger
 
 
 
-SOURCE_DATABASE = (
+DATABASE_PATH = "data/pourya_trader.db"
 
-    "data/pourya_trader.db"
+BACKUP_FOLDER = "backup"
 
-)
-
-
-
-BACKUP_FOLDER = (
-
-    "data/backups"
-
-)
+MAX_BACKUPS = 10
 
 
 
@@ -82,7 +75,7 @@ def create_database_backup():
 
         if not os.path.exists(
 
-            SOURCE_DATABASE
+            DATABASE_PATH
 
         ):
 
@@ -98,6 +91,8 @@ def create_database_backup():
 
 
 
+
+
         filename = (
 
             "backup_"
@@ -105,7 +100,6 @@ def create_database_backup():
             +
 
             datetime.utcnow()
-
             .strftime(
 
                 "%Y%m%d_%H%M%S"
@@ -132,7 +126,7 @@ def create_database_backup():
 
         shutil.copy2(
 
-            SOURCE_DATABASE,
+            DATABASE_PATH,
 
             destination
 
@@ -142,13 +136,17 @@ def create_database_backup():
 
         logger.info(
 
-            f"DATABASE BACKUP CREATED {destination}"
+            f"BACKUP CREATED {destination}"
 
         )
 
 
 
-        return destination
+        cleanup_old_backups()
+
+
+
+        return True
 
 
 
@@ -167,7 +165,7 @@ def create_database_backup():
 
 
 
-def list_backups():
+def get_backup_list():
 
     try:
 
@@ -176,19 +174,15 @@ def list_backups():
 
 
 
-        files = os.listdir(
+        files = []
+
+
+
+        for file in os.listdir(
 
             BACKUP_FOLDER
 
-        )
-
-
-
-        backups = []
-
-
-
-        for file in files:
+        ):
 
 
             if file.endswith(
@@ -198,7 +192,7 @@ def list_backups():
             ):
 
 
-                backups.append(
+                files.append(
 
                     file
 
@@ -206,7 +200,7 @@ def list_backups():
 
 
 
-        backups.sort(
+        files.sort(
 
             reverse=True
 
@@ -214,7 +208,7 @@ def list_backups():
 
 
 
-        return backups
+        return files
 
 
 
@@ -233,6 +227,76 @@ def list_backups():
 
 
 
+def cleanup_old_backups():
+
+    try:
+
+
+        backups = get_backup_list()
+
+
+
+        if len(backups) <= MAX_BACKUPS:
+
+
+            return True
+
+
+
+
+
+        old_files = backups[MAX_BACKUPS:]
+
+
+
+        for file in old_files:
+
+
+            path = os.path.join(
+
+                BACKUP_FOLDER,
+
+                file
+
+            )
+
+
+
+            os.remove(
+
+                path
+
+            )
+
+
+
+        logger.info(
+
+            "OLD BACKUPS CLEANED"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
 def restore_backup(
     filename
 ):
@@ -240,7 +304,7 @@ def restore_backup(
     try:
 
 
-        path = os.path.join(
+        source = os.path.join(
 
             BACKUP_FOLDER,
 
@@ -252,7 +316,7 @@ def restore_backup(
 
         if not os.path.exists(
 
-            path
+            source
 
         ):
 
@@ -261,11 +325,13 @@ def restore_backup(
 
 
 
+
+
         shutil.copy2(
 
-            path,
+            source,
 
-            SOURCE_DATABASE
+            DATABASE_PATH
 
         )
 
@@ -298,102 +364,28 @@ def restore_backup(
 
 
 
-def cleanup_old_backups(
-    keep=20
-):
-
-    try:
-
-
-        backups = list_backups()
-
-
-
-        if len(backups) <= keep:
-
-
-            return True
-
-
-
-        remove_files = backups[
-
-            keep:
-
-        ]
-
-
-
-        for file in remove_files:
-
-
-            os.remove(
-
-                os.path.join(
-
-                    BACKUP_FOLDER,
-
-                    file
-
-                )
-
-            )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
 def backup_status():
 
     try:
 
 
+        backups = get_backup_list()
+
+
+
         return {
-
-
-            "enabled":
-
-                True,
 
 
             "count":
 
-                len(
-
-                    list_backups()
-
-                ),
+                len(backups),
 
 
-            "last":
+            "latest":
 
-                (
-
-                    list_backups()[0]
-
-                    if list_backups()
-
-                    else None
-
-                )
-
+                backups[0]
+                if backups
+                else None
 
         }
 
