@@ -8,7 +8,12 @@ from core.logger import logger
 
 
 
-DB_PATH = "data/subscriptions.db"
+
+
+DB_PATH = "data/pourya_trader.db"
+
+
+
 
 
 
@@ -19,7 +24,9 @@ def get_connection():
     try:
 
         return sqlite3.connect(
+
             DB_PATH
+
         )
 
 
@@ -36,17 +43,15 @@ def get_connection():
 
 
 
+
+
+
 def init_subscription_database():
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
 
 
 
@@ -58,23 +63,21 @@ def init_subscription_database():
 
             """
 
-            CREATE TABLE IF NOT EXISTS subscriptions (
+            CREATE TABLE IF NOT EXISTS subscriptions
+
+            (
 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-                telegram_id TEXT UNIQUE,
+                telegram_id TEXT,
 
-                plan TEXT DEFAULT 'FREE',
+                plan TEXT,
 
                 start_date TEXT,
 
                 expire_date TEXT,
 
-                active INTEGER DEFAULT 0,
-
-                max_trades INTEGER DEFAULT 1,
-
-                created_at TEXT
+                active INTEGER DEFAULT 1
 
             )
 
@@ -107,9 +110,11 @@ def init_subscription_database():
 
 
 
+
+
 def create_subscription(
     telegram_id,
-    plan="BASIC",
+    plan="FREE",
     days=30
 ):
 
@@ -119,9 +124,8 @@ def create_subscription(
         conn = get_connection()
 
 
-        if not conn:
 
-            return False
+        cursor = conn.cursor()
 
 
 
@@ -129,53 +133,11 @@ def create_subscription(
 
 
 
-        expire = (
+        expire = start + timedelta(
 
-            start
-
-            +
-
-            timedelta(
-                days=days
-            )
+            days=days
 
         )
-
-
-
-        limits = {
-
-
-            "FREE":
-
-                1,
-
-
-            "BASIC":
-
-                3,
-
-
-            "VIP":
-
-                10
-
-
-        }
-
-
-
-        max_trades = limits.get(
-
-            plan,
-
-            1
-
-        )
-
-
-
-        cursor = conn.cursor()
 
 
 
@@ -183,7 +145,7 @@ def create_subscription(
 
             """
 
-            INSERT OR REPLACE INTO subscriptions
+            INSERT INTO subscriptions
 
             (
 
@@ -193,35 +155,23 @@ def create_subscription(
 
                 start_date,
 
-                expire_date,
-
-                active,
-
-                max_trades,
-
-                created_at
+                expire_date
 
             )
 
-            VALUES (?,?,?,?,?,?,?)
+            VALUES (?,?,?,?)
 
             """,
 
             (
 
-                telegram_id,
+                str(telegram_id),
 
                 plan,
 
                 start.isoformat(),
 
-                expire.isoformat(),
-
-                1,
-
-                max_trades,
-
-                start.isoformat()
+                expire.isoformat()
 
             )
 
@@ -246,6 +196,8 @@ def create_subscription(
 
 
         return False
+
+
 
 
 
@@ -260,11 +212,6 @@ def get_subscription(
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return None
 
 
 
@@ -282,11 +229,15 @@ def get_subscription(
 
             WHERE telegram_id=?
 
+            ORDER BY id DESC
+
+            LIMIT 1
+
             """,
 
             (
 
-                telegram_id,
+                str(telegram_id),
 
             )
 
@@ -303,6 +254,7 @@ def get_subscription(
 
 
         if not row:
+
 
             return None
 
@@ -326,25 +278,19 @@ def get_subscription(
                 row[2],
 
 
-            "start":
+            "start_date":
 
                 row[3],
 
 
-            "expire":
+            "expire_date":
 
                 row[4],
 
 
             "active":
 
-                row[5],
-
-
-            "max_trades":
-
-                row[6]
-
+                row[5]
 
         }
 
@@ -363,6 +309,8 @@ def get_subscription(
 
 
 
+
+
 def check_subscription(
     telegram_id
 ):
@@ -371,11 +319,15 @@ def check_subscription(
 
 
         subscription = get_subscription(
+
             telegram_id
+
         )
 
 
+
         if not subscription:
+
 
             return False
 
@@ -383,7 +335,7 @@ def check_subscription(
 
         expire = datetime.fromisoformat(
 
-            subscription["expire"]
+            subscription["expire_date"]
 
         )
 
@@ -393,7 +345,9 @@ def check_subscription(
 
 
             disable_subscription(
+
                 telegram_id
+
             )
 
 
@@ -422,6 +376,8 @@ def check_subscription(
 
 
 
+
+
 def disable_subscription(
     telegram_id
 ):
@@ -430,6 +386,7 @@ def disable_subscription(
 
 
         conn = get_connection()
+
 
 
         cursor = conn.cursor()
@@ -450,7 +407,7 @@ def disable_subscription(
 
             (
 
-                telegram_id,
+                str(telegram_id),
 
             )
 
@@ -481,29 +438,32 @@ def disable_subscription(
 
 
 
-def get_user_limit(
-    telegram_id
+
+
+def upgrade_subscription(
+    telegram_id,
+    plan,
+    days
 ):
 
     try:
 
 
-        subscription = get_subscription(
+        disable_subscription(
+
             telegram_id
+
         )
 
 
-        if not subscription:
 
-            return 0
+        return create_subscription(
 
+            telegram_id,
 
+            plan,
 
-        return subscription.get(
-
-            "max_trades",
-
-            0
+            days
 
         )
 
@@ -515,4 +475,62 @@ def get_user_limit(
         logger.exception(e)
 
 
-        return 0
+        return False
+
+
+
+
+
+
+
+
+def get_plan_limits(
+    plan
+):
+
+    plans = {
+
+
+        "FREE":
+
+            {
+
+                "max_trades":1,
+
+                "risk":0.5
+
+            },
+
+
+        "VIP":
+
+            {
+
+                "max_trades":10,
+
+                "risk":2
+
+            },
+
+
+        "PRO":
+
+            {
+
+                "max_trades":50,
+
+                "risk":3
+
+            }
+
+    }
+
+
+
+    return plans.get(
+
+        plan,
+
+        plans["FREE"]
+
+    )
