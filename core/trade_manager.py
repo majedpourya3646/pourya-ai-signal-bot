@@ -2,11 +2,13 @@
 
 from datetime import datetime
 
+from core.logger import logger
+
 from core.database_manager import (
     get_connection
 )
 
-from core.logger import logger
+
 
 
 
@@ -20,8 +22,7 @@ def open_trade(
     tp,
     sl,
     quantity,
-    confidence,
-    telegram_id=None
+    confidence
 ):
 
     try:
@@ -30,51 +31,6 @@ def open_trade(
         conn = get_connection()
 
         cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            SELECT id
-
-            FROM trades
-
-            WHERE symbol=?
-
-            AND status='OPEN'
-
-            """,
-
-            (
-
-                symbol,
-
-            )
-
-        )
-
-
-
-        exists = cursor.fetchone()
-
-
-
-        if exists:
-
-            conn.close()
-
-            logger.warning(
-
-                f"TRADE ALREADY OPEN {symbol}"
-
-            )
-
-            return False
-
-
-
 
 
 
@@ -102,7 +58,7 @@ def open_trade(
 
                 status,
 
-                created_at
+                opened_at
 
             )
 
@@ -165,9 +121,8 @@ def open_trade(
 
         logger.exception(e)
 
-        return False
 
-
+        return None
 
 
 
@@ -177,8 +132,8 @@ def open_trade(
 
 def close_trade(
     trade_id,
-    exit_price=None,
-    pnl=0
+    exit_price,
+    pnl
 ):
 
     try:
@@ -198,13 +153,11 @@ def close_trade(
 
             SET
 
-            exit=?,
+                status=?,
 
-            pnl=?,
+                pnl=?,
 
-            status='CLOSED',
-
-            closed_at=?
+                closed_at=?
 
             WHERE id=?
 
@@ -212,7 +165,7 @@ def close_trade(
 
             (
 
-                exit_price,
+                "CLOSED",
 
                 float(pnl),
 
@@ -234,7 +187,7 @@ def close_trade(
 
         logger.info(
 
-            f"TRADE CLOSED {trade_id}"
+            f"TRADE CLOSED ID={trade_id}"
 
         )
 
@@ -249,9 +202,8 @@ def close_trade(
 
         logger.exception(e)
 
+
         return False
-
-
 
 
 
@@ -296,22 +248,13 @@ def get_open_trades():
 
 
 
-        trades = []
+        return [
 
+            dict(row)
 
+            for row in rows
 
-        for row in rows:
-
-
-            trades.append(
-
-                dict(row)
-
-            )
-
-
-
-        return trades
+        ]
 
 
 
@@ -319,6 +262,7 @@ def get_open_trades():
 
 
         logger.exception(e)
+
 
         return []
 
@@ -330,173 +274,8 @@ def get_open_trades():
 
 
 
-
-
-def get_trade(
-    trade_id
-):
-
-    try:
-
-
-        conn = get_connection()
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            SELECT *
-
-            FROM trades
-
-            WHERE id=?
-
-            """,
-
-            (
-
-                trade_id,
-
-            )
-
-        )
-
-
-
-        row = cursor.fetchone()
-
-
-
-        conn.close()
-
-
-
-        if not row:
-
-            return None
-
-
-
-        return dict(row)
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-        return None
-
-
-
-
-
-
-
-
-
-
-
-def update_trade_pnl(
-    trade_id,
-    pnl
-):
-
-    try:
-
-
-        conn = get_connection()
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            UPDATE trades
-
-            SET pnl=?
-
-            WHERE id=?
-
-            """,
-
-            (
-
-                float(pnl),
-
-                trade_id
-
-            )
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-        return False
-
-
-
-
-
-
-
-
-
-
-
-def count_open_positions():
-
-    try:
-
-
-        return len(
-
-            get_open_trades()
-
-        )
-
-
-
-    except Exception:
-
-
-        return 0
-
-
-
-
-
-
-
-
-
-
-
 def get_trade_history(
-    limit=50
+    limit=100
 ):
 
     try:
@@ -555,4 +334,101 @@ def get_trade_history(
 
         logger.exception(e)
 
+
         return []
+
+
+
+
+
+
+
+
+
+def get_trade_by_id(
+    trade_id
+):
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT *
+
+            FROM trades
+
+            WHERE id=?
+
+            """,
+
+            (
+
+                trade_id,
+
+            )
+
+        )
+
+
+
+        row = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if row:
+
+            return dict(row)
+
+
+
+        return None
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
+
+
+
+
+
+
+
+def count_open_trades():
+
+    try:
+
+
+        return len(
+
+            get_open_trades()
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return 0
