@@ -8,8 +8,8 @@ from core.trade_manager import (
     get_trade_history
 )
 
-from core.notification_manager import (
-    calculate_profit_split
+from core.profit_manager import (
+    calculate_monthly_software_income
 )
 
 
@@ -18,10 +18,18 @@ from core.notification_manager import (
 
 def filter_trades_by_date(
     trades,
-    start_date
+    days
 ):
 
     try:
+
+
+        limit = datetime.utcnow() - timedelta(
+
+            days=days
+
+        )
+
 
 
         result = []
@@ -32,37 +40,36 @@ def filter_trades_by_date(
 
 
             created = trade.get(
+
                 "created_at"
+
             )
+
 
 
             if not created:
 
+
                 continue
 
 
 
-            try:
+            trade_date = datetime.fromisoformat(
+
+                created
+
+            )
 
 
-                trade_date = datetime.fromisoformat(
-                    created
+
+            if trade_date >= limit:
+
+
+                result.append(
+
+                    trade
+
                 )
-
-
-                if trade_date >= start_date:
-
-
-                    result.append(
-                        trade
-                    )
-
-
-
-            except:
-
-
-                continue
 
 
 
@@ -92,11 +99,19 @@ def calculate_statistics(
     try:
 
 
-        total_profit = 0
+        total = len(
+
+            trades
+
+        )
+
+
 
         wins = 0
 
         losses = 0
+
+        profit = 0
 
 
 
@@ -106,32 +121,34 @@ def calculate_statistics(
             pnl = float(
 
                 trade.get(
+
                     "pnl",
+
                     0
+
                 )
 
             )
 
 
 
-            total_profit += pnl
+            profit += pnl
 
 
 
             if pnl > 0:
 
+
                 wins += 1
+
 
 
             elif pnl < 0:
 
+
                 losses += 1
 
 
-
-
-
-        total = wins + losses
 
 
 
@@ -176,20 +193,27 @@ def calculate_statistics(
                 losses,
 
 
-            "profit":
-
-                round(
-                    total_profit,
-                    4
-                ),
-
-
             "win_rate":
 
                 round(
+
                     win_rate,
+
                     2
+
+                ),
+
+
+            "profit":
+
+                round(
+
+                    profit,
+
+                    6
+
                 )
+
 
         }
 
@@ -219,25 +243,11 @@ def generate_daily_report():
 
 
 
-        start = (
-
-            datetime.utcnow()
-
-            -
-
-            timedelta(
-                days=1
-            )
-
-        )
-
-
-
         daily = filter_trades_by_date(
 
             trades,
 
-            start
+            1
 
         )
 
@@ -253,7 +263,7 @@ def generate_daily_report():
 
         return format_report(
 
-            "روزانه",
+            "DAILY",
 
             stats
 
@@ -285,25 +295,11 @@ def generate_weekly_report():
 
 
 
-        start = (
-
-            datetime.utcnow()
-
-            -
-
-            timedelta(
-                days=7
-            )
-
-        )
-
-
-
         weekly = filter_trades_by_date(
 
             trades,
 
-            start
+            7
 
         )
 
@@ -319,7 +315,7 @@ def generate_weekly_report():
 
         return format_report(
 
-            "هفتگی",
+            "WEEKLY",
 
             stats
 
@@ -351,25 +347,11 @@ def generate_monthly_report():
 
 
 
-        start = (
-
-            datetime.utcnow()
-
-            -
-
-            timedelta(
-                days=30
-            )
-
-        )
-
-
-
         monthly = filter_trades_by_date(
 
             trades,
 
-            start
+            30
 
         )
 
@@ -385,7 +367,7 @@ def generate_monthly_report():
 
         return format_report(
 
-            "ماهانه",
+            "MONTHLY",
 
             stats
 
@@ -420,31 +402,39 @@ def format_report(
 
 📊 گزارش {period}
 
-🤖 Pourya Trader AI
+
+📅 تاریخ:
+{datetime.now().strftime('%Y-%m-%d')}
 
 
-📌 تعداد معاملات:
+🔢 تعداد معاملات:
+
 {stats.get('total')}
 
 
 ✅ معاملات سودده:
+
 {stats.get('wins')}
 
 
 ❌ معاملات ضررده:
+
 {stats.get('losses')}
 
 
-📈 درصد موفقیت:
+🎯 درصد موفقیت:
+
 {stats.get('win_rate')}%
 
 
-💰 سود / زیان:
+💰 سود خالص:
+
 {stats.get('profit')}$
 
 
-⏰ زمان گزارش:
-{datetime.now().strftime('%Y-%m-%d %H:%M')}
+🤖 سهم نرم افزار:
+
+محاسبه در سیستم تقسیم سود
 
 """
 
@@ -465,46 +455,24 @@ def format_report(
 
 
 
-def create_user_profit_report(
-    profit,
-    user_percent=50
-):
+def get_performance_summary():
 
     try:
 
 
-        split = calculate_profit_split(
+        trades = get_trade_history()
 
-            profit,
 
-            user_percent
+
+        stats = calculate_statistics(
+
+            trades
 
         )
 
 
 
-        return {
-
-
-            "total":
-
-                profit,
-
-
-            "user":
-
-                split.get(
-                    "user_profit"
-                ),
-
-
-            "software":
-
-                split.get(
-                    "software_profit"
-                )
-
-        }
+        return stats
 
 
 
