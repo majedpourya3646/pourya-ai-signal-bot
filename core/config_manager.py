@@ -7,87 +7,114 @@ from core.logger import logger
 
 
 
-
-CONFIG_FILE = "data/settings.json"
-
+CONFIG_PATH = "data/settings.json"
 
 
 
 
 DEFAULT_SETTINGS = {
 
+    "trading_enabled": True,
 
-    "auto_trade":
+    "emergency_mode": False,
 
-    False,
+    "paper_trading": True,
 
+    "scheduler_mode": "TEST",
 
-    "trading_enabled":
-
-    True,
-
-
-    "min_confidence":
-
-    65,
+    "trading_interval": 300,
 
 
-    "trading_interval":
+    "notification_level": "BASIC",
 
-    300,
+    "notification_channels": [
 
+        "telegram"
 
-    "loop_interval":
-
-    60,
-
-
-    "max_open_trades":
-
-    3,
+    ],
 
 
-    "risk_percent":
+    "email_enabled": False,
 
-    1,
-
-
-    "paper_trading":
-
-    True,
+    "sms_enabled": False,
 
 
-    "leverage":
-
-    10,
+    "user_profit_percent": 50,
 
 
-    "min_risk_reward":
-
-    2.0,
+    "risk_percent": 1,
 
 
-    "default_tp":
-
-    5,
+    "max_open_trades": 3,
 
 
-    "default_sl":
-
-    2,
+    "leverage": 10,
 
 
-    "market_type":
-
-    "FUTURES",
-
-
-    "order_type":
-
-    "market"
+    "trading_mode": "AUTO"
 
 }
 
+
+
+
+def ensure_config():
+
+    try:
+
+
+        directory = os.path.dirname(
+            CONFIG_PATH
+        )
+
+
+        if directory and not os.path.exists(directory):
+
+            os.makedirs(
+                directory
+            )
+
+
+
+        if not os.path.exists(CONFIG_PATH):
+
+
+            with open(
+                CONFIG_PATH,
+                "w",
+                encoding="utf-8"
+            ) as file:
+
+
+                json.dump(
+
+                    DEFAULT_SETTINGS,
+
+                    file,
+
+                    indent=4,
+
+                    ensure_ascii=False
+
+                )
+
+
+
+            return True
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
 
 
 
@@ -99,103 +126,20 @@ def load_settings():
     try:
 
 
-
-        if not os.path.exists(
-
-            CONFIG_FILE
-
-        ):
-
-
-
-            save_settings(
-
-                DEFAULT_SETTINGS.copy()
-
-            )
-
-
-
-            return DEFAULT_SETTINGS.copy()
-
-
-
+        ensure_config()
 
 
 
         with open(
-
-            CONFIG_FILE,
-
+            CONFIG_PATH,
             "r",
-
             encoding="utf-8"
-
         ) as file:
 
 
-            settings = json.load(file)
-
-
-
-
-
-        if not isinstance(
-
-            settings,
-
-            dict
-
-        ):
-
-
-
-            settings = {}
-
-
-
-
-
-        updated = False
-
-
-
-
-
-        for key, value in DEFAULT_SETTINGS.items():
-
-
-
-            if key not in settings:
-
-
-
-                settings[key] = value
-
-
-                updated = True
-
-
-
-
-
-
-        if updated:
-
-
-            save_settings(
-
-                settings
-
+            return json.load(
+                file
             )
-
-
-
-
-
-        return settings
-
-
 
 
 
@@ -205,9 +149,7 @@ def load_settings():
         logger.exception(e)
 
 
-        return DEFAULT_SETTINGS.copy()
-
-
+        return DEFAULT_SETTINGS
 
 
 
@@ -221,29 +163,11 @@ def save_settings(
     try:
 
 
-
-        os.makedirs(
-
-            "data",
-
-            exist_ok=True
-
-        )
-
-
-
-
-
         with open(
-
-            CONFIG_FILE,
-
+            CONFIG_PATH,
             "w",
-
             encoding="utf-8"
-
         ) as file:
-
 
 
             json.dump(
@@ -260,11 +184,7 @@ def save_settings(
 
 
 
-
-
         return True
-
-
 
 
 
@@ -281,8 +201,6 @@ def save_settings(
 
 
 
-
-
 def get_setting(
     key,
     default=None
@@ -291,20 +209,14 @@ def get_setting(
     try:
 
 
-
         settings = load_settings()
 
 
 
         return settings.get(
-
             key,
-
             default
-
         )
-
-
 
 
 
@@ -321,14 +233,12 @@ def get_setting(
 
 
 
-
 def update_setting(
     key,
     value
 ):
 
     try:
-
 
 
         settings = load_settings()
@@ -339,15 +249,9 @@ def update_setting(
 
 
 
-
-
         return save_settings(
-
             settings
-
         )
-
-
 
 
 
@@ -358,69 +262,6 @@ def update_setting(
 
 
         return False
-
-
-
-
-
-
-
-
-def update_settings(
-    values
-):
-
-    try:
-
-
-
-        if not isinstance(
-
-            values,
-
-            dict
-
-        ):
-
-
-            return False
-
-
-
-
-
-        settings = load_settings()
-
-
-
-        settings.update(
-
-            values
-
-        )
-
-
-
-
-
-        return save_settings(
-
-            settings
-
-        )
-
-
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
 
 
 
@@ -431,10 +272,7 @@ def get_all_settings():
 
     try:
 
-
         return load_settings()
-
-
 
 
     except Exception as e:
@@ -444,3 +282,25 @@ def get_all_settings():
 
 
         return {}
+
+
+
+
+
+def reset_settings():
+
+    try:
+
+
+        return save_settings(
+            DEFAULT_SETTINGS
+        )
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
