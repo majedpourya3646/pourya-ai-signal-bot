@@ -1,4 +1,6 @@
-# core/auto_trader.py
+from core.notification.notification_router import (
+    notify_trade_opened
+)core/auto_trader.py
 
 from datetime import datetime
 
@@ -282,7 +284,38 @@ def execute_opportunity(
 
             return None
 
+        trade_report = {
 
+            "symbol": symbol,
+
+            "side": side,
+
+            "entry": entry,
+
+            "quantity": quantity,
+
+            "leverage": LEVERAGE,
+
+            "tp": tp,
+
+            "sl": sl,
+
+            "confidence": score,
+
+            "order_id": order.get(
+                "data",
+                {}
+            ).get(
+                "order_id",
+                "-"
+            )
+
+        }
+
+
+        notify_trade_opened(
+            trade_report
+        )
 
         result = {
 
