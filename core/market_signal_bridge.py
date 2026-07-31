@@ -15,262 +15,46 @@ from config import (
 
 
 
-def normalize_signal(
-    signal
-):
+
+
+def analyze_market_symbols():
 
     try:
 
 
-        signal = str(
+        results = []
 
-            signal
 
-        ).upper().strip()
 
 
 
-        if signal in [
+        for symbol in SYMBOLS:
 
-            "STRONG BUY",
 
-            "EARLY BUY"
 
-        ]:
+            try:
 
-            return "BUY"
 
+                analysis = analyze_symbol(
 
-
-        if signal in [
-
-            "STRONG SELL",
-
-            "EARLY SELL"
-
-        ]:
-
-            return "SELL"
-
-
-
-        return signal
-
-
-
-    except Exception:
-
-
-        return "WAIT"
-
-
-
-
-
-
-
-
-
-
-def analyze_market_symbol(
-    symbol
-):
-
-    try:
-
-
-        result = analyze_symbol(
-
-            symbol
-
-        )
-
-
-
-        if not result:
-
-            return None
-
-
-
-
-
-        signal = normalize_signal(
-
-            result.get(
-
-                "signal",
-
-                "WAIT"
-
-            )
-
-        )
-
-
-
-        if signal not in [
-
-            "BUY",
-
-            "SELL"
-
-        ]:
-
-            return None
-
-
-
-
-
-        return {
-
-
-            "symbol":
-
-                symbol,
-
-
-
-            "signal":
-
-                signal,
-
-
-
-            "confidence":
-
-                result.get(
-
-                    "confidence",
-
-                    0
-
-                ),
-
-
-
-            "entry":
-
-                result.get(
-
-                    "entry"
-
-                ),
-
-
-
-            "tp":
-
-                result.get(
-
-                    "tp"
-
-                ),
-
-
-
-            "sl":
-
-                result.get(
-
-                    "sl"
-
-                ),
-
-
-
-            "buy_score":
-
-                result.get(
-
-                    "buy_score",
-
-                    0
-
-                ),
-
-
-
-            "sell_score":
-
-                result.get(
-
-                    "sell_score",
-
-                    0
-
-                ),
-
-
-
-            "timeframes":
-
-                result.get(
-
-                    "timeframes",
-
-                    {}
+                    symbol
 
                 )
 
-        }
 
 
-
-    except Exception as e:
-
-
-        logger.exception(e)
+                if not analysis:
 
 
-        return None
+                    continue
 
 
 
 
 
+                results.append(
 
-
-
-
-
-def analyze_market_symbols(
-    symbols=None
-):
-
-    try:
-
-
-        if symbols is None:
-
-            symbols = SYMBOLS
-
-
-
-
-
-        opportunities = []
-
-
-
-        for symbol in symbols:
-
-
-
-            result = analyze_market_symbol(
-
-                symbol
-
-            )
-
-
-
-            if result:
-
-                opportunities.append(
-
-                    result
+                    analysis
 
                 )
 
@@ -278,33 +62,21 @@ def analyze_market_symbols(
 
 
 
-        opportunities.sort(
+            except Exception as e:
 
-            key=lambda x:
 
-            x.get(
+                logger.exception(e)
 
-                "confidence",
 
-                0
-
-            ),
-
-            reverse=True
-
-        )
+                continue
 
 
 
-        logger.info(
-
-            f"MARKET SIGNALS FOUND {len(opportunities)}"
-
-        )
 
 
 
-        return opportunities
+
+        return results
 
 
 
@@ -324,23 +96,18 @@ def analyze_market_symbols(
 
 
 
-
-def get_best_signal():
+def analyze_single_symbol(
+    symbol
+):
 
     try:
 
 
-        signals = analyze_market_symbols()
+        return analyze_symbol(
 
+            symbol
 
-
-        if not signals:
-
-            return None
-
-
-
-        return signals[0]
+        )
 
 
 
