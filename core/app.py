@@ -1,6 +1,14 @@
 # core/app.py
 
+import time
+
+
 from core.logger import logger
+
+
+from core.database import (
+    initialize_database
+)
 
 
 from core.mt5_connector import (
@@ -9,18 +17,18 @@ from core.mt5_connector import (
 )
 
 
-from core.database import (
-    initialize_database
-)
-
-
-from core.scheduler import (
-    start_scheduler
+from core.telegram import (
+    send_message
 )
 
 
 from core.position_monitor import (
     start_position_monitor
+)
+
+
+from scheduler.trading_loop import (
+    start_trading_loop
 )
 
 
@@ -34,101 +42,53 @@ from core.report_service import (
 )
 
 
-from core.telegram import (
-    send_message
-)
-
-
-
-
-
-def system_health():
-
-    status = {
-
-        "database": True,
-
-        "mt5": True,
-
-        "telegram": True
-
-    }
-
-
-    return status
-
-
 
 
 
 def initialize_system():
 
-    try:
-
-
-        logger.info(
-            "SYSTEM INITIALIZATION STARTED"
-        )
+    logger.info(
+        "SYSTEM INITIALIZATION STARTED"
+    )
 
 
 
-        initialize_database()
-
-
-        logger.info(
-            "DATABASE INITIALIZED"
-        )
+    initialize_database()
 
 
 
-        mt5_status = initialize_mt5()
+    logger.info(
+        "DATABASE INITIALIZED"
+    )
 
 
 
-        if not mt5_status:
-
-
-            logger.error(
-                "MT5 CONNECTION FAILED"
-            )
-
-
-            return False
+    mt5_status = initialize_mt5()
 
 
 
-
-        logger.info(
-            f"HEALTH STATUS {system_health()}"
-        )
-
-
-
-        send_message(
-            "🤖 Pourya Trader AI\n\nMT5 Connected ✅\nSystem Ready"
-        )
-
-
-
-        logger.info(
-            "SYSTEM READY"
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
+    if not mt5_status:
 
 
         logger.error(
-            f"SYSTEM INIT ERROR {e}"
+            "MT5 CONNECTION FAILED"
         )
 
 
         return False
+
+
+
+
+    logger.info(
+
+        "MT5 CONNECTION READY"
+
+    )
+
+
+
+    return True
 
 
 
@@ -138,35 +98,21 @@ def start_services():
 
 
     logger.info(
-        "TRADING LOOP STARTED"
+        "STARTING SERVICES"
     )
 
 
-    start_scheduler()
 
+    start_trading_loop()
 
-
-    logger.info(
-        "POSITION MONITOR STARTED"
-    )
 
 
     start_position_monitor()
 
 
 
-    logger.info(
-        "HEALTH MONITOR STARTED"
-    )
-
-
     start_health_monitor()
 
-
-
-    logger.info(
-        "REPORT SERVICE STARTED"
-    )
 
 
     start_report_service()
@@ -181,28 +127,6 @@ def start_services():
 
 
 
-def shutdown():
-
-    try:
-
-
-        shutdown_mt5()
-
-
-        logger.info(
-            "MT5 SHUTDOWN"
-        )
-
-
-    except Exception as e:
-
-
-        logger.error(
-            f"SHUTDOWN ERROR {e}"
-        )
-
-
-
 
 
 def run():
@@ -213,21 +137,73 @@ def run():
     )
 
 
-    if initialize_system():
 
-
-        start_services()
-
-
-        logger.info(
-            "POURYA TRADER AI RUNNING"
-        )
-
-
-
-    else:
+    if not initialize_system():
 
 
         logger.error(
             "SYSTEM START FAILED"
+        )
+
+
+        return
+
+
+
+
+    send_message(
+
+        """
+
+🤖 Pourya Trader AI
+
+✅ MT5 Connected
+
+✅ Trading Engine Started
+
+✅ Position Monitor Active
+
+
+"""
+
+    )
+
+
+
+    start_services()
+
+
+
+    logger.info(
+        "POURYA TRADER AI RUNNING"
+    )
+
+
+
+    try:
+
+
+        while True:
+
+
+            time.sleep(
+                60
+            )
+
+
+
+    except KeyboardInterrupt:
+
+
+        logger.info(
+            "SYSTEM STOPPING"
+        )
+
+
+        shutdown_mt5()
+
+
+
+        logger.info(
+            "SYSTEM STOPPED"
         )
