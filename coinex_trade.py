@@ -1,147 +1,168 @@
 # coinex_trade.py
 
+import time
+import hmac
+import hashlib
+import requests
+
 from config import (
+    BASE_URL,
+    COINEX_API_KEY,
+    COINEX_SECRET_KEY,
+    MARKET_TYPE,
     PAPER_TRADING,
-    ORDER_TYPE,
-    LEVERAGE
+    REQUEST_TIMEOUT
 )
 
 from core.logger import logger
-from coinex_api import coinex
+
+
 
 
 
 class CoinExTrade:
 
 
-    def create_order(
+    def __init__(self):
+
+        self.base_url = BASE_URL
+
+        self.api_key = COINEX_API_KEY
+
+        self.secret = COINEX_SECRET_KEY
+
+
+
+
+
+    def _sign(
         self,
-        market,
-        side,
-        amount,
-        order_type=None,
-        leverage=LEVERAGE
+        payload
+    ):
+
+        try:
+
+            message = "&".join(
+
+                [
+
+                    f"{k}={payload[k]}"
+
+                    for k in sorted(payload)
+
+                ]
+
+            )
+
+
+            return hmac.new(
+
+                self.secret.encode(),
+
+                message.encode(),
+
+                hashlib.sha256
+
+            ).hexdigest()
+
+
+
+        except Exception as e:
+
+            logger.exception(e)
+
+            return ""
+
+
+
+
+
+
+    def _request(
+        self,
+        method,
+        path,
+        params=None
     ):
 
         try:
 
 
-            if order_type is None:
-
-                order_type = ORDER_TYPE
-
-
-
-            side = side.lower()
-
-
-
-            if side not in [
-                "buy",
-                "sell"
-            ]:
-
-                logger.error(
-                    f"INVALID SIDE {side}"
-                )
-
-                return None
-
-
-
-
-            logger.info(
-                f"PAPER_TRADING={PAPER_TRADING}"
-            )
-
-
-
             if PAPER_TRADING:
-
-
-                logger.info(
-                    f"PAPER ORDER | {side} | {market} | qty={amount}"
-                )
-
 
                 return {
 
-                    "code": 0,
 
-                    "message":
-                    "Paper Trading",
+                    "code":0,
 
-                    "data": {
 
-                        "market":
-                        market,
+                    "data":{}
 
-                        "side":
-                        side,
-
-                        "amount":
-                        amount,
-
-                        "leverage":
-                        leverage,
-
-                        "order_id":
-                        "PAPER"
-
-                    }
 
                 }
 
 
 
+            if params is None:
 
-            logger.info(
-                f"REAL ORDER | {side} | {market} | qty={amount}"
-            )
-
+                params = {}
 
 
-            result = coinex.create_futures_order(
 
-                market=market,
+            timestamp = str(
 
-                side=side,
-
-                amount=amount,
-
-                order_type=order_type,
-
-                leverage=leverage
+                int(time.time()*1000)
 
             )
 
 
 
-            if not result:
+            params["access_id"] = self.api_key
 
-                logger.error(
-                    "EMPTY ORDER RESPONSE"
+            params["tonce"] = timestamp
+
+
+
+            params["signature"] = self._sign(
+
+                params
+
+            )
+
+
+
+            url = self.base_url + path
+
+
+
+            if method == "GET":
+
+                response = requests.get(
+
+                    url,
+
+                    params=params,
+
+                    timeout=REQUEST_TIMEOUT
+
                 )
 
-                return None
 
+            else:
 
+                response = requests.post(
 
-            if result.get(
-                "code"
-            ) != 0:
+                    url,
 
+                    json=params,
 
-                logger.error(
-                    result
+                    timeout=REQUEST_TIMEOUT
+
                 )
 
-                return None
 
 
-
-            return result
-
+            return response.json()
 
 
 
@@ -150,6 +171,60 @@ class CoinExTrade:
 
             logger.exception(e)
 
+            return None
+
+
+
+
+
+
+
+
+    def get_ticker(
+        self,
+        symbol
+    ):
+
+        try:
+
+            url = (
+
+                self.base_url
+
+                +
+
+                "/spot/ticker"
+
+            )
+
+
+
+            response = requests.get(
+
+                url,
+
+                params={
+
+                    "market":
+
+                    symbol
+
+                },
+
+                timeout=REQUEST_TIMEOUT
+
+            )
+
+
+
+            return response.json()
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
 
             return None
 
@@ -157,43 +232,99 @@ class CoinExTrade:
 
 
 
-    def open_long(
+
+
+
+    def create_order(
         self,
-        symbol,
-        quantity
+        market,
+        side,
+        amount,
+        leverage=10
     ):
 
-
-        return self.create_order(
-
-            market=symbol,
-
-            side="buy",
-
-            amount=quantity
-
-        )
+        try:
 
 
+            if PAPER_TRADING:
+
+                return {
+
+                    "code":0,
+
+                    "status":"PAPER",
+
+                    "data":{
+
+                        "order_id":"PAPER",
+
+                        "market":market,
+
+                        "side":side,
+
+                        "amount":amount
+
+                    }
+
+                }
 
 
 
-    def open_short(
-        self,
-        symbol,
-        quantity
-    ):
+            path = (
+
+                "/futures/order"
+
+                if MARKET_TYPE=="FUTURES"
+
+                else
+
+                "/spot/order"
+
+            )
 
 
-        return self.create_order(
 
-            market=symbol,
+            params = {
 
-            side="sell",
 
-            amount=quantity
+                "market":market,
 
-        )
+
+                "side":side.lower(),
+
+
+                "amount":amount,
+
+
+                "type":"market"
+
+
+            }
+
+
+
+            return self._request(
+
+                "POST",
+
+                path,
+
+                params
+
+            )
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+            return None
+
+
+
+
 
 
 
@@ -206,36 +337,105 @@ class CoinExTrade:
         quantity
     ):
 
+        try:
 
-        close_side = (
 
-            "sell"
+            close_side = (
 
-            if side.upper() in [
+                "sell"
 
-                "BUY",
+                if side.upper()=="BUY"
 
-                "LONG"
+                else
 
-            ]
+                "buy"
 
-            else
-
-            "buy"
-
-        )
+            )
 
 
 
-        return self.create_order(
+            return self.create_order(
 
-            market=symbol,
+                symbol,
 
-            side=close_side,
+                close_side,
 
-            amount=quantity
+                quantity
 
-        )
+            )
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+            return None
+
+
+
+
+
+
+
+
+    def get_balance(self):
+
+        try:
+
+
+            return self._request(
+
+                "GET",
+
+                "/assets/spot/balance"
+
+            )
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+            return None
+
+
+
+
+
+
+
+
+    def get_open_positions(self):
+
+        try:
+
+
+            if PAPER_TRADING:
+
+                return []
+
+
+
+            return self._request(
+
+                "GET",
+
+                "/futures/pending-position"
+
+            )
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+            return None
 
 
 
