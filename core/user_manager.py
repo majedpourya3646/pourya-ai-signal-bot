@@ -8,7 +8,8 @@ from core.logger import logger
 
 
 
-DB_PATH = "data/users.db"
+DB_PATH = "data/pourya_trader.db"
+
 
 
 
@@ -32,9 +33,11 @@ def get_connection():
 
 
 
+
 def init_user_database():
 
     try:
+
 
         conn = get_connection()
 
@@ -50,6 +53,7 @@ def init_user_database():
 
 
         cursor.execute(
+
             """
 
             CREATE TABLE IF NOT EXISTS users (
@@ -60,27 +64,28 @@ def init_user_database():
 
                 username TEXT,
 
-                email TEXT,
-
-                phone TEXT,
-
-                notification_level TEXT DEFAULT 'BASIC',
-
-                user_profit_percent REAL DEFAULT 50,
-
-                risk_percent REAL DEFAULT 1,
-
-                leverage INTEGER DEFAULT 10,
+                active INTEGER DEFAULT 1,
 
                 trading_mode TEXT DEFAULT 'AUTO',
 
-                active INTEGER DEFAULT 1,
+                notification_level TEXT DEFAULT 'BASIC',
+
+                risk_percent REAL DEFAULT 1,
+
+                leverage REAL DEFAULT 10,
+
+                user_profit_percent REAL DEFAULT 50,
+
+                email TEXT,
+
+                phone TEXT,
 
                 created_at TEXT
 
             )
 
             """
+
         )
 
 
@@ -102,6 +107,7 @@ def init_user_database():
 
 
         return False
+
 
 
 
@@ -150,7 +156,7 @@ def create_user(
 
             (
 
-                telegram_id,
+                str(telegram_id),
 
                 username,
 
@@ -195,11 +201,6 @@ def get_user(
         conn = get_connection()
 
 
-        if not conn:
-
-            return None
-
-
 
         cursor = conn.cursor()
 
@@ -219,11 +220,12 @@ def get_user(
 
             (
 
-                telegram_id,
+                str(telegram_id),
 
             )
 
         )
+
 
 
         row = cursor.fetchone()
@@ -240,42 +242,65 @@ def get_user(
 
 
 
-        columns = [
-
-            "id",
-
-            "telegram_id",
-
-            "username",
-
-            "email",
-
-            "phone",
-
-            "notification_level",
-
-            "user_profit_percent",
-
-            "risk_percent",
-
-            "leverage",
-
-            "trading_mode",
-
-            "active",
-
-            "created_at"
-
-        ]
+        return {
 
 
+            "id":
 
-        return dict(
-            zip(
-                columns,
-                row
-            )
-        )
+                row[0],
+
+
+            "telegram_id":
+
+                row[1],
+
+
+            "username":
+
+                row[2],
+
+
+            "active":
+
+                row[3],
+
+
+            "trading_mode":
+
+                row[4],
+
+
+            "notification_level":
+
+                row[5],
+
+
+            "risk_percent":
+
+                row[6],
+
+
+            "leverage":
+
+                row[7],
+
+
+            "user_profit_percent":
+
+                row[8],
+
+
+            "email":
+
+                row[9],
+
+
+            "phone":
+
+                row[10]
+
+
+        }
 
 
 
@@ -301,30 +326,19 @@ def update_user_setting(
     try:
 
 
-        conn = get_connection()
-
-
-        if not conn:
-
-            return False
-
-
-
-        cursor = conn.cursor()
-
-
-
         allowed = [
 
-            "notification_level",
+            "active",
 
-            "user_profit_percent",
+            "trading_mode",
+
+            "notification_level",
 
             "risk_percent",
 
             "leverage",
 
-            "trading_mode",
+            "user_profit_percent",
 
             "email",
 
@@ -336,7 +350,16 @@ def update_user_setting(
 
         if key not in allowed:
 
+
             return False
+
+
+
+        conn = get_connection()
+
+
+
+        cursor = conn.cursor()
 
 
 
@@ -356,7 +379,7 @@ def update_user_setting(
 
                 value,
 
-                telegram_id
+                str(telegram_id)
 
             )
 
@@ -393,11 +416,6 @@ def get_all_active_users():
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return []
 
 
 
@@ -440,3 +458,45 @@ def get_all_active_users():
 
 
         return []
+
+
+
+
+
+
+
+
+def deactivate_user(
+    telegram_id
+):
+
+    return update_user_setting(
+
+        telegram_id,
+
+        "active",
+
+        0
+
+    )
+
+
+
+
+
+
+
+
+def activate_user(
+    telegram_id
+):
+
+    return update_user_setting(
+
+        telegram_id,
+
+        "active",
+
+        1
+
+    )
