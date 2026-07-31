@@ -16,7 +16,9 @@ from core.session import session
 from core.logger import logger
 
 
+
 class CoinExAPI:
+
 
     def __init__(self):
 
@@ -27,48 +29,60 @@ class CoinExAPI:
         self.secret_key = COINEX_SECRET_KEY
 
 
-    def _sign(
+
+    def _generate_sign(
         self,
         method,
         path,
-        query="",
-        body=""
+        body="",
+        timestamp=None
     ):
 
-        timestamp = str(
-            int(time.time() * 1000)
-        )
+        if timestamp is None:
 
-        request_path = path
-
-        if query:
-
-            request_path += "?" + query
+            timestamp = str(
+                int(time.time() * 1000)
+            )
 
 
-        sign_string = (
+        prepared_string = (
+
             method.upper()
+
             +
-            request_path
+
+            path
+
             +
+
             body
+
             +
+
             timestamp
+
         )
 
 
-        sign = hmac.new(
+        signature = hmac.new(
 
-            self.secret_key.encode(),
+            self.secret_key.encode("latin-1"),
 
-            sign_string.encode(),
+            prepared_string.encode("latin-1"),
 
             hashlib.sha256
 
         ).hexdigest().lower()
 
 
-        return sign, timestamp
+
+        logger.info(
+            f"COINEX SIGN STRING {prepared_string}"
+        )
+
+
+        return signature, timestamp
+
 
 
 
@@ -81,37 +95,40 @@ class CoinExAPI:
         private=False
     ):
 
+
         params = params or {}
 
         body = body or {}
 
 
-        query = urlencode(
-            sorted(
-                params.items()
-            )
-        )
-
-
         json_body = ""
+
 
         if method.upper() != "GET":
 
             json_body = json.dumps(
+
                 body,
+
                 separators=(
                     ",",
                     ":"
-                )
+                ),
+
+                ensure_ascii=False
+
             )
+
 
 
         headers = {
 
             "Content-Type":
+
             "application/json"
 
         }
+
 
 
         if private:
@@ -119,134 +136,181 @@ class CoinExAPI:
 
             if not self.api_key or not self.secret_key:
 
-                logger.error(
-                    "COINEX API KEY OR SECRET EMPTY"
-                )
 
                 return {
 
                     "code": -1,
 
                     "message":
+
                     "API KEY EMPTY"
 
                 }
 
 
-            sign, timestamp = self._sign(
+
+            sign, timestamp = self._generate_sign(
 
                 method,
 
                 path,
 
-                query,
-
-                json_body
+                json_body,
 
             )
+
 
 
             headers.update({
 
                 "X-COINEX-KEY":
+
                 self.api_key,
 
 
                 "X-COINEX-SIGN":
+
                 sign,
 
 
                 "X-COINEX-TIMESTAMP":
+
                 timestamp
 
             })
 
 
+
         url = self.base_url + path
 
 
-        for attempt in range(3):
 
-            try:
-
-
-                if method.upper() == "GET":
+        try:
 
 
-                    response = session.get(
-
-                        url,
-
-                        params=params,
-
-                        headers=headers,
-
-                        timeout=REQUEST_TIMEOUT
-
-                    )
+            if method.upper() == "GET":
 
 
-                else:
+                response = session.get(
 
+                    url,
 
-                    response = session.post(
+                    params=params,
 
-                        url,
+                    headers=headers,
 
-                        data=json_body,
+                    timeout=REQUEST_TIMEOUT
 
-                        headers=headers,
-
-                        timeout=REQUEST_TIMEOUT
-
-                    )
-
-
-                logger.info(
-                    f"COINEX URL {response.url}"
-                )
-
-                logger.info(
-                    f"STATUS {response.status_code}"
                 )
 
 
-                data = response.json()
+            else:
 
 
-                logger.info(
-                    f"COINEX RESPONSE {data}"
+                response = session.post(
+
+                    url,
+
+                    data=json_body,
+
+                    headers=headers,
+
+                    timeout=REQUEST_TIMEOUT
+
                 )
 
 
-                return data
+
+            logger.info(
+
+                f"COINEX URL {response.url}"
+
+            )
+
+
+            logger.info(
+
+                f"STATUS {response.status_code}"
+
+            )
 
 
 
-            except Exception as e:
-
-
-                logger.warning(
-                    f"COINEX RETRY {attempt+1}/3 {e}"
-                )
-
-
-                time.sleep(1)
+            result = response.json()
 
 
 
-        return {
+            logger.info(
 
-            "code": -1,
+                f"COINEX RESPONSE {result}"
 
-            "message":
-            "REQUEST FAILED"
+            )
 
-        }
+
+            return result
+
+
+
+        except Exception as e:
+
+
+            logger.exception(e)
+
+
+            return {
+
+                "code":
+
+                -1,
+
+                "message":
+
+                str(e)
+
+            }
+
+
+
+
+    def get_kline(
+        self,
+        market,
+        period,
+        limit=300
+    ):
+
+
+        return self._request(
+
+            "GET",
+
+            "/futures/kline",
+
+            params={
+
+                "market":
+
+                market,
+
+
+                "period":
+
+                period,
+
+
+                "limit":
+
+                limit
+
+            }
+
+        )
+
 
 
 
     def get_balance(self):
+
 
         return self._request(
 
@@ -260,96 +324,14 @@ class CoinExAPI:
 
 
 
-    def get_kline(
-        self,
-        market,
-        period,
-        limit=300
-    ):
-
-        return self._request(
-
-            "GET",
-
-            "/futures/kline",
-
-            params={
-
-                "market":
-                market,
-
-                "period":
-                period,
-
-                "limit":
-                limit
-
-            }
-
-        )
-
-
-
-    def set_leverage(
-        self,
-        market,
-        leverage
-    ):
-
-
-        body = {
-
-            "market":
-            market,
-
-            "leverage":
-            str(leverage)
-
-        }
-
-
-        return self._request(
-
-            "POST",
-
-            "/futures/set-leverage",
-
-            body=body,
-
-            private=True
-
-        )
-
-
 
     def create_futures_order(
         self,
         market,
         side,
         amount,
-        order_type="market",
-        leverage=10
+        order_type="market"
     ):
-
-
-        side = side.lower()
-
-
-        leverage_result = self.set_leverage(
-
-            market,
-
-            leverage
-
-        )
-
-
-        if leverage_result.get("code") != 0:
-
-            logger.warning(
-                f"LEVERAGE FAILED {leverage_result}"
-            )
-
 
 
         body = {
@@ -367,7 +349,7 @@ class CoinExAPI:
 
             "side":
 
-            side,
+            side.lower(),
 
 
             "type":
@@ -380,6 +362,7 @@ class CoinExAPI:
             str(amount)
 
         }
+
 
 
         return self._request(
@@ -396,6 +379,7 @@ class CoinExAPI:
 
 
 
+
     def cancel_order(
         self,
         order_id,
@@ -404,6 +388,7 @@ class CoinExAPI:
 
 
         body = {
+
 
             "market":
 
@@ -417,6 +402,7 @@ class CoinExAPI:
         }
 
 
+
         return self._request(
 
             "POST",
@@ -428,6 +414,7 @@ class CoinExAPI:
             private=True
 
         )
+
 
 
 
