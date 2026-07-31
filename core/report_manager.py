@@ -1,87 +1,259 @@
-# core/report_manager.py
+# core/opportunity_offer_engine.py
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from core.logger import logger
 
+from core.opportunity_engine import (
+    find_best_opportunities
+)
+
 from core.trade_manager import (
-    get_trade_history
+    get_open_trades
 )
 
-from core.profit_manager import (
-    calculate_monthly_software_income
+from config import (
+    MIN_CONFIDENCE
 )
 
 
 
 
 
-def filter_trades_by_date(
-    trades,
-    days
-):
+MAX_OFFERS = 10
+
+OFFER_EXPIRY_MINUTES = 15
+
+
+
+
+
+def _normalize_signal(signal):
+
+    signal = str(signal).upper().strip()
+
+    mapping = {
+
+        "STRONG BUY": "BUY",
+        "EARLY BUY": "BUY",
+        "STRONG SELL": "SELL",
+        "EARLY SELL": "SELL"
+
+    }
+
+    return mapping.get(signal, signal)
+
+
+
+
+
+def _score(opportunity):
 
     try:
 
+        confidence = float(
+            opportunity.get(
+                "confidence",
+                0
+            )
+        )
 
-        limit = datetime.utcnow() - timedelta(
+        volume_score = float(
+            opportunity.get(
+                "volume_score",
+                0
+            )
+        )
 
-            days=days
+        trend_score = float(
+            opportunity.get(
+                "trend_score",
+                0
+            )
+        )
+
+        rr_score = float(
+            opportunity.get(
+                "risk_reward_score",
+                0
+            )
+        )
+
+        return round(
+
+            confidence * 0.50 +
+
+            volume_score * 0.20 +
+
+            trend_score * 0.20 +
+
+            rr_score * 0.10,
+
+            2
 
         )
 
-
-
-        result = []
-
-
-
-        for trade in trades:
-
-
-            created = trade.get(
-
-                "created_at"
-
-            )
-
-
-
-            if not created:
-
-
-                continue
-
-
-
-            trade_date = datetime.fromisoformat(
-
-                created
-
-            )
-
-
-
-            if trade_date >= limit:
-
-
-                result.append(
-
-                    trade
-
-                )
-
-
-
-        return result
-
-
-
     except Exception as e:
-
 
         logger.exception(e)
 
+        return 0
+
+
+
+
+
+def _duplicate_symbols():
+
+    try:
+
+        symbols = set()
+
+        for trade in get_open_trades():
+
+            symbols.add(
+
+                trade.get(
+                    "symbol"
+                )
+
+            )
+
+        return symbols
+
+    except Exception:
+
+        return set()
+
+
+
+
+
+def build_offers():
+
+    try:
+
+        opportunities = find_best_opportunities()
+
+        if not opportunities:
+
+            return []
+
+        opened = _duplicate_symbols()
+
+        offers = []
+
+        for item in opportunities:
+
+            symbol = item.get(
+                "symbol"
+            )
+
+            if not symbol:
+
+                continue
+
+            if symbol in opened:
+
+                continue
+
+            confidence = float(
+
+                item.get(
+                    "confidence",
+                    0
+                )
+
+            )
+
+            if confidence < MIN_CONFIDENCE:
+
+                continue
+
+            signal = _normalize_signal(
+
+                item.get(
+                    "signal"
+                )
+
+            )
+
+            if signal not in [
+
+                "BUY",
+                "SELL"
+
+            ]:
+
+                continue
+
+            offer = {
+
+                "symbol": symbol,
+
+                "signal": signal,
+
+                "entry": item.get(
+
+                    "entry",
+
+                    item.get(
+                        "price"
+                    )
+
+                ),
+
+                "tp": item.get(
+
+                    "tp",
+
+                    item.get(
+                        "take_profit"
+                    )
+
+                ),
+
+                "sl": item.get(
+
+                    "sl",
+
+                    item.get(
+                        "stop_loss"
+                    )
+
+                ),
+
+                "confidence": confidence,
+
+                "offer_score": _score(item),
+
+                "expires_after_minutes": OFFER_EXPIRY_MINUTES,
+
+                "created_at": datetime.utcnow().isoformat()
+
+            }
+
+            offers.append(offer)
+
+        offers.sort(
+
+            key=lambda x: x["offer_score"],
+
+            reverse=True
+
+        )
+
+        logger.info(
+
+            f"OFFER ENGINE CREATED {len(offers)} OFFERS"
+
+        )
+
+        return offers[:MAX_OFFERS]
+
+    except Exception as e:
+
+        logger.exception(e)
 
         return []
 
@@ -89,397 +261,50 @@ def filter_trades_by_date(
 
 
 
-
-
-
-def calculate_statistics(
-    trades
-):
+def best_offer():
 
     try:
 
+        offers = build_offers()
 
-        total = len(
+        if offers:
 
-            trades
+            return offers[0]
 
-        )
+        return None
 
+    except Exception as e:
 
+        logger.exception(e)
 
-        wins = 0
-
-        losses = 0
-
-        profit = 0
-
-
-
-        for trade in trades:
-
-
-            pnl = float(
-
-                trade.get(
-
-                    "pnl",
-
-                    0
-
-                )
-
-            )
-
-
-
-            profit += pnl
-
-
-
-            if pnl > 0:
-
-
-                wins += 1
-
-
-
-            elif pnl < 0:
-
-
-                losses += 1
+        return None
 
 
 
 
 
-        win_rate = 0
+def get_offer_summary():
 
+    try:
 
-
-        if total > 0:
-
-
-            win_rate = (
-
-                wins
-
-                /
-
-                total
-
-                *
-
-                100
-
-            )
-
-
+        offers = build_offers()
 
         return {
 
+            "count": len(offers),
 
-            "total":
-
-                total,
-
-
-            "wins":
-
-                wins,
-
-
-            "losses":
-
-                losses,
-
-
-            "win_rate":
-
-                round(
-
-                    win_rate,
-
-                    2
-
-                ),
-
-
-            "profit":
-
-                round(
-
-                    profit,
-
-                    6
-
-                )
-
+            "offers": offers
 
         }
 
-
-
     except Exception as e:
-
 
         logger.exception(e)
 
+        return {
 
-        return {}
+            "count": 0,
 
+            "offers": []
 
-
-
-
-
-
-
-def generate_daily_report():
-
-    try:
-
-
-        trades = get_trade_history()
-
-
-
-        daily = filter_trades_by_date(
-
-            trades,
-
-            1
-
-        )
-
-
-
-        stats = calculate_statistics(
-
-            daily
-
-        )
-
-
-
-        return format_report(
-
-            "DAILY",
-
-            stats
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return ""
-
-
-
-
-
-
-
-
-def generate_weekly_report():
-
-    try:
-
-
-        trades = get_trade_history()
-
-
-
-        weekly = filter_trades_by_date(
-
-            trades,
-
-            7
-
-        )
-
-
-
-        stats = calculate_statistics(
-
-            weekly
-
-        )
-
-
-
-        return format_report(
-
-            "WEEKLY",
-
-            stats
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return ""
-
-
-
-
-
-
-
-
-def generate_monthly_report():
-
-    try:
-
-
-        trades = get_trade_history()
-
-
-
-        monthly = filter_trades_by_date(
-
-            trades,
-
-            30
-
-        )
-
-
-
-        stats = calculate_statistics(
-
-            monthly
-
-        )
-
-
-
-        return format_report(
-
-            "MONTHLY",
-
-            stats
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return ""
-
-
-
-
-
-
-
-
-def format_report(
-    period,
-    stats
-):
-
-    try:
-
-
-        return f"""
-
-📊 گزارش {period}
-
-
-📅 تاریخ:
-{datetime.now().strftime('%Y-%m-%d')}
-
-
-🔢 تعداد معاملات:
-
-{stats.get('total')}
-
-
-✅ معاملات سودده:
-
-{stats.get('wins')}
-
-
-❌ معاملات ضررده:
-
-{stats.get('losses')}
-
-
-🎯 درصد موفقیت:
-
-{stats.get('win_rate')}%
-
-
-💰 سود خالص:
-
-{stats.get('profit')}$
-
-
-🤖 سهم نرم افزار:
-
-محاسبه در سیستم تقسیم سود
-
-"""
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return ""
-
-
-
-
-
-
-
-
-def get_performance_summary():
-
-    try:
-
-
-        trades = get_trade_history()
-
-
-
-        stats = calculate_statistics(
-
-            trades
-
-        )
-
-
-
-        return stats
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
+        }
