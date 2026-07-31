@@ -1,28 +1,15 @@
-# core/position_manager.py
+# core/order_manager.py
 
 from core.logger import logger
-
-from core.trade_manager import (
-    get_open_trades,
-    close_trade
-)
-
-from core.market import (
-    get_current_price
-)
 
 from core.coinex_trade import (
     coinex_trade
 )
 
-
-
-
-
-
-TRAILING_STOP_ENABLED = True
-
-TRAILING_PERCENT = 1.5
+from config import (
+    PAPER_TRADING,
+    LEVERAGE
+)
 
 
 
@@ -31,206 +18,115 @@ TRAILING_PERCENT = 1.5
 
 
 
-def monitor_positions():
+def create_order(
+    symbol,
+    side,
+    quantity
+):
 
     try:
 
 
-        trades = get_open_trades()
+        logger.info(
 
+            f"CREATING ORDER {symbol} {side}"
 
-
-        if not trades:
-
-
-            return []
-
-
-
-
-
-        closed = []
+        )
 
 
 
 
 
-        for trade in trades:
+        if PAPER_TRADING:
 
 
+            logger.info(
 
-            symbol = trade.get(
-
-                "symbol"
+                f"PAPER ORDER | {symbol} | {side} | {quantity}"
 
             )
 
 
 
-            side = trade.get(
+            return {
 
-                "side"
+
+                "status":
+
+                    "success",
+
+
+                "mode":
+
+                    "paper",
+
+
+                "symbol":
+
+                    symbol,
+
+
+                "side":
+
+                    side,
+
+
+                "quantity":
+
+                    quantity
+
+            }
+
+
+
+
+
+
+
+
+        result = coinex_trade.create_order(
+
+            symbol,
+
+            side,
+
+            quantity,
+
+            LEVERAGE
+
+        )
+
+
+
+
+
+        if not result:
+
+
+            logger.error(
+
+                "COINEX ORDER FAILED"
 
             )
 
 
+            return None
 
-            tp = float(
 
-                trade.get(
 
-                    "tp"
 
-                )
 
-            )
 
+        logger.info(
 
+            f"LIVE ORDER CREATED {result}"
 
-            sl = float(
+        )
 
-                trade.get(
 
-                    "sl"
 
-                )
+        return result
 
-            )
-
-
-
-            quantity = float(
-
-                trade.get(
-
-                    "quantity"
-
-                )
-
-            )
-
-
-
-            trade_id = trade.get(
-
-                "id"
-
-            )
-
-
-
-
-
-            price = get_current_price(
-
-                symbol
-
-            )
-
-
-
-
-
-            if not price:
-
-
-                continue
-
-
-
-
-
-
-
-            should_close = False
-
-            reason = ""
-
-
-
-
-
-
-            if side == "BUY":
-
-
-                if price >= tp:
-
-
-                    should_close = True
-
-                    reason = "TAKE PROFIT"
-
-
-
-
-                elif price <= sl:
-
-
-                    should_close = True
-
-                    reason = "STOP LOSS"
-
-
-
-
-
-
-            elif side == "SELL":
-
-
-                if price <= tp:
-
-
-                    should_close = True
-
-                    reason = "TAKE PROFIT"
-
-
-
-
-                elif price >= sl:
-
-
-                    should_close = True
-
-                    reason = "STOP LOSS"
-
-
-
-
-
-
-
-
-            if should_close:
-
-
-
-                execute_close(
-
-                    trade,
-
-                    price,
-
-                    reason
-
-                )
-
-
-
-                closed.append(
-
-                    trade
-
-                )
-
-
-
-
-
-
-        return closed
 
 
 
@@ -240,7 +136,7 @@ def monitor_positions():
         logger.exception(e)
 
 
-        return []
+        return None
 
 
 
@@ -248,43 +144,37 @@ def monitor_positions():
 
 
 
-
-
-def execute_close(
-    trade,
-    price,
-    reason
+def close_order(
+    symbol,
+    side,
+    quantity
 ):
 
     try:
 
 
-        symbol = trade.get(
 
-            "symbol"
+        logger.info(
 
-        )
-
-
-        side = trade.get(
-
-            "side"
+            f"CLOSING ORDER {symbol}"
 
         )
 
 
-        quantity = trade.get(
-
-            "quantity"
-
-        )
 
 
-        trade_id = trade.get(
 
-            "id"
+        if PAPER_TRADING:
 
-        )
+
+            logger.info(
+
+                f"PAPER CLOSE | {symbol}"
+
+            )
+
+
+            return True
 
 
 
@@ -305,40 +195,14 @@ def execute_close(
 
 
 
-
-
         if result:
-
-
-
-            pnl = calculate_pnl(
-
-                trade,
-
-                price
-
-            )
-
-
-
-            close_trade(
-
-                trade_id,
-
-                price,
-
-                pnl
-
-            )
-
 
 
             logger.info(
 
-                f"CLOSED {symbol} {reason}"
+                f"POSITION CLOSED {symbol}"
 
             )
-
 
 
             return True
@@ -347,8 +211,9 @@ def execute_close(
 
 
 
-
         return False
+
+
 
 
 
@@ -366,86 +231,33 @@ def execute_close(
 
 
 
-def calculate_pnl(
-    trade,
-    exit_price
+def validate_order(
+    symbol,
+    quantity
 ):
 
     try:
 
 
-        entry = float(
-
-            trade.get(
-
-                "entry"
-
-            )
-
-        )
+        if not symbol:
 
 
-        quantity = float(
-
-            trade.get(
-
-                "quantity"
-
-            )
-
-        )
+            return False
 
 
-        side = trade.get(
 
-            "side"
 
-        )
+        if float(quantity) <= 0:
+
+
+            return False
 
 
 
 
 
-        if side == "BUY":
+        return True
 
-
-            pnl = (
-
-                exit_price
-
-                -
-
-                entry
-
-            ) * quantity
-
-
-
-        else:
-
-
-            pnl = (
-
-                entry
-
-                -
-
-                exit_price
-
-            ) * quantity
-
-
-
-
-
-
-        return round(
-
-            pnl,
-
-            4
-
-        )
 
 
 
@@ -455,4 +267,50 @@ def calculate_pnl(
         logger.exception(e)
 
 
-        return 0
+        return False
+
+
+
+
+
+
+
+def get_order_status(
+    order_id
+):
+
+    try:
+
+
+        if PAPER_TRADING:
+
+
+            return {
+
+
+                "status":
+
+                    "filled"
+
+            }
+
+
+
+
+
+        return coinex_trade.get_order_status(
+
+            order_id
+
+        )
+
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
