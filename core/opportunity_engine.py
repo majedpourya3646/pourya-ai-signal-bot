@@ -1,5 +1,3 @@
-# core/opportunity_engine.py
-
 from core.logger import logger
 
 from core.market_signal_bridge import (
@@ -9,7 +7,6 @@ from core.market_signal_bridge import (
 from config import (
     MIN_CONFIDENCE
 )
-
 
 
 
@@ -27,35 +24,23 @@ def calculate_opportunity_score(
         score = 0
 
 
-
-
-
         confidence = item.get(
-
             "confidence",
-
             0
-
         )
-
 
 
         if confidence >= 80:
 
-
             score += 40
-
 
 
         elif confidence >= 70:
 
-
             score += 30
 
 
-
         elif confidence >= MIN_CONFIDENCE:
-
 
             score += 20
 
@@ -64,11 +49,8 @@ def calculate_opportunity_score(
 
 
         signal = item.get(
-
             "signal"
-
         )
-
 
 
         if signal in [
@@ -79,7 +61,6 @@ def calculate_opportunity_score(
 
         ]:
 
-
             score += 20
 
 
@@ -87,17 +68,12 @@ def calculate_opportunity_score(
 
 
         timeframes = item.get(
-
             "timeframes",
-
             {}
-
         )
 
 
-
         if len(timeframes) >= 3:
-
 
             score += 20
 
@@ -106,25 +82,17 @@ def calculate_opportunity_score(
 
 
         entry = item.get(
-
             "entry"
-
         )
-
 
 
         tp = item.get(
-
             "tp"
-
         )
 
 
-
         sl = item.get(
-
             "sl"
-
         )
 
 
@@ -146,16 +114,13 @@ def calculate_opportunity_score(
             )
 
 
-
             if risk > 0:
 
 
                 rr = reward / risk
 
 
-
                 if rr >= 2:
-
 
                     score += 20
 
@@ -181,9 +146,6 @@ def calculate_opportunity_score(
 
 
 
-
-
-
 def scan_opportunities():
 
     try:
@@ -196,9 +158,13 @@ def scan_opportunities():
         if not markets:
 
 
+            logger.warning(
+
+                "NO MARKET DATA"
+
+            )
+
             return []
-
-
 
 
 
@@ -214,6 +180,15 @@ def scan_opportunities():
 
 
 
+            symbol = item.get(
+
+                "symbol",
+
+                "UNKNOWN"
+
+            )
+
+
             confidence = item.get(
 
                 "confidence",
@@ -223,8 +198,34 @@ def scan_opportunities():
             )
 
 
+            signal = item.get(
+
+                "signal",
+
+                "NONE"
+
+            )
+
+
+
+            logger.info(
+
+                f"ANALYSIS {symbol} | SIGNAL={signal} | CONFIDENCE={confidence}"
+
+            )
+
+
+
+
 
             if confidence < MIN_CONFIDENCE:
+
+
+                logger.info(
+
+                    f"REJECTED {symbol} | CONFIDENCE {confidence} < {MIN_CONFIDENCE}"
+
+                )
 
 
                 continue
@@ -241,12 +242,19 @@ def scan_opportunities():
 
 
 
+            logger.info(
+
+                f"OPPORTUNITY {symbol} SCORE={item['opportunity_score']}"
+
+            )
+
+
+
             opportunities.append(
 
                 item
 
             )
-
 
 
 
@@ -278,6 +286,7 @@ def scan_opportunities():
 
 
 
+
     except Exception as e:
 
 
@@ -285,8 +294,6 @@ def scan_opportunities():
 
 
         return []
-
-
 
 
 
@@ -306,8 +313,26 @@ def get_best_opportunity():
         if opportunities:
 
 
-            return opportunities[0]
+            best = opportunities[0]
 
+
+            logger.info(
+
+                f"BEST OPPORTUNITY {best.get('symbol')}"
+
+            )
+
+
+            return best
+
+
+
+
+        logger.info(
+
+            "NO VALID OPPORTUNITY"
+
+        )
 
 
         return None
