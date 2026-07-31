@@ -4,55 +4,97 @@ from datetime import datetime
 
 from core.logger import logger
 
-from core.user_manager import (
-    get_user
+from core.database_manager import (
+    get_connection
 )
 
 
 
 
 
-def calculate_profit_split(
-    total_profit,
-    user_percent=50
+def init_profit_database():
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            CREATE TABLE IF NOT EXISTS profits
+
+            (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                telegram_id TEXT,
+
+                trade_id INTEGER,
+
+                gross_profit REAL,
+
+                user_profit REAL,
+
+                software_profit REAL,
+
+                created_at TEXT
+
+            )
+
+            """
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def calculate_profit_share(
+    profit,
+    user_percent
 ):
 
     try:
 
 
-        total_profit = float(
-            total_profit
-        )
+        profit = float(profit)
 
-
-        user_percent = float(
-            user_percent
-        )
-
-
-
-        if total_profit <= 0:
-
-
-            return {
-
-
-                "user_profit":
-
-                    0,
-
-
-                "software_profit":
-
-                    0
-
-            }
+        user_percent = float(user_percent)
 
 
 
         user_profit = (
 
-            total_profit
+            profit
 
             *
 
@@ -68,7 +110,7 @@ def calculate_profit_split(
 
         software_profit = (
 
-            total_profit
+            profit
 
             -
 
@@ -81,29 +123,19 @@ def calculate_profit_split(
         return {
 
 
-            "total_profit":
+            "gross_profit":
 
-                round(
-                    total_profit,
-                    6
-                ),
+                round(profit, 6),
 
 
             "user_profit":
 
-                round(
-                    user_profit,
-                    6
-                ),
+                round(user_profit, 6),
 
 
             "software_profit":
 
-                round(
-                    software_profit,
-                    6
-                )
-
+                round(software_profit, 6)
 
         }
 
@@ -124,181 +156,167 @@ def calculate_profit_split(
 
 
 
-def calculate_user_trade_result(
+def save_profit_record(
     telegram_id,
-    trade_profit
+    trade_id,
+    profit_data
 ):
 
     try:
 
 
-        user = get_user(
-            telegram_id
-        )
+        conn = get_connection()
 
-
-        if not user:
-
-
-            percent = 50
+        cursor = conn.cursor()
 
 
 
-        else:
+        cursor.execute(
 
+            """
 
-            percent = user.get(
+            INSERT INTO profits
 
-                "user_profit_percent",
+            (
 
-                50
+                telegram_id,
+
+                trade_id,
+
+                gross_profit,
+
+                user_profit,
+
+                software_profit,
+
+                created_at
 
             )
 
+            VALUES (?,?,?,?,?,?)
 
+            """,
 
-        return calculate_profit_split(
+            (
 
-            trade_profit,
+                str(telegram_id),
 
-            percent
+                trade_id,
 
-        )
+                profit_data.get(
 
+                    "gross_profit",
 
+                    0
 
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
-
-
-
-
-
-
-
-
-def create_profit_record(
-    trade,
-    split
-):
-
-    try:
-
-
-        record = {
-
-
-            "telegram_id":
-
-                trade.get(
-                    "telegram_id"
                 ),
 
+                profit_data.get(
 
-            "symbol":
+                    "user_profit",
 
-                trade.get(
-                    "symbol"
+                    0
+
                 ),
 
-
-            "total_profit":
-
-                split.get(
-                    "total_profit"
-                ),
-
-
-            "user_profit":
-
-                split.get(
-                    "user_profit"
-                ),
-
-
-            "software_profit":
-
-                split.get(
-                    "software_profit"
-                ),
-
-
-            "created_at":
-
-                datetime.utcnow()
-                .isoformat()
-
-        }
-
-
-
-        logger.info(
-
-            f"PROFIT RECORD {record}"
-
-        )
-
-
-
-        return record
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
-
-
-
-
-
-
-
-
-def calculate_monthly_software_income(
-    records
-):
-
-    try:
-
-
-        total = 0
-
-
-
-        for item in records:
-
-
-            total += float(
-
-                item.get(
+                profit_data.get(
 
                     "software_profit",
 
                     0
 
-                )
+                ),
+
+                datetime.utcnow()
+                .isoformat()
+
+            )
+
+        )
+
+
+
+        conn.commit()
+
+        conn.close()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def get_user_profit(
+    telegram_id
+):
+
+    try:
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT SUM(user_profit)
+
+            FROM profits
+
+            WHERE telegram_id=?
+
+            """,
+
+            (
+
+                str(telegram_id),
+
+            )
+
+        )
+
+
+
+        result = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if result and result[0]:
+
+            return round(
+
+                float(result[0]),
+
+                6
 
             )
 
 
 
-        return round(
-
-            total,
-
-            6
-
-        )
+        return 0
 
 
 
@@ -315,31 +333,56 @@ def calculate_monthly_software_income(
 
 
 
-def format_profit_message(
-    result
-):
+
+
+def calculate_monthly_software_income():
 
     try:
 
 
-        return f"""
+        conn = get_connection()
 
-💰 گزارش سود معامله
-
-
-📈 سود کل:
-{result.get('total_profit')}$
+        cursor = conn.cursor()
 
 
-👤 سهم کاربر:
-{result.get('user_profit')}$
+
+        cursor.execute(
+
+            """
+
+            SELECT SUM(software_profit)
+
+            FROM profits
+
+            WHERE created_at >= datetime('now','-30 days')
+
+            """
+
+        )
 
 
-🤖 سهم نرم افزار:
-{result.get('software_profit')}$
+
+        result = cursor.fetchone()
 
 
-"""
+
+        conn.close()
+
+
+
+        if result and result[0]:
+
+            return round(
+
+                float(result[0]),
+
+                6
+
+            )
+
+
+
+        return 0
 
 
 
@@ -349,4 +392,37 @@ def format_profit_message(
         logger.exception(e)
 
 
-        return ""
+        return 0
+
+
+
+
+
+
+
+
+def profit_report():
+
+    try:
+
+
+        return {
+
+
+            "software_income":
+
+                calculate_monthly_software_income()
+
+
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
