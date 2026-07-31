@@ -8,10 +8,10 @@ from core.trade_manager import (
 )
 
 from core.market import (
-    get_latest_price
+    get_current_price
 )
 
-from coinex_trade import (
+from core.coinex_trade import (
     coinex_trade
 )
 
@@ -19,307 +19,39 @@ from coinex_trade import (
 
 
 
-def calculate_pnl(
-    side,
-    entry,
-    exit_price,
-    quantity
-):
+
+TRAILING_STOP_ENABLED = True
+
+TRAILING_PERCENT = 1.5
+
+
+
+
+
+
+
+
+def monitor_positions():
 
     try:
 
 
-        if side == "BUY":
+        trades = get_open_trades()
 
-            pnl = (
 
-                exit_price
 
-                -
+        if not trades:
 
-                entry
 
-            ) * quantity
+            return []
 
 
 
-        else:
-
-            pnl = (
-
-                entry
-
-                -
-
-                exit_price
-
-            ) * quantity
-
-
-
-        return round(
-
-            pnl,
-
-            6
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return 0
-
-
-
-
-
-
-
-def check_position(
-    trade
-):
-
-    try:
-
-
-        symbol = trade.get(
-
-            "symbol"
-
-        )
-
-
-
-        price = get_latest_price(
-
-            symbol
-
-        )
-
-
-
-        if not price:
-
-            return None
-
-
-
-
-
-        side = trade.get(
-
-            "side"
-
-        )
-
-
-
-        tp = float(
-
-            trade.get(
-
-                "tp",
-
-                0
-
-            )
-
-        )
-
-
-
-        sl = float(
-
-            trade.get(
-
-                "sl",
-
-                0
-
-            )
-
-        )
-
-
-
-
-
-        close = False
-
-        reason = ""
-
-
-
-
-
-        if side == "BUY":
-
-
-            if price >= tp:
-
-
-                close = True
-
-                reason = "TAKE PROFIT"
-
-
-
-            elif price <= sl:
-
-
-                close = True
-
-                reason = "STOP LOSS"
-
-
-
-
-
-        elif side == "SELL":
-
-
-            if price <= tp:
-
-
-                close = True
-
-                reason = "TAKE PROFIT"
-
-
-
-            elif price >= sl:
-
-
-                close = True
-
-                reason = "STOP LOSS"
-
-
-
-
-
-
-
-        if close:
-
-
-            quantity = trade.get(
-
-                "quantity",
-
-                0
-
-            )
-
-
-
-            result = coinex_trade.close_position(
-
-                symbol,
-
-                side,
-
-                quantity
-
-            )
-
-
-
-            pnl = calculate_pnl(
-
-                side,
-
-                float(
-
-                    trade["entry"]
-
-                ),
-
-                float(price),
-
-                float(quantity)
-
-            )
-
-
-
-            close_trade(
-
-                trade["id"],
-
-                price,
-
-                pnl
-
-            )
-
-
-
-            return {
-
-
-                "trade_id":
-
-                    trade["id"],
-
-
-
-                "symbol":
-
-                    symbol,
-
-
-
-                "reason":
-
-                    reason,
-
-
-
-                "pnl":
-
-                    pnl
-
-            }
-
-
-
-
-
-        return None
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-def check_tp_sl():
-
-    try:
 
 
         closed = []
 
 
-
-        trades = get_open_trades()
 
 
 
@@ -327,21 +59,172 @@ def check_tp_sl():
 
 
 
-            result = check_position(
+            symbol = trade.get(
 
-                trade
+                "symbol"
 
             )
 
 
 
-            if result:
+            side = trade.get(
+
+                "side"
+
+            )
+
+
+
+            tp = float(
+
+                trade.get(
+
+                    "tp"
+
+                )
+
+            )
+
+
+
+            sl = float(
+
+                trade.get(
+
+                    "sl"
+
+                )
+
+            )
+
+
+
+            quantity = float(
+
+                trade.get(
+
+                    "quantity"
+
+                )
+
+            )
+
+
+
+            trade_id = trade.get(
+
+                "id"
+
+            )
+
+
+
+
+
+            price = get_current_price(
+
+                symbol
+
+            )
+
+
+
+
+
+            if not price:
+
+
+                continue
+
+
+
+
+
+
+
+            should_close = False
+
+            reason = ""
+
+
+
+
+
+
+            if side == "BUY":
+
+
+                if price >= tp:
+
+
+                    should_close = True
+
+                    reason = "TAKE PROFIT"
+
+
+
+
+                elif price <= sl:
+
+
+                    should_close = True
+
+                    reason = "STOP LOSS"
+
+
+
+
+
+
+            elif side == "SELL":
+
+
+                if price <= tp:
+
+
+                    should_close = True
+
+                    reason = "TAKE PROFIT"
+
+
+
+
+                elif price >= sl:
+
+
+                    should_close = True
+
+                    reason = "STOP LOSS"
+
+
+
+
+
+
+
+
+            if should_close:
+
+
+
+                execute_close(
+
+                    trade,
+
+                    price,
+
+                    reason
+
+                )
+
+
 
                 closed.append(
 
-                    result
+                    trade
 
                 )
+
 
 
 
@@ -365,12 +248,107 @@ def check_tp_sl():
 
 
 
-def get_positions():
+
+
+def execute_close(
+    trade,
+    price,
+    reason
+):
 
     try:
 
 
-        return get_open_trades()
+        symbol = trade.get(
+
+            "symbol"
+
+        )
+
+
+        side = trade.get(
+
+            "side"
+
+        )
+
+
+        quantity = trade.get(
+
+            "quantity"
+
+        )
+
+
+        trade_id = trade.get(
+
+            "id"
+
+        )
+
+
+
+
+
+
+        result = coinex_trade.close_position(
+
+            symbol,
+
+            side,
+
+            quantity
+
+        )
+
+
+
+
+
+
+
+        if result:
+
+
+
+            pnl = calculate_pnl(
+
+                trade,
+
+                price
+
+            )
+
+
+
+            close_trade(
+
+                trade_id,
+
+                price,
+
+                pnl
+
+            )
+
+
+
+            logger.info(
+
+                f"CLOSED {symbol} {reason}"
+
+            )
+
+
+
+            return True
+
+
+
+
+
+
+        return False
 
 
 
@@ -380,4 +358,101 @@ def get_positions():
         logger.exception(e)
 
 
-        return []
+        return False
+
+
+
+
+
+
+
+def calculate_pnl(
+    trade,
+    exit_price
+):
+
+    try:
+
+
+        entry = float(
+
+            trade.get(
+
+                "entry"
+
+            )
+
+        )
+
+
+        quantity = float(
+
+            trade.get(
+
+                "quantity"
+
+            )
+
+        )
+
+
+        side = trade.get(
+
+            "side"
+
+        )
+
+
+
+
+
+        if side == "BUY":
+
+
+            pnl = (
+
+                exit_price
+
+                -
+
+                entry
+
+            ) * quantity
+
+
+
+        else:
+
+
+            pnl = (
+
+                entry
+
+                -
+
+                exit_price
+
+            ) * quantity
+
+
+
+
+
+
+        return round(
+
+            pnl,
+
+            4
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return 0
