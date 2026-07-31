@@ -7,38 +7,64 @@ from core.trade_manager import (
     close_trade
 )
 
+from core.notification.notification_router import (
+    notify_trade_closed
+)
+
 from core.logger import logger
 
 
-def get_current_price(symbol):
+
+
+def get_current_price(
+    symbol
+):
 
     try:
 
-        ticker = coinex_trade.get_ticker(symbol)
+
+        ticker = coinex_trade.get_ticker(
+            symbol
+        )
+
 
         if not ticker:
+
             return None
+
+
 
         data = ticker.get(
             "data",
             {}
         )
 
+
         price = data.get(
             "last"
         )
 
+
         if not price:
+
             return None
+
+
 
         return float(price)
 
 
+
     except Exception as e:
+
 
         logger.exception(e)
 
+
         return None
+
+
+
 
 
 
@@ -51,31 +77,48 @@ def calculate_pnl(
 
     try:
 
+
         side = side.upper()
 
+
+
         if side in [
+
             "BUY",
             "LONG"
+
         ]:
 
+
             pnl = (
+
                 current - entry
+
             ) * quantity
+
 
 
         elif side in [
+
             "SELL",
             "SHORT"
+
         ]:
 
+
             pnl = (
+
                 entry - current
+
             ) * quantity
+
 
 
         else:
 
+
             pnl = 0
+
 
 
         return round(
@@ -84,15 +127,21 @@ def calculate_pnl(
         )
 
 
+
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return 0
 
 
 
-def calculate_profit_percent(
+
+
+
+def calculate_pnl_percent(
     entry,
     current,
     side
@@ -100,29 +149,52 @@ def calculate_profit_percent(
 
     try:
 
+
+        entry = float(entry)
+
+        current = float(current)
+
+
+
         if entry <= 0:
+
             return 0
 
 
+
         if side.upper() in [
+
             "BUY",
             "LONG"
+
         ]:
 
+
             percent = (
-                (current-entry)
+
+                (current - entry)
+
                 /
+
                 entry
+
             ) * 100
+
 
 
         else:
 
+
             percent = (
-                (entry-current)
+
+                (entry - current)
+
                 /
+
                 entry
+
             ) * 100
+
 
 
         return round(
@@ -131,80 +203,17 @@ def calculate_profit_percent(
         )
 
 
-    except:
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
 
         return 0
 
 
 
-def check_trailing_stop(
-    trade,
-    current
-):
-
-    try:
-
-        trailing = float(
-            trade.get(
-                "trailing",
-                0
-            )
-        )
-
-
-        if trailing <= 0:
-            return False
-
-
-        side = trade.get(
-            "side",
-            "BUY"
-        )
-
-
-        entry = float(
-            trade.get(
-                "entry",
-                0
-            )
-        )
-
-
-        if side.upper() in [
-            "BUY",
-            "LONG"
-        ]:
-
-            if current > entry:
-
-                stop = current * (
-                    1 -
-                    trailing / 100
-                )
-
-                trade["sl"] = stop
-
-
-        else:
-
-            if current < entry:
-
-                stop = current * (
-                    1 +
-                    trailing / 100
-                )
-
-                trade["sl"] = stop
-
-
-        return True
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
 
 
 
@@ -213,9 +222,13 @@ def check_tp_sl():
     closed = []
 
 
+
     try:
 
+
+
         trades = get_open_trades()
+
 
 
         if not trades:
@@ -223,7 +236,10 @@ def check_tp_sl():
             return []
 
 
+
+
         for trade in trades:
+
 
 
             symbol = trade.get(
@@ -237,36 +253,49 @@ def check_tp_sl():
             )
 
 
+
             entry = float(
+
                 trade.get(
                     "entry",
                     0
                 )
+
             )
 
 
+
             tp = float(
+
                 trade.get(
                     "tp",
                     0
                 )
+
             )
 
 
+
             sl = float(
+
                 trade.get(
                     "sl",
                     0
                 )
+
             )
 
 
+
             quantity = float(
+
                 trade.get(
                     "quantity",
                     0
                 )
+
             )
+
 
 
             if not symbol or quantity <= 0:
@@ -274,9 +303,12 @@ def check_tp_sl():
                 continue
 
 
+
+
             current = get_current_price(
                 symbol
             )
+
 
 
             if not current:
@@ -285,58 +317,80 @@ def check_tp_sl():
 
 
 
-            check_trailing_stop(
-                trade,
-                current
-            )
 
+            close_reason = None
 
-            reason = None
 
 
 
             if side.upper() in [
+
                 "BUY",
                 "LONG"
+
             ]:
 
 
-                if tp and current >= tp:
-
-                    reason = "TAKE PROFIT"
+                if tp > 0 and current >= tp:
 
 
-                elif sl and current <= sl:
-
-                    reason = "STOP LOSS"
+                    close_reason = "TAKE PROFIT"
 
 
 
-            else:
+                elif sl > 0 and current <= sl:
 
 
-                if tp and current <= tp:
-
-                    reason = "TAKE PROFIT"
-
-
-                elif sl and current >= sl:
-
-                    reason = "STOP LOSS"
+                    close_reason = "STOP LOSS"
 
 
 
-            if not reason:
+
+
+
+            elif side.upper() in [
+
+                "SELL",
+                "SHORT"
+
+            ]:
+
+
+                if tp > 0 and current <= tp:
+
+
+                    close_reason = "TAKE PROFIT"
+
+
+
+                elif sl > 0 and current >= sl:
+
+
+                    close_reason = "STOP LOSS"
+
+
+
+
+
+
+            if not close_reason:
 
                 continue
 
 
 
+
+
             result = coinex_trade.close_position(
+
                 symbol,
+
                 side,
+
                 quantity
+
             )
+
 
 
             if not result:
@@ -345,73 +399,165 @@ def check_tp_sl():
 
 
 
-            if result.get("code") != 0:
 
-                logger.error(result)
+
+            if result.get(
+                "code"
+            ) != 0:
+
+
+                logger.error(
+                    result
+                )
+
 
                 continue
 
 
 
+
+
             pnl = calculate_pnl(
+
                 side,
+
                 entry,
+
                 current,
+
                 quantity
+
             )
 
 
-            pnl_percent = calculate_profit_percent(
+
+            pnl_percent = calculate_pnl_percent(
+
                 entry,
+
                 current,
+
                 side
+
             )
+
+
+
 
 
             close_trade(
+
                 trade.get(
                     "id"
                 )
+
             )
 
 
-            report = {
 
-                "symbol": symbol,
 
-                "side": side,
+            trade_report = {
 
-                "entry": entry,
 
-                "exit": current,
+                "symbol":
 
-                "quantity": quantity,
+                    symbol,
 
-                "reason": reason,
 
-                "pnl": pnl,
+                "side":
 
-                "pnl_percent": pnl_percent
+                    side,
+
+
+                "entry":
+
+                    entry,
+
+
+                "exit":
+
+                    current,
+
+
+                "quantity":
+
+                    quantity,
+
+
+                "reason":
+
+                    close_reason,
+
+
+                "pnl":
+
+                    pnl,
+
+
+                "pnl_percent":
+
+                    pnl_percent,
+
+
+                "tp":
+
+                    tp,
+
+
+                "sl":
+
+                    sl,
+
+
+                "confidence":
+
+                    trade.get(
+                        "confidence",
+                        "-"
+                    )
+
 
             }
 
 
-            closed.append(
-                report
+
+            notify_trade_closed(
+                trade_report
             )
+
+
+
+
+
+            closed.append(
+
+                trade_report
+
+            )
+
+
+
 
 
             logger.info(
-                f"CLOSED {symbol} | {reason} | PNL {pnl}"
+
+                f"{symbol} CLOSED {close_reason} PNL={pnl}"
+
             )
+
+
+
 
 
         return closed
 
 
 
+
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return []
