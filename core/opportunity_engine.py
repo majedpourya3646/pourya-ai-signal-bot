@@ -14,6 +14,9 @@ from config import (
 
 
 
+
+
+
 def calculate_opportunity_score(
     item
 ):
@@ -27,105 +30,140 @@ def calculate_opportunity_score(
 
 
 
-        confidence = float(
+        confidence = item.get(
 
-            item.get(
+            "confidence",
 
-                "confidence",
-
-                0
-
-            )
+            0
 
         )
 
 
 
-        buy_score = float(
+        if confidence >= 80:
 
-            item.get(
 
-                "buy_score",
+            score += 40
 
-                0
 
-            )
+
+        elif confidence >= 70:
+
+
+            score += 30
+
+
+
+        elif confidence >= MIN_CONFIDENCE:
+
+
+            score += 20
+
+
+
+
+
+        signal = item.get(
+
+            "signal"
 
         )
 
 
 
-        sell_score = float(
+        if signal in [
 
-            item.get(
+            "BUY",
 
-                "sell_score",
+            "SELL"
 
-                0
+        ]:
 
-            )
+
+            score += 20
+
+
+
+
+
+        timeframes = item.get(
+
+            "timeframes",
+
+            {}
 
         )
 
 
 
+        if len(timeframes) >= 3:
 
 
-        score += confidence * 0.6
-
-
-
-
-
-        if buy_score > 0 or sell_score > 0:
-
-            score += (
-
-                max(
-
-                    buy_score,
-
-                    sell_score
-
-                )
-
-                *
-
-                0.3
-
-            )
+            score += 20
 
 
 
 
 
-        if item.get(
+        entry = item.get(
 
             "entry"
 
-        ) and item.get(
+        )
+
+
+
+        tp = item.get(
 
             "tp"
 
-        ) and item.get(
+        )
+
+
+
+        sl = item.get(
 
             "sl"
 
-        ):
-
-            score += 10
-
-
-
-
-
-        return round(
-
-            score,
-
-            2
-
         )
+
+
+
+        if entry and tp and sl:
+
+
+            risk = abs(
+
+                entry - sl
+
+            )
+
+
+            reward = abs(
+
+                tp - entry
+
+            )
+
+
+
+            if risk > 0:
+
+
+                rr = reward / risk
+
+
+
+                if rr >= 2:
+
+
+                    score += 20
+
+
+
+
+
+        return score
 
 
 
@@ -145,54 +183,22 @@ def calculate_opportunity_score(
 
 
 
-def enrich_opportunity(
-    item
-):
+
+def scan_opportunities():
 
     try:
 
 
-        item["opportunity_score"] = calculate_opportunity_score(
-
-            item
-
-        )
+        markets = analyze_market_symbols()
 
 
 
-        return item
+        if not markets:
 
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-
-
-
-def find_best_opportunities():
-
-    try:
-
-
-        signals = analyze_market_symbols()
-
-
-
-        if not signals:
 
             return []
+
+
 
 
 
@@ -202,19 +208,17 @@ def find_best_opportunities():
 
 
 
-        for item in signals:
+
+
+        for item in markets:
 
 
 
-            confidence = float(
+            confidence = item.get(
 
-                item.get(
+                "confidence",
 
-                    "confidence",
-
-                    0
-
-                )
+                0
 
             )
 
@@ -222,13 +226,14 @@ def find_best_opportunities():
 
             if confidence < MIN_CONFIDENCE:
 
+
                 continue
 
 
 
 
 
-            enriched = enrich_opportunity(
+            item["opportunity_score"] = calculate_opportunity_score(
 
                 item
 
@@ -236,13 +241,12 @@ def find_best_opportunities():
 
 
 
-            if enriched:
+            opportunities.append(
 
-                opportunities.append(
+                item
 
-                    enriched
+            )
 
-                )
 
 
 
@@ -270,14 +274,6 @@ def find_best_opportunities():
 
 
 
-        logger.info(
-
-            f"BEST OPPORTUNITIES {len(opportunities)}"
-
-        )
-
-
-
         return opportunities
 
 
@@ -298,16 +294,17 @@ def find_best_opportunities():
 
 
 
-def get_top_opportunity():
+def get_best_opportunity():
 
     try:
 
 
-        opportunities = find_best_opportunities()
+        opportunities = scan_opportunities()
 
 
 
         if opportunities:
+
 
             return opportunities[0]
 
