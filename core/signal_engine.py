@@ -2,24 +2,64 @@
 
 import pandas as pd
 
-from core.logger import logger
+from ta.momentum import RSIIndicator
 
-from config import (
-    DEFAULT_TP,
-    DEFAULT_SL
+from ta.trend import (
+    EMAIndicator,
+    MACD,
+    ADXIndicator
 )
 
+from core.logger import logger
 
 
 
 
-try:
 
-    import ta
+def prepare_dataframe(
+    candles
+):
 
-except Exception:
+    try:
 
-    ta = None
+
+        df = pd.DataFrame(
+
+            candles
+
+        )
+
+
+
+        if df.empty:
+
+            return None
+
+
+
+
+
+        df["close"] = df["close"].astype(float)
+
+        df["high"] = df["high"].astype(float)
+
+        df["low"] = df["low"].astype(float)
+
+        df["volume"] = df["volume"].astype(float)
+
+
+
+        return df
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
 
 
 
@@ -34,129 +74,90 @@ def calculate_indicators(
     try:
 
 
-        if df is None or df.empty:
+        df["ema20"] = EMAIndicator(
 
-            return None
+            df["close"],
 
+            window=20
 
+        ).ema_indicator()
 
-        data = df.copy()
 
 
+        df["ema50"] = EMAIndicator(
 
-        if ta:
+            df["close"],
 
+            window=50
 
-            data["ema20"] = ta.trend.ema_indicator(
+        ).ema_indicator()
 
-                data["close"],
 
-                window=20
 
-            )
+        df["ema200"] = EMAIndicator(
 
+            df["close"],
 
-            data["ema50"] = ta.trend.ema_indicator(
+            window=200
 
-                data["close"],
+        ).ema_indicator()
 
-                window=50
 
-            )
 
 
-            data["ema200"] = ta.trend.ema_indicator(
 
-                data["close"],
+        rsi = RSIIndicator(
 
-                window=200
+            df["close"],
 
-            )
+            window=14
 
+        )
 
 
-            data["rsi"] = ta.momentum.rsi(
 
-                data["close"],
+        df["rsi"] = rsi.rsi()
 
-                window=14
 
-            )
 
 
 
-            data["macd"] = ta.trend.macd(
 
-                data["close"]
+        macd = MACD(
 
-            )
+            df["close"]
 
+        )
 
 
-            data["adx"] = ta.trend.adx(
 
-                data["high"],
+        df["macd"] = macd.macd()
 
-                data["low"],
+        df["macd_signal"] = macd.macd_signal()
 
-                data["close"]
 
-            )
 
 
 
-        else:
+        adx = ADXIndicator(
 
+            df["high"],
 
-            data["ema20"] = (
+            df["low"],
 
-                data["close"]
+            df["close"]
 
-                .ewm(span=20)
+        )
 
-                .mean()
 
-            )
 
+        df["adx"] = adx.adx()
 
-            data["ema50"] = (
 
-                data["close"]
 
-                .ewm(span=50)
 
-                .mean()
 
-            )
-
-
-            data["ema200"] = (
-
-                data["close"]
-
-                .ewm(span=200)
-
-                .mean()
-
-            )
-
-
-
-            data["rsi"] = 50
-
-
-
-            data["macd"] = 0
-
-
-
-            data["adx"] = 0
-
-
-
-
-
-        return data
+        return df
 
 
 
@@ -175,21 +176,21 @@ def calculate_indicators(
 
 
 def analyze_signal(
-    df
+    candles
 ):
 
     try:
 
 
-        data = calculate_indicators(
+        df = prepare_dataframe(
 
-            df
+            candles
 
         )
 
 
 
-        if data is None:
+        if df is None:
 
             return None
 
@@ -197,15 +198,30 @@ def analyze_signal(
 
 
 
-        last = data.iloc[-1]
+        df = calculate_indicators(
+
+            df
+
+        )
+
+
+
+        if df is None:
+
+            return None
+
+
+
+
+
+        last = df.iloc[-1]
 
 
 
         score = 0
 
+        signal = None
 
-
-        signal = "WAIT"
 
 
 
@@ -215,23 +231,14 @@ def analyze_signal(
 
         if last["ema20"] > last["ema50"]:
 
-            score += 20
-
-
-        if last["ema50"] > last["ema200"]:
-
-            score += 20
+            score += 15
 
 
 
-        if last["ema20"] < last["ema50"]:
+        if last["close"] > last["ema200"]:
 
-            score -= 20
+            score += 15
 
-
-        if last["ema50"] < last["ema200"]:
-
-            score -= 20
 
 
 
@@ -239,14 +246,18 @@ def analyze_signal(
 
         # RSI
 
-        if last["rsi"] < 35:
+        if 40 < last["rsi"] < 70:
 
             score += 15
 
 
-        elif last["rsi"] > 65:
 
-            score -= 15
+
+
+        elif last["rsi"] < 30:
+
+            score += 10
+
 
 
 
@@ -254,13 +265,10 @@ def analyze_signal(
 
         # MACD
 
-        if last["macd"] > 0:
+        if last["macd"] > last["macd_signal"]:
 
             score += 15
 
-        else:
-
-            score -= 15
 
 
 
@@ -270,7 +278,8 @@ def analyze_signal(
 
         if last["adx"] > 20:
 
-            score += 10
+            score += 15
+
 
 
 
@@ -278,17 +287,11 @@ def analyze_signal(
 
         # Volume
 
-        if (
+        avg_volume = df["volume"].mean()
 
-            last["volume"]
 
-            >
 
-            data["volume"]
-
-            .mean()
-
-        ):
+        if last["volume"] > avg_volume:
 
             score += 10
 
@@ -296,23 +299,31 @@ def analyze_signal(
 
 
 
-        confidence = abs(score)
+
+        if score >= 60:
+
+
+            if (
+
+                last["ema20"]
+
+                >
+
+                last["ema50"]
+
+            ):
+
+
+                signal = "BUY"
 
 
 
+            else:
 
 
-        if score >= 40:
+                signal = "SELL"
 
 
-            signal = "BUY"
-
-
-
-        elif score <= -40:
-
-
-            signal = "SELL"
 
 
 
@@ -326,11 +337,12 @@ def analyze_signal(
                 signal,
 
 
+
             "confidence":
 
                 min(
 
-                    confidence,
+                    score,
 
                     100
 
@@ -348,91 +360,21 @@ def analyze_signal(
 
 
 
-            "entry":
+            "rsi":
 
                 float(
 
-                    last["close"]
+                    last["rsi"]
 
                 ),
 
 
 
-            "tp":
+            "adx":
 
                 float(
 
-                    last["close"]
-
-                )
-
-                *
-
-                (
-
-                    1 +
-
-                    DEFAULT_TP / 100
-
-                )
-
-                if signal=="BUY"
-
-                else
-
-                float(
-
-                    last["close"]
-
-                )
-
-                *
-
-                (
-
-                    1 -
-
-                    DEFAULT_TP / 100
-
-                ),
-
-
-
-            "sl":
-
-                float(
-
-                    last["close"]
-
-                )
-
-                *
-
-                (
-
-                    1 -
-
-                    DEFAULT_SL / 100
-
-                )
-
-                if signal=="BUY"
-
-                else
-
-                float(
-
-                    last["close"]
-
-                )
-
-                *
-
-                (
-
-                    1 +
-
-                    DEFAULT_SL / 100
+                    last["adx"]
 
                 )
 
@@ -447,47 +389,3 @@ def analyze_signal(
 
 
         return None
-
-
-
-
-
-
-
-def get_signal_strength(
-    result
-):
-
-    try:
-
-
-        confidence = result.get(
-
-            "confidence",
-
-            0
-
-        )
-
-
-
-        if confidence >= 80:
-
-            return "STRONG"
-
-
-
-        if confidence >= 60:
-
-            return "NORMAL"
-
-
-
-        return "WEAK"
-
-
-
-    except Exception:
-
-
-        return "UNKNOWN"
