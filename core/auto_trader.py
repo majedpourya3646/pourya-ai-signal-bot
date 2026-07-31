@@ -14,23 +14,38 @@ from core.trade_manager import (
 
 
 from config import (
+
     MAX_OPEN_TRADES,
-    MIN_CONFIDENCE,
-    LEVERAGE
+
+    MIN_CONFIDENCE
+
 )
 
 
 
 
 
-def execute_trade(signal):
+
+
+def execute_trade(
+
+    opportunity
+
+):
 
 
     try:
 
 
 
-        if not signal:
+        if not opportunity:
+
+
+            logger.info(
+
+                "NO OPPORTUNITY"
+
+            )
 
 
             return None
@@ -40,36 +55,65 @@ def execute_trade(signal):
 
 
 
-        symbol = signal.get(
+
+        symbol = opportunity.get(
+
             "symbol"
+
         )
 
 
-        direction = signal.get(
+
+        signal = opportunity.get(
+
             "signal"
+
         )
 
 
 
-        confidence = signal.get(
+        confidence = opportunity.get(
+
             "confidence",
+
             0
+
         )
 
 
 
-        entry = signal.get(
+        entry = opportunity.get(
+
             "entry"
+
         )
 
 
-        tp = signal.get(
+
+        tp = opportunity.get(
+
             "tp"
+
         )
 
 
-        sl = signal.get(
+
+        sl = opportunity.get(
+
             "sl"
+
+        )
+
+
+
+
+
+
+
+        logger.info(
+
+            f"TRADE CHECK {symbol} {signal} CONF={confidence}"
+
         )
 
 
@@ -97,65 +141,18 @@ def execute_trade(signal):
 
 
 
-        if direction not in [
 
-            "BUY",
-
-            "SELL"
-
-        ]:
-
-
-            logger.info(
-
-                f"INVALID SIGNAL {direction}"
-
-            )
-
-
-            return None
-
-
-
-
-
-
-
-        logger.info(
-
-            f"TRADE APPROVED {symbol} {direction}"
-
-        )
-
-
-
-
-
-
-
-        lot = calculate_lot(
-
-            symbol
-
-        )
-
-
-
-
-
-
-
-        order = create_order(
+        result = create_order(
 
             symbol,
 
-            direction,
+            signal,
 
-            lot,
+            entry,
 
-            sl,
+            tp,
 
-            tp
+            sl
 
         )
 
@@ -165,7 +162,8 @@ def execute_trade(signal):
 
 
 
-        if not order:
+
+        if not result:
 
 
 
@@ -185,46 +183,82 @@ def execute_trade(signal):
 
 
 
-        trade = {
+        trade_id = save_trade(
+
+            {
 
 
-            "symbol":
+                "symbol":
 
-                symbol,
-
-
-            "side":
-
-                direction,
+                    symbol,
 
 
-            "entry":
+                "side":
 
-                entry,
-
-
-            "tp":
-
-                tp,
+                    signal,
 
 
-            "sl":
+                "entry":
 
-                sl,
-
-
-            "confidence":
-
-                confidence,
+                    entry,
 
 
-            "ticket":
+                "tp":
 
-                order.get(
+                    tp,
 
-                    "ticket"
 
-                )
+                "sl":
+
+                    sl,
+
+
+                "ticket":
+
+                    result.get(
+
+                        "ticket"
+
+                    ),
+
+
+                "status":
+
+                    "OPEN"
+
+
+
+            }
+
+        )
+
+
+
+
+
+
+
+        logger.info(
+
+            f"TRADE OPENED {trade_id}"
+
+        )
+
+
+
+
+
+        return {
+
+
+            "trade_id":
+
+                trade_id,
+
+
+            "order":
+
+                result
 
 
 
@@ -235,34 +269,9 @@ def execute_trade(signal):
 
 
 
-        save_trade(
-
-            trade
-
-        )
-
-
-
-
-
-        logger.info(
-
-            f"TRADE OPENED {trade}"
-
-        )
-
-
-
-
-
-        return trade
-
-
-
-
-
 
     except Exception as e:
+
 
 
         logger.error(
@@ -282,18 +291,90 @@ def execute_trade(signal):
 
 
 
-def calculate_lot(symbol):
-
-
-    """
-    محاسبه حجم معامله
-    نسخه اولیه MT5
-    """
 
 
 
-    default_lot = 0.01
+
+def auto_trade(
+
+    opportunities
+
+):
+
+
+    try:
 
 
 
-    return default_lot
+        if not opportunities:
+
+
+            return None
+
+
+
+
+
+
+
+        sorted_items = sorted(
+
+            opportunities,
+
+            key=lambda x:
+
+                x.get(
+
+                    "confidence",
+
+                    0
+
+                ),
+
+            reverse=True
+
+        )
+
+
+
+
+
+
+
+        best = sorted_items[0]
+
+
+
+
+
+        logger.info(
+
+            f"BEST TRADE {best}"
+
+        )
+
+
+
+        return execute_trade(
+
+            best
+
+        )
+
+
+
+
+
+
+    except Exception as e:
+
+
+
+        logger.error(
+
+            f"AUTO TRADE LOOP ERROR {e}"
+
+        )
+
+
+        return None
