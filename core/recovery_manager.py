@@ -1,8 +1,5 @@
 # core/recovery_manager.py
 
-import os
-import json
-
 from datetime import datetime
 
 from core.logger import logger
@@ -12,90 +9,176 @@ from core.trade_manager import (
 )
 
 from core.database_manager import (
-    insert_log
+    save_setting,
+    get_setting
 )
 
-
-
-
-
-RECOVERY_FILE = (
-
-    "data/recovery_state.json"
-
-)
+from coinex_trade import coinex_trade
 
 
 
 
 
 
+RECOVERY_STATUS = {
 
-def save_recovery_state(
-    state
-):
+    "running":
+
+        False,
+
+
+    "last_check":
+
+        None,
+
+
+    "issues":
+
+        []
+
+}
+
+
+
+
+
+
+
+
+def check_saved_positions():
 
     try:
 
 
-        folder = os.path.dirname(
+        trades = get_open_trades()
 
-            RECOVERY_FILE
+
+
+        if not trades:
+
+
+            return True
+
+
+
+        logger.info(
+
+            f"FOUND {len(trades)} OPEN TRADES"
 
         )
 
 
-        if not os.path.exists(
 
-            folder
-
-        ):
+        return True
 
 
-            os.makedirs(
 
-                folder
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def sync_exchange_positions():
+
+    try:
+
+
+        positions = coinex_trade.get_open_positions()
+
+
+
+        if positions is None:
+
+
+            logger.warning(
+
+                "EXCHANGE POSITION CHECK FAILED"
+
+            )
+
+
+            return False
+
+
+
+        logger.info(
+
+            "EXCHANGE POSITIONS SYNCED"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def check_duplicate_risk():
+
+    try:
+
+
+        trades = get_open_trades()
+
+
+
+        symbols = []
+
+
+
+        for trade in trades:
+
+
+            symbol = trade.get(
+
+                "symbol"
 
             )
 
 
 
-        data = {
+            if symbol in symbols:
 
 
-            "state":
+                logger.warning(
 
-                state,
+                    f"DUPLICATE POSITION {symbol}"
 
-
-            "timestamp":
-
-                datetime.utcnow()
-                .isoformat()
+                )
 
 
-        }
+                return False
 
 
 
-        with open(
+            symbols.append(
 
-            RECOVERY_FILE,
-
-            "w",
-
-            encoding="utf-8"
-
-        ) as file:
-
-
-            json.dump(
-
-                data,
-
-                file,
-
-                indent=4
+                symbol
 
             )
 
@@ -120,38 +203,40 @@ def save_recovery_state(
 
 
 
-def load_recovery_state():
+def enable_safe_mode():
 
     try:
 
 
-        if not os.path.exists(
+        save_setting(
 
-            RECOVERY_FILE
+            "safe_mode",
 
-        ):
+            True
 
-
-            return None
-
+        )
 
 
-        with open(
 
-            RECOVERY_FILE,
+        save_setting(
 
-            "r",
+            "trading_mode",
 
-            encoding="utf-8"
+            "MANUAL"
 
-        ) as file:
+        )
 
 
-            return json.load(
 
-                file
+        logger.warning(
 
-            )
+            "SAFE MODE ENABLED"
+
+        )
+
+
+
+        return True
 
 
 
@@ -161,7 +246,7 @@ def load_recovery_state():
         logger.exception(e)
 
 
-        return None
+        return False
 
 
 
@@ -170,29 +255,22 @@ def load_recovery_state():
 
 
 
-def check_open_positions():
+def disable_safe_mode():
 
     try:
 
 
-        trades = get_open_trades()
+        save_setting(
+
+            "safe_mode",
+
+            False
+
+        )
 
 
 
-        return {
-
-
-            "count":
-
-                len(trades),
-
-
-            "trades":
-
-                trades
-
-
-        }
+        return True
 
 
 
@@ -202,80 +280,82 @@ def check_open_positions():
         logger.exception(e)
 
 
-        return {
+        return False
 
 
-            "count":
-
-                0,
 
 
-            "trades":
+
+
+
+
+def run_recovery_check():
+
+    global RECOVERY_STATUS
+
+
+
+    try:
+
+
+        checks = [
+
+            check_saved_positions(),
+
+            sync_exchange_positions(),
+
+            check_duplicate_risk()
+
+        ]
+
+
+
+        success = all(
+
+            checks
+
+        )
+
+
+
+        if not success:
+
+
+            enable_safe_mode()
+
+
+
+        RECOVERY_STATUS = {
+
+
+            "running":
+
+                True,
+
+
+            "last_check":
+
+                datetime.utcnow()
+                .isoformat(),
+
+
+            "issues":
 
                 []
 
-        }
+                if success
 
+                else [
 
+                    "RECOVERY WARNING"
 
-
-
-
-
-
-def validate_recovery():
-
-    try:
-
-
-        state = load_recovery_state()
-
-
-
-        positions = check_open_positions()
-
-
-
-        result = {
-
-
-            "previous_state":
-
-                state,
-
-
-            "open_positions":
-
-                positions,
-
-
-            "safe":
-
-                True
-
+                ]
 
         }
 
 
 
-        if positions.get(
-
-            "count",
-
-            0
-
-        ) > 0:
-
-
-            logger.info(
-
-                "OPEN POSITIONS FOUND DURING RECOVERY"
-
-            )
-
-
-
-        return result
+        return success
 
 
 
@@ -285,14 +365,11 @@ def validate_recovery():
         logger.exception(e)
 
 
-        return {
+        enable_safe_mode()
 
 
-            "safe":
 
-                False
-
-        }
+        return False
 
 
 
@@ -306,146 +383,15 @@ def start_recovery():
     try:
 
 
-        recovery = validate_recovery()
-
-
-
-        if not recovery.get(
-
-            "safe"
-
-        ):
-
-
-            enter_safe_mode(
-
-                "RECOVERY FAILED"
-
-            )
-
-
-            return False
-
-
-
-        save_recovery_state(
-
-            "SYSTEM_RECOVERED"
-
-        )
-
-
-
-        insert_log(
-
-            "SYSTEM_RECOVERY",
-
-            recovery
-
-        )
-
-
-
         logger.info(
 
-            "RECOVERY COMPLETED"
+            "RECOVERY SYSTEM STARTED"
 
         )
 
 
 
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def enter_safe_mode(
-    reason
-):
-
-    try:
-
-
-        save_recovery_state(
-
-            "SAFE_MODE"
-
-        )
-
-
-
-        insert_log(
-
-            "SAFE_MODE",
-
-            reason
-
-        )
-
-
-
-        logger.warning(
-
-            f"SYSTEM SAFE MODE: {reason}"
-
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def clear_recovery_state():
-
-    try:
-
-
-        if os.path.exists(
-
-            RECOVERY_FILE
-
-        ):
-
-
-            os.remove(
-
-                RECOVERY_FILE
-
-            )
-
-
-
-        return True
+        return run_recovery_check()
 
 
 
@@ -466,34 +412,4 @@ def clear_recovery_state():
 
 def recovery_status():
 
-    try:
-
-
-        state = load_recovery_state()
-
-
-
-        return {
-
-
-            "available":
-
-                bool(state),
-
-
-            "state":
-
-                state
-
-
-        }
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
+    return RECOVERY_STATUS
