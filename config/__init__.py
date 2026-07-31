@@ -111,3 +111,11 @@ USE_ATR_FILTER = True
 from .settings import *
 
 MAX_DAILY_LOSS_PERCENT = 5
+
+# ===========================
+# Scheduler
+# ===========================
+
+SCHEDULER_INTERVAL = 60
+
+SCHEDULER_MODE = "RUNNING"
