@@ -1,117 +1,14 @@
 # core/market_signal_bridge.py
 
-from multi_timeframe import (
+from core.logger import logger
+
+from core.multi_timeframe import (
     analyze_symbol
 )
 
-from core.logger import logger
-
-from datetime import datetime
-
 from config import (
-    MIN_CONFIDENCE
+    SYMBOLS
 )
-
-
-
-
-VALID_SIGNALS = [
-
-    "BUY",
-
-    "SELL",
-
-    "STRONG BUY",
-
-    "STRONG SELL",
-
-    "EARLY BUY",
-
-    "EARLY SELL",
-
-]
-
-
-
-
-
-def is_valid_signal(
-    result
-):
-
-    try:
-
-
-        if not result:
-
-
-            return False
-
-
-
-
-        signal = result.get(
-
-            "signal",
-
-            "WAIT"
-
-        )
-
-
-
-        score = float(
-
-            result.get(
-
-                "score",
-
-                result.get(
-
-                    "confidence",
-
-                    0
-
-                )
-
-            )
-
-        )
-
-
-
-
-
-        if signal not in VALID_SIGNALS:
-
-
-            return False
-
-
-
-
-
-        if score < MIN_CONFIDENCE:
-
-
-            return False
-
-
-
-
-
-        return True
-
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
 
 
 
@@ -125,14 +22,39 @@ def normalize_signal(
     try:
 
 
-        if signal in VALID_SIGNALS:
+        signal = str(
+
+            signal
+
+        ).upper().strip()
 
 
-            return signal
+
+        if signal in [
+
+            "STRONG BUY",
+
+            "EARLY BUY"
+
+        ]:
+
+            return "BUY"
 
 
 
-        return "WAIT"
+        if signal in [
+
+            "STRONG SELL",
+
+            "EARLY SELL"
+
+        ]:
+
+            return "SELL"
+
+
+
+        return signal
 
 
 
@@ -148,12 +70,29 @@ def normalize_signal(
 
 
 
-def build_signal_item(
-    symbol,
-    result
+
+
+def analyze_market_symbol(
+    symbol
 ):
 
     try:
+
+
+        result = analyze_symbol(
+
+            symbol
+
+        )
+
+
+
+        if not result:
+
+            return None
+
+
+
 
 
         signal = normalize_signal(
@@ -170,23 +109,15 @@ def build_signal_item(
 
 
 
-        score = float(
+        if signal not in [
 
-            result.get(
+            "BUY",
 
-                "score",
+            "SELL"
 
-                result.get(
+        ]:
 
-                    "confidence",
-
-                    0
-
-                )
-
-            )
-
-        )
+            return None
 
 
 
@@ -197,151 +128,91 @@ def build_signal_item(
 
             "symbol":
 
-            symbol,
-
-
-
-            "market":
-
-            "FUTURES",
+                symbol,
 
 
 
             "signal":
 
-            signal,
+                signal,
 
 
 
             "confidence":
 
-            score,
+                result.get(
 
+                    "confidence",
 
+                    0
 
-            "score":
-
-            score,
+                ),
 
 
 
             "entry":
 
-            result.get(
-
-                "entry",
-
                 result.get(
 
-                    "price"
+                    "entry"
 
-                )
-
-            ),
-
-
-
-            "price":
-
-            result.get(
-
-                "price"
-
-            ),
+                ),
 
 
 
             "tp":
 
-            result.get(
-
-                "tp",
-
                 result.get(
 
-                    "take_profit"
+                    "tp"
 
-                )
-
-            ),
+                ),
 
 
 
             "sl":
 
-            result.get(
+                result.get(
 
-                "sl",
+                    "sl"
+
+                ),
+
+
+
+            "buy_score":
 
                 result.get(
 
-                    "stop_loss"
+                    "buy_score",
 
-                )
+                    0
 
-            ),
-
-
-
-            "take_profit":
-
-            result.get(
-
-                "take_profit"
-
-            ),
+                ),
 
 
 
-            "stop_loss":
+            "sell_score":
 
-            result.get(
+                result.get(
 
-                "stop_loss"
+                    "sell_score",
 
-            ),
+                    0
+
+                ),
 
 
 
             "timeframes":
 
-            result.get(
+                result.get(
 
-                "timeframes",
+                    "timeframes",
 
-                []
+                    {}
 
-            ),
-
-
-
-            "grade":
-
-            result.get(
-
-                "grade",
-
-                ""
-
-            ),
-
-
-
-            "reasons":
-
-            result.get(
-
-                "reasons",
-
-                []
-
-            ),
-
-
-
-            "created_at":
-
-            datetime.utcnow().isoformat()
+                )
 
         }
 
@@ -361,25 +232,25 @@ def build_signal_item(
 
 
 
+
+
+
 def analyze_market_symbols(
-    symbols
+    symbols=None
 ):
-
-
-    results = []
-
-
 
     try:
 
 
+        if symbols is None:
 
-        if not symbols:
-
-
-            return []
+            symbols = SYMBOLS
 
 
+
+
+
+        opportunities = []
 
 
 
@@ -387,74 +258,17 @@ def analyze_market_symbols(
 
 
 
-            try:
+            result = analyze_market_symbol(
+
+                symbol
+
+            )
 
 
 
-                logger.info(
+            if result:
 
-                    f"ANALYZING {symbol}"
-
-                )
-
-
-
-
-
-                result = analyze_symbol(
-
-                    symbol
-
-                )
-
-
-
-
-
-                if not result:
-
-
-                    continue
-
-
-
-
-
-
-                logger.info(
-
-                    f"{symbol} RESULT {result}"
-
-                )
-
-
-
-
-
-                if not is_valid_signal(
-
-                    result
-
-                ):
-
-
-
-                    logger.info(
-
-                        f"{symbol} FILTERED"
-
-                    )
-
-
-                    continue
-
-
-
-
-
-                item = build_signal_item(
-
-                    symbol,
+                opportunities.append(
 
                     result
 
@@ -464,46 +278,7 @@ def analyze_market_symbols(
 
 
 
-                if not item:
-
-
-                    continue
-
-
-
-
-
-                results.append(
-
-                    item
-
-                )
-
-
-
-
-
-                logger.info(
-
-                    f"{symbol} ACCEPTED | {item['signal']} | SCORE={item['score']}"
-
-                )
-
-
-
-
-
-            except Exception as e:
-
-
-
-                logger.exception(e)
-
-
-
-
-
-        results.sort(
+        opportunities.sort(
 
             key=lambda x:
 
@@ -521,21 +296,15 @@ def analyze_market_symbols(
 
 
 
-
-
         logger.info(
 
-            f"VALID MARKET SIGNALS: {len(results)}"
+            f"MARKET SIGNALS FOUND {len(opportunities)}"
 
         )
 
 
 
-
-
-        return results
-
-
+        return opportunities
 
 
 
@@ -546,3 +315,39 @@ def analyze_market_symbols(
 
 
         return []
+
+
+
+
+
+
+
+
+
+
+def get_best_signal():
+
+    try:
+
+
+        signals = analyze_market_symbols()
+
+
+
+        if not signals:
+
+            return None
+
+
+
+        return signals[0]
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
