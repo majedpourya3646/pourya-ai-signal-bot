@@ -1,332 +1,185 @@
 # core/payment_manager.py
 
-import sqlite3
-
 from datetime import datetime
-
+from core.database_manager import get_connection
 from core.logger import logger
 
-
-
-
-
-DB_PATH = "data/pourya_trader.db"
-
-
-
-
-
-
-
-
-def get_connection():
-
-    try:
-
-        return sqlite3.connect(
-
-            DB_PATH
-
-        )
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
+PAYMENT_STATUS = (
+    "PENDING",
+    "SUCCESS",
+    "FAILED",
+    "CANCELLED"
+)
 
 
 def init_payment_database():
 
     try:
 
-
         conn = get_connection()
-
-
 
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
             CREATE TABLE IF NOT EXISTS payments
-
             (
-
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                telegram_id TEXT,
-
-                amount REAL,
-
-                currency TEXT DEFAULT 'USDT',
-
-                payment_type TEXT,
-
-                status TEXT,
-
+                telegram_id TEXT NOT NULL,
+                amount REAL NOT NULL,
+                currency TEXT NOT NULL,
+                payment_method TEXT NOT NULL,
                 transaction_id TEXT,
-
-                created_at TEXT
-
+                status TEXT NOT NULL,
+                description TEXT,
+                created_at TEXT,
+                updated_at TEXT
             )
-
             """
-
         )
 
-
-
         conn.commit()
-
         conn.close()
-
-
 
         return True
 
-
-
     except Exception as e:
-
 
         logger.exception(e)
 
-
         return False
-
-
-
-
-
-
 
 
 def create_payment(
     telegram_id,
     amount,
-    payment_type,
+    currency="USDT",
+    payment_method="CRYPTO",
+    description=""
+):
+
+    try:
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        now = datetime.utcnow().isoformat()
+
+        cursor.execute(
+            """
+            INSERT INTO payments
+            (
+                telegram_id,
+                amount,
+                currency,
+                payment_method,
+                status,
+                description,
+                created_at,
+                updated_at
+            )
+            VALUES
+            (
+                ?,?,?,?,?,?,?,?
+            )
+            """,
+            (
+                str(telegram_id),
+                float(amount),
+                currency,
+                payment_method,
+                "PENDING",
+                description,
+                now,
+                now
+            )
+        )
+
+        payment_id = cursor.lastrowid
+
+        conn.commit()
+        conn.close()
+
+        return payment_id
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return None
+
+
+def update_payment_status(
+    payment_id,
+    status,
     transaction_id=None
 ):
 
     try:
 
+        if status not in PAYMENT_STATUS:
+
+            return False
 
         conn = get_connection()
-
-
-
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
-            INSERT INTO payments
-
+            UPDATE payments
+            SET
+                status=?,
+                transaction_id=?,
+                updated_at=?
+            WHERE id=?
+            """,
             (
-
-                telegram_id,
-
-                amount,
-
-                payment_type,
-
-                transaction_id,
-
                 status,
-
-                created_at
-
-            )
-
-            VALUES (?,?,?,?,?,?)
-
-            """,
-
-            (
-
-                str(telegram_id),
-
-                float(amount),
-
-                payment_type,
-
                 transaction_id,
-
-                "PENDING",
-
-                datetime.utcnow()
-                .isoformat()
-
+                datetime.utcnow().isoformat(),
+                payment_id
             )
-
         )
 
-
-
         conn.commit()
-
         conn.close()
-
-
 
         return True
 
-
-
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
 
 
-
-
-
-
-
-
-def confirm_payment(
-    transaction_id
-):
+def get_payment(payment_id):
 
     try:
 
-
         conn = get_connection()
-
-
-
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
-            UPDATE payments
-
-            SET status='SUCCESS'
-
-            WHERE transaction_id=?
-
+            SELECT *
+            FROM payments
+            WHERE id=?
             """,
-
-            (
-
-                transaction_id,
-
-            )
-
+            (payment_id,)
         )
 
-
-
-        conn.commit()
+        row = cursor.fetchone()
 
         conn.close()
 
-
-
-        return True
-
-
+        return row
 
     except Exception as e:
 
-
         logger.exception(e)
 
-
-        return False
-
-
-
-
-
-
-
-
-def reject_payment(
-    transaction_id
-):
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            UPDATE payments
-
-            SET status='FAILED'
-
-            WHERE transaction_id=?
-
-            """,
-
-            (
-
-                transaction_id,
-
-            )
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
+        return None
 
 
 def get_user_payments(
@@ -335,227 +188,72 @@ def get_user_payments(
 
     try:
 
-
         conn = get_connection()
-
-
-
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
             SELECT *
-
             FROM payments
-
             WHERE telegram_id=?
-
             ORDER BY id DESC
-
             """,
-
-            (
-
-                str(telegram_id),
-
-            )
-
+            (str(telegram_id),)
         )
-
-
 
         rows = cursor.fetchall()
 
-
-
         conn.close()
-
-
 
         return rows
 
-
-
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return []
 
 
-
-
-
-
-
-
-def calculate_total_revenue():
+def successful_payments_total():
 
     try:
 
-
         conn = get_connection()
-
-
-
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
             SELECT SUM(amount)
-
             FROM payments
-
             WHERE status='SUCCESS'
-
             """
-
         )
-
-
 
         result = cursor.fetchone()
 
-
-
         conn.close()
-
-
 
         if result and result[0]:
 
+            return float(result[0])
 
-            return round(
-
-                float(result[0]),
-
-                6
-
-            )
-
-
-
-        return 0
-
-
+        return 0.0
 
     except Exception as e:
 
-
         logger.exception(e)
 
+        return 0.0
 
-        return 0
 
+def payment_statistics():
 
+    return {
 
+        "total_income":
+            successful_payments_total(),
 
+        "generated_at":
+            datetime.utcnow().isoformat()
 
-
-
-
-def get_monthly_revenue():
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            SELECT SUM(amount)
-
-            FROM payments
-
-            WHERE status='SUCCESS'
-
-            AND created_at >= datetime('now','-30 days')
-
-            """
-
-        )
-
-
-
-        result = cursor.fetchone()
-
-
-
-        conn.close()
-
-
-
-        return (
-
-            float(result[0])
-
-            if result[0]
-
-            else 0
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return 0
-
-
-
-
-
-
-
-
-def payment_report():
-
-    try:
-
-
-        return {
-
-
-            "total":
-
-                calculate_total_revenue(),
-
-
-            "monthly":
-
-                get_monthly_revenue()
-
-
-        }
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
+    }
