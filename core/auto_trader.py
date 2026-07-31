@@ -3,8 +3,8 @@
 from core.logger import logger
 
 
-from core.mt5_order_manager import (
-    create_trade
+from core.order_manager import (
+    create_order
 )
 
 
@@ -15,156 +15,172 @@ from core.trade_manager import (
 
 from config import (
     MAX_OPEN_TRADES,
-    DEFAULT_TP,
-    DEFAULT_SL
+    MIN_CONFIDENCE,
+    LEVERAGE
 )
 
 
 
 
 
-def calculate_levels(
-    entry,
-    signal
-):
+def execute_trade(signal):
+
 
     try:
 
 
-        if signal == "BUY":
+
+        if not signal:
 
 
-            tp = entry * (
-                1 + DEFAULT_TP / 100
-            )
-
-
-            sl = entry * (
-                1 - DEFAULT_SL / 100
-            )
-
-
-
-        else:
-
-
-            tp = entry * (
-                1 - DEFAULT_TP / 100
-            )
-
-
-            sl = entry * (
-                1 + DEFAULT_SL / 100
-            )
-
-
-
-        return (
-
-            round(tp, 5),
-
-            round(sl, 5)
-
-        )
-
-
-
-    except Exception as e:
-
-
-        logger.error(
-            f"LEVEL ERROR {e}"
-        )
-
-
-        return None, None
+            return None
 
 
 
 
 
-def execute_trade(
-    opportunity
-):
 
-    try:
-
-
-        symbol = opportunity.get(
+        symbol = signal.get(
             "symbol"
         )
 
 
-        signal = opportunity.get(
+        direction = signal.get(
             "signal"
         )
 
 
-        confidence = opportunity.get(
+
+        confidence = signal.get(
             "confidence",
             0
         )
 
 
-        entry = opportunity.get(
+
+        entry = signal.get(
             "entry"
         )
 
 
+        tp = signal.get(
+            "tp"
+        )
 
-        if not symbol or not signal:
+
+        sl = signal.get(
+            "sl"
+        )
 
 
-            logger.error(
-                "INVALID OPPORTUNITY"
+
+
+
+
+
+        if confidence < MIN_CONFIDENCE:
+
+
+
+            logger.info(
+
+                f"TRADE REJECTED {symbol} CONF={confidence}"
+
             )
 
 
             return None
+
+
+
+
+
+
+
+        if direction not in [
+
+            "BUY",
+
+            "SELL"
+
+        ]:
+
+
+            logger.info(
+
+                f"INVALID SIGNAL {direction}"
+
+            )
+
+
+            return None
+
+
+
 
 
 
 
         logger.info(
-            f"TRADE APPROVED {symbol} {signal}"
-        )
 
-
-
-        tp, sl = calculate_levels(
-
-            entry,
-
-            signal
+            f"TRADE APPROVED {symbol} {direction}"
 
         )
 
 
 
 
-        result = create_trade(
+
+
+
+        lot = calculate_lot(
+
+            symbol
+
+        )
+
+
+
+
+
+
+
+        order = create_order(
 
             symbol,
 
-            signal,
+            direction,
 
-            sl=sl,
+            lot,
 
-            tp=tp
+            sl,
+
+            tp
 
         )
 
 
 
-        if result is None:
+
+
+
+
+        if not order:
+
 
 
             logger.error(
-                "ORDER FAILED"
+
+                "ORDER CREATION FAILED"
+
             )
 
 
             return None
+
+
+
+
 
 
 
@@ -172,25 +188,44 @@ def execute_trade(
         trade = {
 
 
-            "symbol": symbol,
+            "symbol":
+
+                symbol,
 
 
-            "side": signal,
+            "side":
+
+                direction,
 
 
-            "entry": entry,
+            "entry":
+
+                entry,
 
 
-            "tp": tp,
+            "tp":
+
+                tp,
 
 
-            "sl": sl,
+            "sl":
+
+                sl,
 
 
-            "confidence": confidence,
+            "confidence":
+
+                confidence,
 
 
-            "status": "OPEN"
+            "ticket":
+
+                order.get(
+
+                    "ticket"
+
+                )
+
 
 
         }
@@ -198,15 +233,25 @@ def execute_trade(
 
 
 
+
+
         save_trade(
+
             trade
+
         )
+
+
 
 
 
         logger.info(
-            f"TRADE SAVED {trade}"
+
+            f"TRADE OPENED {trade}"
+
         )
+
+
 
 
 
@@ -214,12 +259,41 @@ def execute_trade(
 
 
 
+
+
+
     except Exception as e:
 
 
         logger.error(
-            f"AUTO TRADE ERROR {e}"
+
+            f"AUTO TRADER ERROR {e}"
+
         )
 
 
         return None
+
+
+
+
+
+
+
+
+
+def calculate_lot(symbol):
+
+
+    """
+    محاسبه حجم معامله
+    نسخه اولیه MT5
+    """
+
+
+
+    default_lot = 0.01
+
+
+
+    return default_lot
