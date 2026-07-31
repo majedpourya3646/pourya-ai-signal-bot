@@ -6,13 +6,14 @@ from datetime import datetime
 
 from core.logger import logger
 
-from core.subscription_manager import (
-    create_subscription
-)
 
 
 
-DB_PATH = "data/payments.db"
+
+DB_PATH = "data/pourya_trader.db"
+
+
+
 
 
 
@@ -23,15 +24,21 @@ def get_connection():
     try:
 
         return sqlite3.connect(
+
             DB_PATH
+
         )
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return None
+
+
 
 
 
@@ -46,11 +53,6 @@ def init_payment_database():
         conn = get_connection()
 
 
-        if not conn:
-
-            return False
-
-
 
         cursor = conn.cursor()
 
@@ -60,7 +62,9 @@ def init_payment_database():
 
             """
 
-            CREATE TABLE IF NOT EXISTS payments (
+            CREATE TABLE IF NOT EXISTS payments
+
+            (
 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
 
@@ -70,11 +74,11 @@ def init_payment_database():
 
                 currency TEXT DEFAULT 'USDT',
 
-                plan TEXT,
+                payment_type TEXT,
 
-                payment_id TEXT,
+                status TEXT,
 
-                status TEXT DEFAULT 'PENDING',
+                transaction_id TEXT,
 
                 created_at TEXT
 
@@ -109,22 +113,19 @@ def init_payment_database():
 
 
 
+
+
 def create_payment(
     telegram_id,
     amount,
-    plan,
-    payment_id
+    payment_type,
+    transaction_id=None
 ):
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
 
 
 
@@ -144,9 +145,9 @@ def create_payment(
 
                 amount,
 
-                plan,
+                payment_type,
 
-                payment_id,
+                transaction_id,
 
                 status,
 
@@ -160,17 +161,18 @@ def create_payment(
 
             (
 
-                telegram_id,
+                str(telegram_id),
 
-                amount,
+                float(amount),
 
-                plan,
+                payment_type,
 
-                payment_id,
+                transaction_id,
 
                 "PENDING",
 
-                datetime.utcnow().isoformat()
+                datetime.utcnow()
+                .isoformat()
 
             )
 
@@ -201,19 +203,16 @@ def create_payment(
 
 
 
+
+
 def confirm_payment(
-    payment_id
+    transaction_id
 ):
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
 
 
 
@@ -225,59 +224,17 @@ def confirm_payment(
 
             """
 
-            SELECT *
-
-            FROM payments
-
-            WHERE payment_id=?
-
-            """,
-
-            (
-
-                payment_id,
-
-            )
-
-        )
-
-
-
-        payment = cursor.fetchone()
-
-
-
-        if not payment:
-
-
-            conn.close()
-
-
-            return False
-
-
-
-        telegram_id = payment[1]
-
-        plan = payment[3]
-
-
-
-        cursor.execute(
-
-            """
-
             UPDATE payments
 
-            SET status='PAID'
+            SET status='SUCCESS'
 
-            WHERE payment_id=?
+            WHERE transaction_id=?
 
             """,
 
             (
 
-                payment_id,
+                transaction_id,
 
             )
 
@@ -288,18 +245,6 @@ def confirm_payment(
         conn.commit()
 
         conn.close()
-
-
-
-        create_subscription(
-
-            telegram_id,
-
-            plan,
-
-            30
-
-        )
 
 
 
@@ -320,19 +265,16 @@ def confirm_payment(
 
 
 
+
+
 def reject_payment(
-    payment_id
+    transaction_id
 ):
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return False
 
 
 
@@ -348,13 +290,13 @@ def reject_payment(
 
             SET status='FAILED'
 
-            WHERE payment_id=?
+            WHERE transaction_id=?
 
             """,
 
             (
 
-                payment_id,
+                transaction_id,
 
             )
 
@@ -385,8 +327,10 @@ def reject_payment(
 
 
 
-def get_payment_history(
-    telegram_id=None
+
+
+def get_user_payments(
+    telegram_id
 ):
 
     try:
@@ -395,58 +339,32 @@ def get_payment_history(
         conn = get_connection()
 
 
-        if not conn:
-
-            return []
-
-
 
         cursor = conn.cursor()
 
 
 
-        if telegram_id:
+        cursor.execute(
 
+            """
 
-            cursor.execute(
+            SELECT *
 
-                """
+            FROM payments
 
-                SELECT *
+            WHERE telegram_id=?
 
-                FROM payments
+            ORDER BY id DESC
 
-                WHERE telegram_id=?
+            """,
 
-                ORDER BY id DESC
+            (
 
-                """,
-
-                (
-
-                    telegram_id,
-
-                )
+                str(telegram_id),
 
             )
 
-
-        else:
-
-
-            cursor.execute(
-
-                """
-
-                SELECT *
-
-                FROM payments
-
-                ORDER BY id DESC
-
-                """
-
-            )
+        )
 
 
 
@@ -475,17 +393,14 @@ def get_payment_history(
 
 
 
+
+
 def calculate_total_revenue():
 
     try:
 
 
         conn = get_connection()
-
-
-        if not conn:
-
-            return 0
 
 
 
@@ -501,7 +416,7 @@ def calculate_total_revenue():
 
             FROM payments
 
-            WHERE status='PAID'
+            WHERE status='SUCCESS'
 
             """
 
@@ -517,9 +432,84 @@ def calculate_total_revenue():
 
 
 
-        return float(
+        if result and result[0]:
 
-            result[0] or 0
+
+            return round(
+
+                float(result[0]),
+
+                6
+
+            )
+
+
+
+        return 0
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return 0
+
+
+
+
+
+
+
+
+def get_monthly_revenue():
+
+    try:
+
+
+        conn = get_connection()
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT SUM(amount)
+
+            FROM payments
+
+            WHERE status='SUCCESS'
+
+            AND created_at >= datetime('now','-30 days')
+
+            """
+
+        )
+
+
+
+        result = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        return (
+
+            float(result[0])
+
+            if result[0]
+
+            else 0
 
         )
 
@@ -532,3 +522,40 @@ def calculate_total_revenue():
 
 
         return 0
+
+
+
+
+
+
+
+
+def payment_report():
+
+    try:
+
+
+        return {
+
+
+            "total":
+
+                calculate_total_revenue(),
+
+
+            "monthly":
+
+                get_monthly_revenue()
+
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
