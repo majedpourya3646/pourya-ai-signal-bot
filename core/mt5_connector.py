@@ -2,6 +2,10 @@
 
 import MetaTrader5 as mt5
 
+from datetime import datetime
+
+from core.logger import logger
+
 from config import (
     MT5_LOGIN,
     MT5_PASSWORD,
@@ -9,7 +13,7 @@ from config import (
     MT5_PATH
 )
 
-from core.logger import logger
+
 
 
 
@@ -17,47 +21,75 @@ def initialize_mt5():
 
     try:
 
+
         if MT5_PATH:
 
+
             result = mt5.initialize(
-                MT5_PATH,
-                login=MT5_LOGIN,
-                password=MT5_PASSWORD,
-                server=MT5_SERVER
+                MT5_PATH
             )
+
 
         else:
 
-            result = mt5.initialize(
-                login=MT5_LOGIN,
-                password=MT5_PASSWORD,
-                server=MT5_SERVER
-            )
+
+            result = mt5.initialize()
+
 
 
         if not result:
 
-            error = mt5.last_error()
 
             logger.error(
-                f"MT5 INITIALIZE FAILED {error}"
+                f"MT5 INIT FAILED {mt5.last_error()}"
             )
 
+
             return False
+
+
+
+
+        authorized = mt5.login(
+
+            MT5_LOGIN,
+
+            password=MT5_PASSWORD,
+
+            server=MT5_SERVER
+
+        )
+
+
+
+        if not authorized:
+
+
+            logger.error(
+                f"MT5 LOGIN FAILED {mt5.last_error()}"
+            )
+
+
+            return False
+
 
 
         logger.info(
             "MT5 CONNECTED"
         )
 
+
         return True
+
 
 
     except Exception as e:
 
+
         logger.error(
             f"MT5 CONNECTION ERROR {e}"
         )
+
 
         return False
 
@@ -67,137 +99,39 @@ def initialize_mt5():
 
 def shutdown_mt5():
 
-    try:
+    mt5.shutdown()
 
-        mt5.shutdown()
 
-        logger.info(
-            "MT5 DISCONNECTED"
-        )
 
 
-    except Exception as e:
 
-        logger.error(
-            f"MT5 SHUTDOWN ERROR {e}"
-        )
+def timeframe_convert(
+    timeframe
+):
 
 
+    mapping = {
 
 
+        "15": mt5.TIMEFRAME_M15,
 
-def get_account_info():
 
-    try:
+        "60": mt5.TIMEFRAME_H1,
 
-        account = mt5.account_info()
 
+        "240": mt5.TIMEFRAME_H4
 
-        if account is None:
 
-            return None
+    }
 
 
-        return {
+    return mapping.get(
 
-            "login": account.login,
+        str(timeframe),
 
-            "balance": account.balance,
+        mt5.TIMEFRAME_M15
 
-            "equity": account.equity,
-
-            "profit": account.profit,
-
-            "currency": account.currency
-
-        }
-
-
-    except Exception as e:
-
-        logger.error(
-            f"ACCOUNT INFO ERROR {e}"
-        )
-
-        return None
-
-
-
-
-
-def get_symbol_info(symbol):
-
-    try:
-
-        info = mt5.symbol_info(
-            symbol
-        )
-
-
-        if info is None:
-
-            logger.error(
-                f"SYMBOL NOT FOUND {symbol}"
-            )
-
-            return None
-
-
-        if not info.visible:
-
-            mt5.symbol_select(
-                symbol,
-                True
-            )
-
-
-        return info
-
-
-    except Exception as e:
-
-        logger.error(
-            f"SYMBOL INFO ERROR {e}"
-        )
-
-        return None
-
-
-
-
-
-def get_tick(symbol):
-
-    try:
-
-        tick = mt5.symbol_info_tick(
-            symbol
-        )
-
-
-        if tick is None:
-
-            return None
-
-
-        return {
-
-            "bid": tick.bid,
-
-            "ask": tick.ask,
-
-            "last": tick.last
-
-        }
-
-
-    except Exception as e:
-
-        logger.error(
-            f"TICK ERROR {e}"
-        )
-
-        return None
+    )
 
 
 
@@ -205,58 +139,136 @@ def get_tick(symbol):
 
 def get_rates(
     symbol,
-    timeframe,
+    timeframe="15",
     count=200
 ):
 
     try:
 
-        timeframe_map = {
 
-            "1": mt5.TIMEFRAME_M1,
-
-            "5": mt5.TIMEFRAME_M5,
-
-            "15": mt5.TIMEFRAME_M15,
-
-            "30": mt5.TIMEFRAME_M30,
-
-            "60": mt5.TIMEFRAME_H1,
-
-            "240": mt5.TIMEFRAME_H4,
-
-            "1440": mt5.TIMEFRAME_D1
-
-        }
-
-
-        tf = timeframe_map.get(
-            timeframe,
-            mt5.TIMEFRAME_M15
-        )
-
-
-        rates = mt5.copy_rates_from_pos(
+        if not mt5.symbol_select(
             symbol,
-            tf,
-            0,
-            count
-        )
+            True
+        ):
 
 
-        if rates is None:
+            logger.error(
+                f"SYMBOL NOT FOUND {symbol}"
+            )
+
 
             return None
 
 
-        return rates
+
+        rates = mt5.copy_rates_from_pos(
+
+            symbol,
+
+            timeframe_convert(timeframe),
+
+            0,
+
+            count
+
+        )
+
+
+
+        if rates is None:
+
+
+            logger.error(
+                f"NO RATES {symbol}"
+            )
+
+
+            return None
+
+
+
+
+        data = []
+
+
+
+        for item in rates:
+
+
+            data.append({
+
+
+                "time": int(item["time"]),
+
+
+                "open": float(item["open"]),
+
+
+                "high": float(item["high"]),
+
+
+                "low": float(item["low"]),
+
+
+                "close": float(item["close"]),
+
+
+                "tick_volume": int(item["tick_volume"])
+
+
+            })
+
+
+
+        return data
+
 
 
     except Exception as e:
 
+
         logger.error(
             f"GET RATES ERROR {e}"
         )
+
+
+        return None
+
+
+
+
+
+def get_tick(
+    symbol
+):
+
+    try:
+
+
+        tick = mt5.symbol_info_tick(
+            symbol
+        )
+
+
+
+        if tick is None:
+
+
+            return None
+
+
+
+        return tick
+
+
+
+    except Exception as e:
+
+
+        logger.error(
+            f"TICK ERROR {e}"
+        )
+
 
         return None
 
@@ -267,78 +279,97 @@ def get_rates(
 def send_market_order(
     symbol,
     side,
-    volume,
+    lot,
     sl=0,
     tp=0
 ):
 
     try:
 
-        tick = mt5.symbol_info_tick(
+
+
+        tick = get_tick(
             symbol
         )
 
 
+
         if tick is None:
+
 
             return None
 
 
 
-        if side.lower() == "buy":
+        if side == "buy":
 
-            order_type = mt5.ORDER_TYPE_BUY
 
             price = tick.ask
 
 
+            order_type = mt5.ORDER_TYPE_BUY
+
+
+
         else:
+
+
+            price = tick.bid
+
 
             order_type = mt5.ORDER_TYPE_SELL
 
-            price = tick.bid
 
 
 
         request = {
 
-            "action":
-                mt5.TRADE_ACTION_DEAL,
 
-            "symbol":
-                symbol,
+            "action": mt5.TRADE_ACTION_DEAL,
 
-            "volume":
-                volume,
 
-            "type":
-                order_type,
+            "symbol": symbol,
 
-            "price":
-                price,
 
-            "sl":
-                sl,
+            "volume": lot,
 
-            "tp":
-                tp,
 
-            "deviation":
-                20,
+            "type": order_type,
 
-            "magic":
-                20260731,
 
-            "comment":
-                "Pourya Trader AI",
+            "price": price,
 
-            "type_time":
-                mt5.ORDER_TIME_GTC,
 
-            "type_filling":
-                mt5.ORDER_FILLING_IOC
+            "sl": sl,
+
+
+            "tp": tp,
+
+
+            "deviation": 20,
+
+
+            "magic": 20260731,
+
+
+            "comment": "Pourya Trader AI",
+
+
+            "type_time": mt5.ORDER_TIME_GTC,
+
+
+            "type_filling": mt5.ORDER_FILLING_IOC
+
 
         }
+
+
+
+
+
+        logger.info(
+            f"MT5 REQUEST {request}"
+        )
 
 
 
@@ -347,46 +378,23 @@ def send_market_order(
         )
 
 
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-
-            logger.error(
-                f"ORDER FAILED {result}"
-            )
-
-            return None
-
-
 
         logger.info(
-            f"ORDER SUCCESS {symbol} {side}"
+            f"MT5 RESPONSE {result}"
         )
 
 
-        return {
 
-            "ticket":
-                result.order,
-
-            "symbol":
-                symbol,
-
-            "side":
-                side,
-
-            "volume":
-                volume,
-
-            "price":
-                price
-
-        }
+        return result
 
 
 
     except Exception as e:
 
+
         logger.error(
-            f"ORDER ERROR {e}"
+            f"SEND ORDER ERROR {e}"
         )
+
 
         return None
