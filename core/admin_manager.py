@@ -1,83 +1,49 @@
 # core/admin_manager.py
 
+from datetime import datetime
+
 from core.logger import logger
 
 from core.user_manager import (
     get_all_active_users,
-    update_user_setting
+    deactivate_user,
+    activate_user
+)
+
+from core.payment_manager import (
+    calculate_total_revenue
 )
 
 from core.trade_manager import (
     get_trade_history
 )
 
-from core.monitoring_manager import (
-    get_monitor_status
+from core.health_monitor import (
+    get_health_status
 )
 
 
 
-def get_admin_users():
+
+
+def admin_dashboard():
 
     try:
+
 
         users = get_all_active_users()
 
-        return users
 
 
-    except Exception as e:
-
-        logger.exception(e)
-
-        return []
+        trades = get_trade_history()
 
 
 
+        revenue = calculate_total_revenue()
 
 
 
-def get_system_summary():
-
-    try:
-
-
-        trades = get_trade_history(
-            100
-        )
-
-
-        monitor = get_monitor_status()
-
-
-
-        total_profit = 0
-
-        software_profit = 0
-
-
-
-        for trade in trades:
-
-
-            if len(trade) > 12:
-
-
-                try:
-
-                    total_profit += float(
-                        trade[10] or 0
-                    )
-
-
-                    software_profit += float(
-                        trade[13] or 0
-                    )
-
-
-                except:
-
-                    pass
+        health = get_health_status()
 
 
 
@@ -86,37 +52,28 @@ def get_system_summary():
 
             "users":
 
-                len(
-                    get_admin_users()
-                ),
+                len(users),
 
 
             "trades":
 
-                len(
-                    trades
-                ),
-
-
-            "total_profit":
-
-                round(
-                    total_profit,
-                    4
-                ),
+                len(trades),
 
 
             "software_profit":
 
-                round(
-                    software_profit,
-                    4
-                ),
+                revenue,
 
 
-            "system":
+            "health":
 
-                monitor
+                health,
+
+
+            "time":
+
+                datetime.utcnow()
+                .isoformat()
 
 
         }
@@ -138,22 +95,70 @@ def get_system_summary():
 
 
 
-def disable_user(
+def get_users_report():
+
+    try:
+
+
+        users = get_all_active_users()
+
+
+
+        return {
+
+
+            "count":
+
+                len(users),
+
+
+            "users":
+
+                users
+
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
+
+
+
+
+
+
+
+
+def activate_account(
     telegram_id
 ):
 
     try:
 
 
-        return update_user_setting(
+        result = activate_user(
 
-            telegram_id,
-
-            "active",
-
-            0
+            telegram_id
 
         )
+
+
+        logger.info(
+
+            f"USER ACTIVATED {telegram_id}"
+
+        )
+
+
+
+        return result
 
 
 
@@ -170,22 +175,31 @@ def disable_user(
 
 
 
-def enable_user(
+
+
+def block_account(
     telegram_id
 ):
 
     try:
 
 
-        return update_user_setting(
+        result = deactivate_user(
 
-            telegram_id,
-
-            "active",
-
-            1
+            telegram_id
 
         )
+
+
+        logger.warning(
+
+            f"USER BLOCKED {telegram_id}"
+
+        )
+
+
+
+        return result
 
 
 
@@ -202,44 +216,47 @@ def enable_user(
 
 
 
-def get_platform_profit():
+
+
+def format_admin_report():
 
     try:
 
 
-        trades = get_trade_history(
-            1000
-        )
-
-
-        profit = 0
+        dashboard = admin_dashboard()
 
 
 
-        for trade in trades:
+        return f"""
+
+👑 Pourya Trader AI Admin
 
 
-            try:
+👥 کاربران فعال:
+
+{dashboard.get('users')}
 
 
-                profit += float(
+📊 تعداد معاملات:
 
-                    trade[13] or 0
-
-                )
+{dashboard.get('trades')}
 
 
-            except:
+💰 درآمد نرم افزار:
+
+{dashboard.get('software_profit')}$
 
 
-                continue
+🖥 وضعیت سیستم:
+
+{dashboard.get('health')}
 
 
+⏰ زمان:
 
-        return round(
-            profit,
-            4
-        )
+{dashboard.get('time')}
+
+"""
 
 
 
@@ -249,14 +266,16 @@ def get_platform_profit():
         logger.exception(e)
 
 
-        return 0
+        return ""
 
 
 
 
 
 
-def admin_dashboard():
+
+
+def system_control():
 
     try:
 
@@ -264,19 +283,24 @@ def admin_dashboard():
         return {
 
 
-            "users":
+            "trading":
 
-                get_admin_users(),
-
-
-            "summary":
-
-                get_system_summary(),
+                True,
 
 
-            "software_profit":
+            "manual_mode":
 
-                get_platform_profit()
+                True,
+
+
+            "auto_mode":
+
+                True,
+
+
+            "emergency":
+
+                False
 
 
         }
