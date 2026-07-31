@@ -2,10 +2,12 @@
 
 from core.logger import logger
 
+
 from core.mt5_connector import (
     send_market_order,
     get_tick
 )
+
 
 from config import (
     DEFAULT_LOT,
@@ -18,29 +20,38 @@ from config import (
 
 
 
-def calculate_lot(
-    balance
-):
+def calculate_lot():
 
     try:
 
-        if not USE_DYNAMIC_LOT:
 
-            return DEFAULT_LOT
-
+        if USE_DYNAMIC_LOT:
 
 
-        lot = balance * 0.01 / 100
+            lot = DEFAULT_LOT
+
+
+
+        else:
+
+
+            lot = DEFAULT_LOT
+
+
 
 
         if lot < MIN_LOT:
 
+
             lot = MIN_LOT
+
 
 
         if lot > MAX_LOT:
 
+
             lot = MAX_LOT
+
 
 
         return round(
@@ -49,11 +60,14 @@ def calculate_lot(
         )
 
 
+
     except Exception as e:
+
 
         logger.error(
             f"LOT CALCULATION ERROR {e}"
         )
+
 
         return DEFAULT_LOT
 
@@ -64,31 +78,11 @@ def calculate_lot(
 def create_trade(
     symbol,
     signal,
-    lot=None,
     sl=0,
     tp=0
 ):
 
     try:
-
-
-        if signal not in [
-            "BUY",
-            "SELL"
-        ]:
-
-            logger.error(
-                f"INVALID SIGNAL {signal}"
-            )
-
-            return None
-
-
-
-        if lot is None:
-
-            lot = DEFAULT_LOT
-
 
 
         tick = get_tick(
@@ -98,16 +92,29 @@ def create_trade(
 
         if tick is None:
 
+
             logger.error(
                 f"NO PRICE {symbol}"
             )
+
 
             return None
 
 
 
+
+        lot = calculate_lot()
+
+
+
+        side = signal.lower()
+
+
+
         logger.info(
-            f"MT5 ORDER {symbol} {signal} LOT={lot}"
+
+            f"MT5 ORDER {symbol} {side} LOT={lot}"
+
         )
 
 
@@ -116,7 +123,7 @@ def create_trade(
 
             symbol,
 
-            signal.lower(),
+            side,
 
             lot,
 
@@ -130,20 +137,66 @@ def create_trade(
 
         if result is None:
 
+
             logger.error(
-                "MT5 ORDER FAILED"
+                "MT5 ORDER RETURN NONE"
             )
+
 
             return None
 
 
 
+
+        if result.retcode != 10009 and result.retcode != 10008:
+
+
+            logger.error(
+
+                f"MT5 ORDER FAILED {result}"
+
+            )
+
+
+            return None
+
+
+
+
         logger.info(
-            f"MT5 ORDER CREATED {result}"
+
+            f"MT5 ORDER SUCCESS {result.order}"
+
         )
 
 
-        return result
+
+        return {
+
+
+            "ticket": result.order,
+
+
+            "symbol": symbol,
+
+
+            "side": signal,
+
+
+            "volume": lot,
+
+
+            "price": tick.ask if side == "buy" else tick.bid,
+
+
+            "sl": sl,
+
+
+            "tp": tp
+
+
+        }
+
 
 
 
@@ -151,37 +204,10 @@ def create_trade(
 
 
         logger.error(
+
             f"CREATE TRADE ERROR {e}"
+
         )
 
 
         return None
-
-
-
-
-
-def close_trade(
-    ticket
-):
-
-    try:
-
-        logger.info(
-            f"CLOSE REQUEST {ticket}"
-        )
-
-
-        # در مرحله بعدی با position manager تکمیل می‌شود
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.error(
-            f"CLOSE TRADE ERROR {e}"
-        )
-
-        return False
