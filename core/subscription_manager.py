@@ -6,110 +6,54 @@ from datetime import datetime, timedelta
 
 from core.logger import logger
 
-
-
-
-
 DB_PATH = "data/pourya_trader.db"
-
-
-
-
-
-
 
 
 def get_connection():
 
     try:
 
-        return sqlite3.connect(
-
-            DB_PATH
-
-        )
-
+        return sqlite3.connect(DB_PATH)
 
     except Exception as e:
 
-
         logger.exception(e)
 
-
         return None
-
-
-
-
-
-
-
 
 
 def init_subscription_database():
 
     try:
 
-
         conn = get_connection()
-
-
 
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
             CREATE TABLE IF NOT EXISTS subscriptions
-
             (
-
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                telegram_id TEXT,
-
+                telegram_id TEXT UNIQUE,
                 plan TEXT,
-
                 start_date TEXT,
-
                 expire_date TEXT,
-
                 active INTEGER DEFAULT 1
-
             )
-
             """
-
         )
 
-
-
         conn.commit()
-
         conn.close()
-
-
 
         return True
 
-
-
     except Exception as e:
-
 
         logger.exception(e)
 
-
         return False
-
-
-
-
-
-
 
 
 def create_subscription(
@@ -120,417 +64,225 @@ def create_subscription(
 
     try:
 
-
         conn = get_connection()
-
-
 
         cursor = conn.cursor()
 
-
-
         start = datetime.utcnow()
 
-
-
-        expire = start + timedelta(
-
-            days=days
-
-        )
-
-
+        expire = start + timedelta(days=days)
 
         cursor.execute(
-
             """
-
-            INSERT INTO subscriptions
-
+            INSERT OR REPLACE INTO subscriptions
             (
-
                 telegram_id,
-
                 plan,
-
                 start_date,
-
-                expire_date
-
+                expire_date,
+                active
             )
-
-            VALUES (?,?,?,?)
-
+            VALUES (?,?,?,?,?)
             """,
-
             (
-
                 str(telegram_id),
-
                 plan,
-
                 start.isoformat(),
-
-                expire.isoformat()
-
+                expire.isoformat(),
+                1
             )
-
         )
 
-
-
         conn.commit()
-
         conn.close()
-
-
 
         return True
 
-
-
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
 
 
-
-
-
-
-
-
-def get_subscription(
-    telegram_id
-):
+def get_subscription(telegram_id):
 
     try:
 
-
         conn = get_connection()
-
-
 
         cursor = conn.cursor()
 
-
-
         cursor.execute(
-
             """
-
-            SELECT *
-
+            SELECT
+                plan,
+                start_date,
+                expire_date,
+                active
             FROM subscriptions
-
             WHERE telegram_id=?
-
-            ORDER BY id DESC
-
-            LIMIT 1
-
             """,
-
-            (
-
-                str(telegram_id),
-
-            )
-
+            (str(telegram_id),)
         )
-
-
 
         row = cursor.fetchone()
 
-
-
         conn.close()
-
-
 
         if not row:
 
-
             return None
 
-
-
         return {
-
-
-            "id":
-
-                row[0],
-
-
-            "telegram_id":
-
-                row[1],
-
-
-            "plan":
-
-                row[2],
-
-
-            "start_date":
-
-                row[3],
-
-
-            "expire_date":
-
-                row[4],
-
-
-            "active":
-
-                row[5]
-
+            "plan": row[0],
+            "start_date": row[1],
+            "expire_date": row[2],
+            "active": bool(row[3])
         }
-
-
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return None
 
 
-
-
-
-
-
-
-def check_subscription(
-    telegram_id
-):
+def check_subscription(telegram_id):
 
     try:
 
+        sub = get_subscription(telegram_id)
 
-        subscription = get_subscription(
-
-            telegram_id
-
-        )
-
-
-
-        if not subscription:
-
+        if not sub:
 
             return False
 
+        if not sub["active"]:
 
+            return False
 
         expire = datetime.fromisoformat(
-
-            subscription["expire_date"]
-
+            sub["expire_date"]
         )
 
-
-
-        if datetime.utcnow() > expire:
-
-
-            disable_subscription(
-
-                telegram_id
-
-            )
-
-
-            return False
-
-
-
-        return bool(
-
-            subscription["active"]
-
-        )
-
-
+        return expire > datetime.utcnow()
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
 
 
-
-
-
-
-
-
-def disable_subscription(
-    telegram_id
-):
-
-    try:
-
-
-        conn = get_connection()
-
-
-
-        cursor = conn.cursor()
-
-
-
-        cursor.execute(
-
-            """
-
-            UPDATE subscriptions
-
-            SET active=0
-
-            WHERE telegram_id=?
-
-            """,
-
-            (
-
-                str(telegram_id),
-
-            )
-
-        )
-
-
-
-        conn.commit()
-
-        conn.close()
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-def upgrade_subscription(
+def extend_subscription(
     telegram_id,
-    plan,
     days
 ):
 
     try:
 
-
-        disable_subscription(
-
+        sub = get_subscription(
             telegram_id
-
         )
 
+        if not sub:
 
+            return False
 
-        return create_subscription(
-
-            telegram_id,
-
-            plan,
-
-            days
-
+        expire = datetime.fromisoformat(
+            sub["expire_date"]
         )
 
+        if expire < datetime.utcnow():
 
+            expire = datetime.utcnow()
+
+        expire += timedelta(days=days)
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            UPDATE subscriptions
+            SET expire_date=?
+            WHERE telegram_id=?
+            """,
+            (
+                expire.isoformat(),
+                str(telegram_id)
+            )
+        )
+
+        conn.commit()
+        conn.close()
+
+        return True
 
     except Exception as e:
 
-
         logger.exception(e)
-
 
         return False
 
 
-
-
-
-
-
-
-def get_plan_limits(
-    plan
+def deactivate_subscription(
+    telegram_id
 ):
 
-    plans = {
+    try:
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            UPDATE subscriptions
+            SET active=0
+            WHERE telegram_id=?
+            """,
+            (str(telegram_id),)
+        )
+
+        conn.commit()
+        conn.close()
+
+        return True
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return False
 
 
-        "FREE":
+def get_active_subscribers():
 
-            {
+    try:
 
-                "max_trades":1,
+        conn = get_connection()
 
-                "risk":0.5
+        cursor = conn.cursor()
 
-            },
+        cursor.execute(
+            """
+            SELECT telegram_id
+            FROM subscriptions
+            WHERE active=1
+            """
+        )
 
+        rows = cursor.fetchall()
 
-        "VIP":
+        conn.close()
 
-            {
+        return [r[0] for r in rows]
 
-                "max_trades":10,
+    except Exception as e:
 
-                "risk":2
+        logger.exception(e)
 
-            },
-
-
-        "PRO":
-
-            {
-
-                "max_trades":50,
-
-                "risk":3
-
-            }
-
-    }
-
-
-
-    return plans.get(
-
-        plan,
-
-        plans["FREE"]
-
-    )
+        return []
