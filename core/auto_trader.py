@@ -1,11 +1,9 @@
-from core.notification.notification_router import (
-    notify_trade_opened
-)core/auto_trader.py
+# core/auto_trader.py
 
-from datetime import datetime
+from core.logger import logger
 
 from core.opportunity_engine import (
-    calculate_opportunity_score
+    get_top_opportunity
 )
 
 from core.risk_engine import (
@@ -13,197 +11,134 @@ from core.risk_engine import (
 )
 
 from core.order_manager import (
-    create_order,
-    calculate_quantity
+    calculate_quantity,
+    create_order
 )
 
 from core.trade_manager import (
     open_trade
 )
 
-from core.logger import logger
-
 from config import (
+    INITIAL_BALANCE,
     LEVERAGE
 )
 
 
 
-def normalize_side(signal):
+
+
+def execute_auto_trade():
 
     try:
 
-        signal = signal.upper()
 
+        opportunity = get_top_opportunity()
 
-        if signal in [
-            "BUY",
-            "STRONG BUY",
-            "EARLY BUY"
-        ]:
-
-            return "BUY"
-
-
-
-        if signal in [
-            "SELL",
-            "STRONG SELL",
-            "EARLY SELL"
-        ]:
-
-            return "SELL"
-
-
-
-        return None
-
-
-    except:
-
-        return None
-
-
-
-def execute_opportunity(
-    opportunity
-):
-
-    try:
 
 
         if not opportunity:
 
-            return None
-
-
-
-        score = calculate_opportunity_score(
-            opportunity
-        )
-
-
-        opportunity["confidence"] = score
-
-
-
-        valid, reason = validate_trade(
-            opportunity
-        )
-
-
-        if not valid:
-
             logger.info(
-                f"TRADE REJECTED {reason}"
+
+                "NO OPPORTUNITY FOUND"
+
             )
 
             return None
+
+
+
+
+
+        if not validate_trade(
+
+            opportunity
+
+        ):
+
+            logger.warning(
+
+                "TRADE REJECTED BY RISK ENGINE"
+
+            )
+
+            return None
+
+
+
 
 
 
         symbol = opportunity.get(
+
             "symbol"
-        )
 
-
-        side = normalize_side(
-            opportunity.get(
-                "signal",
-                ""
-            )
-        )
-
-
-        if not side:
-
-            logger.error(
-                "INVALID SIGNAL SIDE"
-            )
-
-            return None
-
-
-
-        entry = float(
-            opportunity.get(
-                "entry",
-                opportunity.get(
-                    "price",
-                    0
-                )
-            )
         )
 
 
 
-        if entry <= 0:
+        side = opportunity.get(
 
-            return None
+            "signal"
+
+        )
+
+
+
+        entry = opportunity.get(
+
+            "entry"
+
+        )
 
 
 
         tp = opportunity.get(
-            "tp",
-            opportunity.get(
-                "take_profit"
-            )
+
+            "tp"
+
         )
+
 
 
         sl = opportunity.get(
-            "sl",
-            opportunity.get(
-                "stop_loss"
-            )
+
+            "sl"
+
         )
 
 
 
-        quantity = opportunity.get(
-            "quantity"
+
+
+        quantity = calculate_quantity(
+
+            INITIAL_BALANCE,
+
+            entry,
+
+            sl
+
         )
 
 
-
-        if not quantity:
-
-            balance = float(
-                opportunity.get(
-                    "balance",
-                    0
-                )
-            )
-
-
-            if balance <= 0:
-
-                balance = 100
-
-
-            quantity = calculate_quantity(
-
-                balance,
-
-                entry,
-
-                sl
-
-            )
-
-
-
-        quantity = float(quantity)
 
 
 
         if quantity <= 0:
 
-            logger.error(
+            logger.warning(
+
                 "INVALID QUANTITY"
+
             )
 
             return None
+
+
+
+
 
 
 
@@ -215,48 +150,30 @@ def execute_opportunity(
 
             quantity,
 
-            LEVERAGE,
-
-            sl,
-
-            tp
+            LEVERAGE
 
         )
+
+
 
 
 
         if not order:
 
             logger.error(
+
                 "ORDER FAILED"
+
             )
 
             return None
 
 
 
-        order_status = order.get(
-            "status"
-        )
-
-
-        if order_status not in [
-            "PAPER",
-            "OPEN",
-            "SUCCESS"
-        ] and order.get(
-            "code"
-        ) != 0:
-
-            logger.error(
-                "ORDER NOT CONFIRMED"
-            )
-
-            return None
 
 
 
-        saved = open_trade(
+        trade_id = open_trade(
 
             symbol,
 
@@ -270,85 +187,95 @@ def execute_opportunity(
 
             quantity,
 
-            score
+            opportunity.get(
+
+                "confidence",
+
+                0
+
+            )
 
         )
 
 
 
-        if not saved:
+
+
+        if not trade_id:
 
             logger.error(
-                "DATABASE SAVE FAILED AFTER ORDER"
+
+                "TRADE DATABASE FAILED"
+
             )
 
             return None
 
-        trade_report = {
-
-            "symbol": symbol,
-
-            "side": side,
-
-            "entry": entry,
-
-            "quantity": quantity,
-
-            "leverage": LEVERAGE,
-
-            "tp": tp,
-
-            "sl": sl,
-
-            "confidence": score,
-
-            "order_id": order.get(
-                "data",
-                {}
-            ).get(
-                "order_id",
-                "-"
-            )
-
-        }
 
 
-        notify_trade_opened(
-            trade_report
-        )
+
 
         result = {
 
 
-            "symbol": symbol,
+            "trade_id":
 
-            "side": side,
+                trade_id,
 
-            "entry": entry,
 
-            "quantity": quantity,
 
-            "leverage": LEVERAGE,
+            "symbol":
 
-            "tp": tp,
+                symbol,
 
-            "sl": sl,
 
-            "confidence": score,
 
-            "created_at":
-                datetime.utcnow().isoformat(),
+            "side":
 
-            "order": order
+                side,
 
+
+
+            "entry":
+
+                entry,
+
+
+
+            "tp":
+
+                tp,
+
+
+
+            "sl":
+
+                sl,
+
+
+
+            "quantity":
+
+                quantity,
+
+
+
+            "order":
+
+                order
 
         }
 
 
 
+
+
         logger.info(
-            f"TRADE OPENED {symbol} {side}"
+
+            f"AUTO TRADE OPENED {symbol}"
+
         )
+
 
 
         return result
@@ -357,55 +284,31 @@ def execute_opportunity(
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return None
 
 
 
-def execute_batch(
-    opportunities
-):
 
-    results = []
 
+
+
+def scan_and_trade():
 
     try:
 
 
-        if not opportunities:
-
-            return []
-
-
-
-        for opportunity in opportunities:
-
-
-            result = execute_opportunity(
-                opportunity
-            )
-
-
-            if result:
-
-                results.append(
-                    result
-                )
-
-
-
-        logger.info(
-            f"EXECUTED TRADES {len(results)}"
-        )
-
-
-        return results
+        return execute_auto_trade()
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return []
+
+        return None
