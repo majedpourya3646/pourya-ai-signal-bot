@@ -1,88 +1,191 @@
 # core/config_manager.py
 
-import json
 import os
+import json
 
 from core.logger import logger
 
 
 
-CONFIG_PATH = "data/settings.json"
+
+CONFIG_FILE = "data/settings.json"
+
 
 
 
 
 DEFAULT_SETTINGS = {
 
-    "trading_enabled": True,
 
-    "emergency_mode": False,
+    # Trading
 
-    "paper_trading": True,
+    "trading_enabled":
 
-    "scheduler_mode": "TEST",
-
-    "trading_interval": 300,
+        True,
 
 
-    "notification_level": "BASIC",
+    "trading_mode":
 
-    "notification_channels": [
-
-        "telegram"
-
-    ],
+        "AUTO",
 
 
-    "email_enabled": False,
+    "paper_trading":
 
-    "sms_enabled": False,
-
-
-    "user_profit_percent": 50,
+        True,
 
 
-    "risk_percent": 1,
+    "scheduler_mode":
+
+        "TEST",
 
 
-    "max_open_trades": 3,
+    "trading_interval":
+
+        300,
 
 
-    "leverage": 10,
+
+    # Risk
+
+    "risk_percent":
+
+        1,
 
 
-    "trading_mode": "AUTO"
+    "max_open_trades":
+
+        3,
+
+
+    "max_daily_loss":
+
+        5,
+
+
+    "leverage":
+
+        10,
+
+
+
+    # Notification
+
+    "notification_level":
+
+        "BASIC",
+
+
+    "report_channels":
+
+        [
+
+            "telegram"
+
+        ],
+
+
+    "sms_enabled":
+
+        False,
+
+
+    "email_enabled":
+
+        False,
+
+
+
+    # Profit Sharing
+
+    "user_profit_percent":
+
+        50,
+
+
+    "software_profit_percent":
+
+        50,
+
+
+
+    # Backup
+
+    "backup_enabled":
+
+        True,
+
+
+
+    # Monitoring
+
+    "monitor_interval":
+
+        60,
+
+
+    "health_check_interval":
+
+        60,
+
+
+
+    # Recovery
+
+    "emergency_mode":
+
+        False,
+
+
+    # Subscription
+
+    "subscription_required":
+
+        False
+
 
 }
 
 
 
 
-def ensure_config():
+
+
+
+def create_config_file():
 
     try:
 
 
-        directory = os.path.dirname(
-            CONFIG_PATH
+        folder = os.path.dirname(
+            CONFIG_FILE
         )
 
 
-        if directory and not os.path.exists(directory):
+
+        if folder and not os.path.exists(
+            folder
+        ):
+
 
             os.makedirs(
-                directory
+                folder
             )
 
 
 
-        if not os.path.exists(CONFIG_PATH):
+        if not os.path.exists(
+            CONFIG_FILE
+        ):
 
 
             with open(
-                CONFIG_PATH,
+
+                CONFIG_FILE,
+
                 "w",
+
                 encoding="utf-8"
+
             ) as file:
 
 
@@ -97,10 +200,6 @@ def ensure_config():
                     ensure_ascii=False
 
                 )
-
-
-
-            return True
 
 
 
@@ -121,19 +220,24 @@ def ensure_config():
 
 
 
+
 def load_settings():
 
     try:
 
 
-        ensure_config()
+        create_config_file()
 
 
 
         with open(
-            CONFIG_PATH,
+
+            CONFIG_FILE,
+
             "r",
+
             encoding="utf-8"
+
         ) as file:
 
 
@@ -164,9 +268,13 @@ def save_settings(
 
 
         with open(
-            CONFIG_PATH,
+
+            CONFIG_FILE,
+
             "w",
+
             encoding="utf-8"
+
         ) as file:
 
 
@@ -201,6 +309,8 @@ def save_settings(
 
 
 
+
+
 def get_setting(
     key,
     default=None
@@ -214,8 +324,11 @@ def get_setting(
 
 
         return settings.get(
+
             key,
+
             default
+
         )
 
 
@@ -227,6 +340,8 @@ def get_setting(
 
 
         return default
+
+
 
 
 
@@ -268,20 +383,13 @@ def update_setting(
 
 
 
+
 def get_all_settings():
 
-    try:
-
-        return load_settings()
+    return load_settings()
 
 
-    except Exception as e:
 
-
-        logger.exception(e)
-
-
-        return {}
 
 
 
@@ -293,8 +401,33 @@ def reset_settings():
 
 
         return save_settings(
+
             DEFAULT_SETTINGS
+
         )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+def ensure_config():
+
+    try:
+
+
+        return create_config_file()
+
 
 
     except Exception as e:
