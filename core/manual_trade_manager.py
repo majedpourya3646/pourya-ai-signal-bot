@@ -5,7 +5,8 @@ from datetime import datetime
 from core.logger import logger
 
 from core.order_manager import (
-    create_order
+    create_order,
+    calculate_quantity
 )
 
 from core.trade_manager import (
@@ -16,42 +17,15 @@ from core.risk_engine import (
     validate_trade
 )
 
-
-
-
-
-MANUAL_STATUS = {
-
-
-    "PENDING":
-
-        "PENDING",
-
-
-    "APPROVED":
-
-        "APPROVED",
-
-
-    "REJECTED":
-
-        "REJECTED",
-
-
-    "OPENED":
-
-        "OPENED"
-
-
-}
+from core.config_manager import (
+    get_setting
+)
 
 
 
 
 
-
-
-def create_manual_offer(
+def create_trade_offer(
     opportunity
 ):
 
@@ -60,53 +34,39 @@ def create_manual_offer(
 
         return {
 
-
             "symbol":
 
-                opportunity.get(
-                    "symbol"
-                ),
+                opportunity.get("symbol"),
 
 
-            "side":
+            "signal":
 
-                opportunity.get(
-                    "side"
-                ),
+                opportunity.get("signal"),
 
 
             "entry":
 
-                opportunity.get(
-                    "entry"
-                ),
+                opportunity.get("entry"),
 
 
             "tp":
 
-                opportunity.get(
-                    "tp"
-                ),
+                opportunity.get("tp"),
 
 
             "sl":
 
-                opportunity.get(
-                    "sl"
-                ),
+                opportunity.get("sl"),
 
 
             "confidence":
 
-                opportunity.get(
-                    "confidence",
-                    0
-                ),
+                opportunity.get("confidence", 0),
 
 
             "status":
 
-                MANUAL_STATUS["PENDING"],
+                "PENDING",
 
 
             "created_at":
@@ -133,106 +93,11 @@ def create_manual_offer(
 
 
 
-def format_manual_offer(
+def validate_manual_offer(
     offer
 ):
 
     try:
-
-
-        return f"""
-
-🚀 فرصت معاملاتی ویژه
-
-
-🪙 ارز:
-{offer.get('symbol')}
-
-
-📈 جهت:
-{offer.get('side')}
-
-
-💵 قیمت ورود:
-{offer.get('entry')}
-
-
-🎯 حد سود:
-{offer.get('tp')}
-
-
-🛑 حد ضرر:
-{offer.get('sl')}
-
-
-⚡ درصد اطمینان:
-{offer.get('confidence')}%
-
-
-⏳ وضعیت:
-منتظر تایید شما
-
-
-"""
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return ""
-
-
-
-
-
-
-
-
-def approve_manual_trade(
-    user,
-    offer,
-    leverage
-):
-
-    try:
-
-
-        offer["status"] = (
-
-            MANUAL_STATUS["APPROVED"]
-
-        )
-
-
-
-        quantity = offer.get(
-
-            "quantity",
-
-            0
-
-        )
-
-
-
-        if quantity <= 0:
-
-
-            logger.error(
-
-                "INVALID QUANTITY"
-
-            )
-
-
-            return None
-
-
-
 
 
         valid, reason = validate_trade(
@@ -243,12 +108,166 @@ def approve_manual_trade(
 
 
 
-        if not valid:
+        return {
 
 
-            logger.warning(
+            "valid":
 
-                f"MANUAL TRADE BLOCKED {reason}"
+                valid,
+
+
+            "reason":
+
+                reason
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {
+
+
+            "valid":
+
+                False,
+
+
+            "reason":
+
+                str(e)
+
+        }
+
+
+
+
+
+
+
+
+def execute_manual_trade(
+    offer,
+    user_settings
+):
+
+    try:
+
+
+        if offer.get(
+
+            "status"
+
+        ) != "PENDING":
+
+
+            return None
+
+
+
+
+
+        side = offer.get(
+
+            "signal"
+
+        )
+
+
+
+        if side in [
+
+            "STRONG BUY",
+
+            "EARLY BUY"
+
+        ]:
+
+
+            side = "BUY"
+
+
+
+        elif side in [
+
+            "STRONG SELL",
+
+            "EARLY SELL"
+
+        ]:
+
+
+            side = "SELL"
+
+
+
+
+
+        leverage = user_settings.get(
+
+            "leverage",
+
+            get_setting(
+
+                "leverage",
+
+                10
+
+            )
+
+        )
+
+
+
+
+
+        entry = float(
+
+            offer.get(
+
+                "entry",
+
+                0
+
+            )
+
+        )
+
+
+
+        quantity = calculate_quantity(
+
+            user_settings.get(
+
+                "balance",
+
+                0
+
+            ),
+
+            entry,
+
+            offer.get(
+
+                "sl"
+
+            )
+
+        )
+
+
+
+        if quantity <= 0:
+
+
+            logger.error(
+
+                "INVALID MANUAL QUANTITY"
 
             )
 
@@ -262,12 +281,12 @@ def approve_manual_trade(
         order = create_order(
 
             offer.get(
+
                 "symbol"
+
             ),
 
-            offer.get(
-                "side"
-            ),
+            side,
 
             quantity,
 
@@ -286,39 +305,45 @@ def approve_manual_trade(
 
 
 
-        saved = open_trade(
+        trade = open_trade(
 
             offer.get(
+
                 "symbol"
+
             ),
 
-            offer.get(
-                "side"
-            ),
+            side,
+
+            entry,
 
             offer.get(
-                "entry"
-            ),
 
-            offer.get(
                 "tp"
+
             ),
 
             offer.get(
+
                 "sl"
+
             ),
 
             quantity,
 
             offer.get(
-                "confidence"
+
+                "confidence",
+
+                0
+
             )
 
         )
 
 
 
-        if not saved:
+        if not trade:
 
 
             return None
@@ -327,37 +352,26 @@ def approve_manual_trade(
 
 
 
-        offer["status"] = (
-
-            MANUAL_STATUS["OPENED"]
-
-        )
+        offer["status"] = "APPROVED"
 
 
 
         return {
 
 
-            "status":
+            "offer":
 
-                "OPENED",
-
-
-            "symbol":
-
-                offer.get(
-                    "symbol"
-                ),
-
-
-            "leverage":
-
-                leverage,
+                offer,
 
 
             "order":
 
-                order
+                order,
+
+
+            "trade":
+
+                trade
 
 
         }
@@ -379,18 +393,63 @@ def approve_manual_trade(
 
 
 
-def reject_manual_trade(
+def reject_trade_offer(
     offer
 ):
 
     try:
 
 
-        offer["status"] = (
+        offer["status"] = "REJECTED"
 
-            MANUAL_STATUS["REJECTED"]
+
+        offer["updated_at"] = datetime.utcnow().isoformat()
+
+
+
+        return offer
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return None
+
+
+
+
+
+
+
+
+def update_offer_leverage(
+    offer,
+    leverage
+):
+
+    try:
+
+
+        leverage = int(
+
+            leverage
 
         )
+
+
+
+        if leverage < 1 or leverage > 100:
+
+
+            return False
+
+
+
+        offer["leverage"] = leverage
 
 
 
@@ -413,36 +472,56 @@ def reject_manual_trade(
 
 
 
-def update_user_leverage(
-    leverage
+def manual_offer_message(
+    offer
 ):
 
     try:
 
 
-        leverage = int(
+        return f"""
 
-            leverage
-
-        )
+🚀 پیشنهاد معامله جدید
 
 
+🪙 ارز:
 
-        if leverage < 1:
-
-
-            leverage = 1
+{offer.get('symbol')}
 
 
+📈 جهت:
 
-        if leverage > 50:
-
-
-            leverage = 50
+{offer.get('signal')}
 
 
+💵 ورود:
 
-        return leverage
+{offer.get('entry')}
+
+
+🎯 TP:
+
+{offer.get('tp')}
+
+
+🛑 SL:
+
+{offer.get('sl')}
+
+
+🤖 اطمینان:
+
+{offer.get('confidence')}%
+
+
+⚡ اهرم:
+
+قابل انتخاب توسط شما
+
+
+تایید یا رد کنید.
+
+"""
 
 
 
@@ -452,4 +531,4 @@ def update_user_leverage(
         logger.exception(e)
 
 
-        return 1
+        return ""
