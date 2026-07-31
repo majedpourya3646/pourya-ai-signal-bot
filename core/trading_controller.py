@@ -3,149 +3,53 @@
 from core.logger import logger
 
 from core.auto_trader import (
-    execute_auto_trade
-)
-
-from core.trade_manager import (
-    get_open_trades
+    execute_trade
 )
 
 from core.position_manager import (
-    check_tp_sl
+    monitor_positions
 )
 
 from core.opportunity_engine import (
-    find_best_opportunities
-)
-
-from config import (
-    MAX_OPEN_TRADES,
-    MIN_CONFIDENCE
+    get_best_opportunity
 )
 
 
 
 
 
-def get_valid_opportunities():
+
+TRADING_ENABLED = True
+
+
+
+
+
+def trading_cycle():
 
     try:
 
 
-        opportunities = find_best_opportunities()
+        if not TRADING_ENABLED:
 
 
+            logger.warning(
 
-        if not opportunities:
-
-            return []
-
-
-
-
-
-        valid = []
-
-
-
-        for item in opportunities:
-
-
-            confidence = float(
-
-                item.get(
-
-                    "confidence",
-
-                    0
-
-                )
+                "TRADING DISABLED"
 
             )
 
 
-
-            if confidence < MIN_CONFIDENCE:
-
-                continue
-
-
-
-            valid.append(
-
-                item
-
-            )
-
-
-
-        return valid
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return []
+            return None
 
 
 
 
-
-
-
-
-
-def can_open_new_trade():
-
-    try:
-
-
-        open_trades = get_open_trades()
-
-
-
-        if len(open_trades) >= MAX_OPEN_TRADES:
-
-            logger.info(
-
-                "MAX OPEN TRADES LIMIT"
-
-            )
-
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-def run_trading_cycle():
-
-    try:
 
 
         logger.info(
 
-            "TRADING CYCLE STARTED"
+            "TRADING CYCLE START"
 
         )
 
@@ -153,15 +57,16 @@ def run_trading_cycle():
 
 
 
-        closed = check_tp_sl()
+        position_result = monitor_positions()
 
 
 
-        if closed:
+        if position_result:
+
 
             logger.info(
 
-                f"CLOSED POSITIONS {closed}"
+                f"POSITION UPDATE {position_result}"
 
             )
 
@@ -171,62 +76,66 @@ def run_trading_cycle():
 
 
 
-        if not can_open_new_trade():
-
-            return []
+        opportunity = get_best_opportunity()
 
 
 
-
-
-
-
-        opportunities = get_valid_opportunities()
-
-
-
-        if not opportunities:
-
-            logger.info(
-
-                "NO VALID OPPORTUNITIES"
-
-            )
-
-            return []
-
-
-
-
-
-
-
-
-        result = execute_auto_trade()
-
-
-
-        if result:
+        if not opportunity:
 
 
             logger.info(
 
-                f"TRADE EXECUTED {result}"
+                "NO VALID OPPORTUNITY"
 
             )
 
 
-            return [
-
-                result
-
-            ]
+            return None
 
 
 
 
 
-        return []
+
+        logger.info(
+
+            f"OPPORTUNITY FOUND {opportunity}"
+
+        )
+
+
+
+
+
+        trade = execute_trade()
+
+
+
+        if trade:
+
+
+            logger.info(
+
+                f"TRADE EXECUTED {trade}"
+
+            )
+
+
+
+        else:
+
+
+            logger.info(
+
+                "TRADE NOT EXECUTED"
+
+            )
+
+
+
+
+
+        return trade
 
 
 
@@ -236,7 +145,7 @@ def run_trading_cycle():
         logger.exception(e)
 
 
-        return []
+        return None
 
 
 
@@ -244,39 +153,63 @@ def run_trading_cycle():
 
 
 
+def enable_trading():
+
+    global TRADING_ENABLED
+
+
+    TRADING_ENABLED = True
 
 
 
-def controller_status():
+    logger.info(
 
-    try:
+        "TRADING ENABLED"
 
-
-        return {
-
-
-            "open_trades":
-
-                len(
-
-                    get_open_trades()
-
-                ),
+    )
 
 
 
-            "max_open":
-
-                MAX_OPEN_TRADES
-
-        }
+    return True
 
 
 
-    except Exception as e:
 
 
-        logger.exception(e)
 
 
-        return {}
+def disable_trading():
+
+    global TRADING_ENABLED
+
+
+    TRADING_ENABLED = False
+
+
+
+    logger.info(
+
+        "TRADING DISABLED"
+
+    )
+
+
+
+    return True
+
+
+
+
+
+
+
+def trading_status():
+
+    return {
+
+
+        "enabled":
+
+            TRADING_ENABLED
+
+    }
