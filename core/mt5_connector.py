@@ -2,15 +2,13 @@
 
 import MetaTrader5 as mt5
 
-
 from core.logger import logger
 
 
 from config import (
     MT5_LOGIN,
     MT5_PASSWORD,
-    MT5_SERVER,
-    MT5_PATH
+    MT5_SERVER
 )
 
 
@@ -19,25 +17,12 @@ from config import (
 
 def initialize_mt5():
 
+
     try:
 
 
-        if MT5_PATH:
 
-
-            initialized = mt5.initialize(
-                MT5_PATH
-            )
-
-
-        else:
-
-
-            initialized = mt5.initialize()
-
-
-
-        if not initialized:
+        if not mt5.initialize():
 
 
             logger.error(
@@ -53,6 +38,7 @@ def initialize_mt5():
 
 
 
+
         authorized = mt5.login(
 
             MT5_LOGIN,
@@ -62,6 +48,9 @@ def initialize_mt5():
             server=MT5_SERVER
 
         )
+
+
+
 
 
 
@@ -80,12 +69,20 @@ def initialize_mt5():
 
 
 
+
+
         logger.info(
-            "MT5 CONNECTED SUCCESSFULLY"
+
+            "MT5 CONNECTED"
+
         )
 
 
+
         return True
+
+
+
 
 
 
@@ -106,64 +103,46 @@ def initialize_mt5():
 
 
 
-def shutdown_mt5():
+
+
+def get_account_info():
 
 
     try:
 
 
-        mt5.shutdown()
-
-
-        logger.info(
-            "MT5 DISCONNECTED"
-        )
-
-
-    except Exception as e:
-
-
-        logger.error(
-
-            f"MT5 SHUTDOWN ERROR {e}"
-
-        )
+        account = mt5.account_info()
 
 
 
+        if account:
+
+
+            return {
+
+
+                "balance":
+
+                    account.balance,
+
+
+                "equity":
+
+                    account.equity,
+
+
+                "profit":
+
+                    account.profit
 
 
 
-
-def get_tick(
-    symbol
-):
-
-    try:
-
-
-        info = mt5.symbol_info_tick(
-            symbol
-        )
+            }
 
 
 
-        if info is None:
+        return None
 
-
-            logger.error(
-
-                f"NO TICK DATA {symbol}"
-
-            )
-
-
-            return None
-
-
-
-
-        return info
 
 
 
@@ -173,7 +152,7 @@ def get_tick(
 
         logger.error(
 
-            f"TICK ERROR {e}"
+            f"ACCOUNT INFO ERROR {e}"
 
         )
 
@@ -194,18 +173,21 @@ def send_market_order(
 
     volume,
 
-    sl=0,
+    sl,
 
-    tp=0
+    tp
 
 ):
+
 
     try:
 
 
 
-        tick = get_tick(
+        tick = mt5.symbol_info_tick(
+
             symbol
+
         )
 
 
@@ -213,18 +195,30 @@ def send_market_order(
         if tick is None:
 
 
+            logger.error(
+
+                f"NO PRICE DATA {symbol}"
+
+            )
+
+
             return None
 
 
 
 
-        if side == "buy":
+
+
+
+        if side.upper() == "BUY":
 
 
             order_type = mt5.ORDER_TYPE_BUY
 
 
             price = tick.ask
+
+
 
 
 
@@ -235,6 +229,7 @@ def send_market_order(
 
 
             price = tick.bid
+
 
 
 
@@ -279,11 +274,9 @@ def send_market_order(
                 tp,
 
 
-
             "deviation":
 
                 20,
-
 
 
             "magic":
@@ -291,17 +284,14 @@ def send_market_order(
                 20260731,
 
 
-
             "comment":
 
                 "Pourya Trader AI",
 
 
-
             "type_time":
 
                 mt5.ORDER_TIME_GTC,
-
 
 
             "type_filling":
@@ -315,9 +305,15 @@ def send_market_order(
 
 
 
+
+
         result = mt5.order_send(
+
             request
+
         )
+
+
 
 
 
@@ -329,7 +325,10 @@ def send_market_order(
 
 
 
+
         return result
+
+
 
 
 
@@ -345,3 +344,46 @@ def send_market_order(
 
 
         return None
+
+
+
+
+
+
+
+def get_positions():
+
+
+    try:
+
+
+
+        positions = mt5.positions_get()
+
+
+
+        if positions is None:
+
+
+            return []
+
+
+
+
+        return positions
+
+
+
+
+
+    except Exception as e:
+
+
+        logger.error(
+
+            f"POSITIONS ERROR {e}"
+
+        )
+
+
+        return []
