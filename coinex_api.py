@@ -18,6 +18,7 @@ from core.session import session
 from core.logger import logger
 
 
+
 class CoinExAPI:
 
 
@@ -39,6 +40,7 @@ class CoinExAPI:
         body=""
     ):
 
+
         timestamp = str(
             int(time.time() * 1000)
         )
@@ -54,14 +56,23 @@ class CoinExAPI:
 
 
         sign_string = (
+
             method.upper()
+
             +
+
             request_path
+
             +
+
             body
+
             +
+
             timestamp
+
         )
+
 
 
         logger.info(
@@ -69,7 +80,8 @@ class CoinExAPI:
         )
 
 
-        sign = hmac.new(
+
+        signature = hmac.new(
 
             self.secret_key.encode(),
 
@@ -81,7 +93,7 @@ class CoinExAPI:
 
 
 
-        return sign, timestamp
+        return signature, timestamp
 
 
 
@@ -103,9 +115,13 @@ class CoinExAPI:
 
 
         query = urlencode(
+
             sorted(
+
                 params.items()
+
             )
+
         )
 
 
@@ -141,15 +157,32 @@ class CoinExAPI:
 
 
 
+        sign_path = "/v2" + path
+
+
 
         if private:
+
+
+            if not self.api_key or not self.secret_key:
+
+                return {
+
+                    "code":
+                    -1,
+
+                    "message":
+                    "API KEY MISSING"
+
+                }
+
 
 
             sign, timestamp = self._sign(
 
                 method,
 
-                path,
+                sign_path,
 
                 query,
 
@@ -176,7 +209,6 @@ class CoinExAPI:
 
 
 
-
         url = self.base_url + path
 
 
@@ -184,6 +216,7 @@ class CoinExAPI:
         for attempt in range(3):
 
             try:
+
 
 
                 if method.upper() == "GET":
@@ -219,7 +252,6 @@ class CoinExAPI:
 
 
 
-
                 logger.info(
                     f"COINEX URL {response.url}"
                 )
@@ -231,17 +263,17 @@ class CoinExAPI:
 
 
 
-                data = response.json()
+                result = response.json()
 
 
 
                 logger.info(
-                    f"COINEX RESPONSE {data}"
+                    f"COINEX RESPONSE {result}"
                 )
 
 
 
-                return data
+                return result
 
 
 
@@ -249,7 +281,7 @@ class CoinExAPI:
 
 
                 logger.warning(
-                    f"COINEX REQUEST RETRY {attempt+1}/3 {e}"
+                    f"COINEX RETRY {attempt+1}/3 {e}"
                 )
 
 
@@ -266,22 +298,6 @@ class CoinExAPI:
             "REQUEST FAILED"
 
         }
-
-
-
-
-    def get_balance(self):
-
-        return self._request(
-
-            "GET",
-
-            "/assets/futures/balance",
-
-            private=True
-
-        )
-
 
 
 
@@ -305,15 +321,30 @@ class CoinExAPI:
                 "market":
                 market,
 
-
                 "period":
                 period,
-
 
                 "limit":
                 limit
 
             }
+
+        )
+
+
+
+
+
+    def get_balance(self):
+
+
+        return self._request(
+
+            "GET",
+
+            "/assets/futures/balance",
+
+            private=True
 
         )
 
@@ -330,10 +361,6 @@ class CoinExAPI:
     ):
 
 
-        side = side.lower()
-
-
-
         body = {
 
 
@@ -346,7 +373,7 @@ class CoinExAPI:
 
 
             "side":
-            side,
+            side.lower(),
 
 
             "type":
@@ -354,10 +381,13 @@ class CoinExAPI:
 
 
             "amount":
-            str(amount)
+            str(amount),
+
+
+            "position_id":
+            0
 
         }
-
 
 
 
@@ -369,9 +399,9 @@ class CoinExAPI:
 
         return self._request(
 
-            method="POST",
+            "POST",
 
-            path="/futures/order",
+            "/futures/order",
 
             body=body,
 
@@ -396,7 +426,7 @@ class CoinExAPI:
 
             "sell"
 
-            if side.lower() == "buy"
+            if side.lower()=="buy"
 
             else
 
@@ -430,10 +460,13 @@ class CoinExAPI:
 
 
             "stop_price":
-            str(stop_price)
+            str(stop_price),
+
+
+            "position_id":
+            0
 
         }
-
 
 
 
@@ -455,8 +488,8 @@ class CoinExAPI:
 
     def cancel_order(
         self,
-        order_id,
-        market
+        market,
+        order_id
     ):
 
 
@@ -485,7 +518,6 @@ class CoinExAPI:
             private=True
 
         )
-
 
 
 
