@@ -14,10 +14,6 @@ from core.pump_scanner_advanced import (
 
 from core.logger import logger
 
-from config import (
-    MIN_CONFIDENCE
-)
-
 
 
 def calculate_opportunity_score(
@@ -32,138 +28,66 @@ def calculate_opportunity_score(
 
 
         confidence = float(
-
             item.get(
-
                 "confidence",
-
                 0
-
             )
-
         )
 
 
-
-        if confidence >= 85:
+        if confidence >= 90:
 
             score += 40
 
-
-        elif confidence >= 70:
+        elif confidence >= 80:
 
             score += 30
 
-
-        elif confidence >= MIN_CONFIDENCE:
+        elif confidence >= 70:
 
             score += 20
 
 
 
-
-        signal = item.get(
-
-            "signal",
-
-            ""
-
+        volume = item.get(
+            "volume_confirm",
+            False
         )
 
 
+        if volume:
 
-        if signal in [
-
-            "STRONG BUY",
-
-            "STRONG SELL"
-
-        ]:
-
-            score += 20
+            score += 15
 
 
 
-        elif signal in [
+        trend = item.get(
+            "trend_confirm",
+            False
+        )
 
-            "BUY",
 
-            "SELL"
+        if trend:
 
-        ]:
+            score += 15
+
+
+
+        breakout = item.get(
+            "breakout",
+            False
+        )
+
+
+        if breakout:
 
             score += 10
 
 
 
-
-        volume = item.get(
-
-            "volume_score",
-
-            0
-
-        )
-
-
-
-        try:
-
-            score += min(
-
-                float(volume),
-
-                15
-
-            )
-
-        except:
-
-            pass
-
-
-
-
-
-        trend = item.get(
-
-            "trend_score",
-
-            0
-
-        )
-
-
-
-        try:
-
-            score += min(
-
-                float(trend),
-
-                15
-
-            )
-
-        except:
-
-            pass
-
-
-
-
-        return round(
-
-            min(
-
-                score,
-
-                100
-
-            ),
-
-            2
-
+        return min(
+            score,
+            100
         )
 
 
@@ -180,8 +104,40 @@ def calculate_opportunity_score(
 
 
 
+def classify_opportunity(
+    score
+):
 
-def prepare_opportunity(
+    try:
+
+
+        if score >= 85:
+
+            return "HIGH"
+
+
+
+        elif score >= 70:
+
+            return "MEDIUM"
+
+
+
+        return "LOW"
+
+
+
+    except:
+
+
+        return "LOW"
+
+
+
+
+
+
+def enrich_opportunity(
     item
 ):
 
@@ -193,9 +149,12 @@ def prepare_opportunity(
         )
 
 
-
         item["opportunity_score"] = score
 
+
+        item["risk_level"] = classify_opportunity(
+            score
+        )
 
 
         return item
@@ -208,7 +167,124 @@ def prepare_opportunity(
         logger.exception(e)
 
 
-        return None
+        return item
+
+
+
+
+
+
+def get_market_opportunities():
+
+    try:
+
+
+        symbols = get_symbols()
+
+
+
+        if not symbols:
+
+            return []
+
+
+
+        results = analyze_market_symbols(
+            symbols
+        )
+
+
+
+        if not results:
+
+            return []
+
+
+
+        enriched = []
+
+
+
+        for item in results:
+
+
+            enriched.append(
+
+                enrich_opportunity(
+                    item
+                )
+
+            )
+
+
+
+        return enriched
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return []
+
+
+
+
+
+
+def get_explosive_opportunities():
+
+    try:
+
+
+        pumps = scan_advanced_pumps()
+
+
+
+        if not pumps:
+
+            return []
+
+
+
+        results = []
+
+
+
+        for item in pumps:
+
+
+            item = enrich_opportunity(
+                item
+            )
+
+
+            if item.get(
+                "opportunity_score",
+                0
+            ) >= 70:
+
+
+                results.append(
+                    item
+                )
+
+
+
+        return results
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return []
 
 
 
@@ -224,107 +300,85 @@ def find_best_opportunities():
 
 
 
-        symbols = get_symbols()
+        market = get_market_opportunities()
 
 
 
-        if not symbols:
+        if market:
 
-
-            logger.info(
-                "NO SYMBOLS FOUND"
+            opportunities.extend(
+                market
             )
 
+
+
+        explosive = get_explosive_opportunities()
+
+
+
+        if explosive:
+
+            opportunities.extend(
+                explosive
+            )
+
+
+
+        if not opportunities:
 
             return []
 
 
 
-
-        market_signals = analyze_market_symbols(
-
-            symbols
-
-        )
-
-
-
-        if market_signals:
-
-
-            opportunities.extend(
-
-                market_signals
-
-            )
-
-
-
-
-
-        pumps = scan_advanced_pumps()
-
-
-
-        if pumps:
-
-
-            opportunities.extend(
-
-                pumps
-
-            )
-
-
-
-
-
-        final = []
+        unique = {}
 
 
 
         for item in opportunities:
 
 
-
-            prepared = prepare_opportunity(
-
-                item
-
+            symbol = item.get(
+                "symbol"
             )
 
 
-
-            if not prepared:
-
+            if not symbol:
 
                 continue
 
 
 
-
-            if prepared.get(
-
-                "confidence",
-
-                0
-
-            ) < MIN_CONFIDENCE:
-
-
-                continue
-
-
-
-
-            final.append(
-
-                prepared
-
+            old = unique.get(
+                symbol
             )
 
 
 
+            if not old:
+
+
+                unique[symbol] = item
+
+
+
+            else:
+
+
+                if item.get(
+                    "opportunity_score",
+                    0
+                ) > old.get(
+                    "opportunity_score",
+                    0
+                ):
+
+                    unique[symbol] = item
+
+
+
+        final = list(
+            unique.values()
+        )
 
 
 
@@ -333,11 +387,8 @@ def find_best_opportunities():
             key=lambda x:
 
             x.get(
-
                 "opportunity_score",
-
                 0
-
             ),
 
             reverse=True
@@ -348,10 +399,9 @@ def find_best_opportunities():
 
         logger.info(
 
-            f"BEST OPPORTUNITIES: {len(final)}"
+            f"BEST OPPORTUNITIES FOUND: {len(final)}"
 
         )
-
 
 
         return final
