@@ -1,310 +1,382 @@
-# core/opportunity_offer_engine.py
+# core/report_manager.py
 
 from datetime import datetime
 
 from core.logger import logger
 
-from core.opportunity_engine import (
-    find_best_opportunities
-)
-
 from core.trade_manager import (
-    get_open_trades
+    get_trade_history
 )
 
-from config import (
-    MIN_CONFIDENCE
+from core.database_manager import (
+    get_connection
 )
 
 
 
 
 
-MAX_OFFERS = 10
-
-OFFER_EXPIRY_MINUTES = 15
-
-
-
-
-
-def _normalize_signal(signal):
-
-    signal = str(signal).upper().strip()
-
-    mapping = {
-
-        "STRONG BUY": "BUY",
-        "EARLY BUY": "BUY",
-        "STRONG SELL": "SELL",
-        "EARLY SELL": "SELL"
-
-    }
-
-    return mapping.get(signal, signal)
-
-
-
-
-
-def _score(opportunity):
+def get_total_profit():
 
     try:
 
-        confidence = float(
-            opportunity.get(
-                "confidence",
-                0
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT SUM(pnl)
+
+            FROM trades
+
+            WHERE status='CLOSED'
+
+            """
+
+        )
+
+
+
+        result = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if result and result[0]:
+
+            return round(
+
+                float(result[0]),
+
+                4
+
             )
-        )
 
-        volume_score = float(
-            opportunity.get(
-                "volume_score",
-                0
-            )
-        )
 
-        trend_score = float(
-            opportunity.get(
-                "trend_score",
-                0
-            )
-        )
 
-        rr_score = float(
-            opportunity.get(
-                "risk_reward_score",
-                0
-            )
-        )
+        return 0.0
 
-        return round(
 
-            confidence * 0.50 +
-
-            volume_score * 0.20 +
-
-            trend_score * 0.20 +
-
-            rr_score * 0.10,
-
-            2
-
-        )
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return 0
+
+        return 0.0
 
 
 
 
 
-def _duplicate_symbols():
+
+
+def today_profit():
 
     try:
 
-        symbols = set()
 
-        for trade in get_open_trades():
+        today = datetime.utcnow().strftime(
 
-            symbols.add(
+            "%Y-%m-%d"
+
+        )
+
+
+
+        conn = get_connection()
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT SUM(pnl)
+
+            FROM trades
+
+            WHERE status='CLOSED'
+
+            AND closed_at LIKE ?
+
+            """,
+
+            (
+
+                today + "%",
+
+            )
+
+        )
+
+
+
+        result = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if result and result[0]:
+
+            return round(
+
+                float(result[0]),
+
+                4
+
+            )
+
+
+
+        return 0.0
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return 0.0
+
+
+
+
+
+
+
+def get_trade_statistics():
+
+    try:
+
+
+        trades = get_trade_history(
+
+            1000
+
+        )
+
+
+
+        total = len(
+
+            trades
+
+        )
+
+
+
+        wins = 0
+
+        losses = 0
+
+
+
+        for trade in trades:
+
+
+            pnl = float(
 
                 trade.get(
-                    "symbol"
-                )
 
-            )
+                    "pnl",
 
-        return symbols
-
-    except Exception:
-
-        return set()
-
-
-
-
-
-def build_offers():
-
-    try:
-
-        opportunities = find_best_opportunities()
-
-        if not opportunities:
-
-            return []
-
-        opened = _duplicate_symbols()
-
-        offers = []
-
-        for item in opportunities:
-
-            symbol = item.get(
-                "symbol"
-            )
-
-            if not symbol:
-
-                continue
-
-            if symbol in opened:
-
-                continue
-
-            confidence = float(
-
-                item.get(
-                    "confidence",
                     0
+
                 )
 
             )
 
-            if confidence < MIN_CONFIDENCE:
 
-                continue
+            if pnl > 0:
 
-            signal = _normalize_signal(
+                wins += 1
 
-                item.get(
-                    "signal"
+
+            elif pnl < 0:
+
+                losses += 1
+
+
+
+
+
+        return {
+
+
+            "total":
+
+                total,
+
+
+            "wins":
+
+                wins,
+
+
+            "losses":
+
+                losses
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
+
+
+
+
+
+
+
+
+def get_performance_summary():
+
+    try:
+
+
+        stats = get_trade_statistics()
+
+
+
+        return {
+
+
+            "total_profit":
+
+                get_total_profit(),
+
+
+
+            "today_profit":
+
+                today_profit(),
+
+
+
+            "trades":
+
+                stats.get(
+
+                    "total",
+
+                    0
+
+                ),
+
+
+
+            "wins":
+
+                stats.get(
+
+                    "wins",
+
+                    0
+
+                ),
+
+
+
+            "losses":
+
+                stats.get(
+
+                    "losses",
+
+                    0
+
                 )
 
-            )
+        }
 
-            if signal not in [
 
-                "BUY",
-                "SELL"
-
-            ]:
-
-                continue
-
-            offer = {
-
-                "symbol": symbol,
-
-                "signal": signal,
-
-                "entry": item.get(
-
-                    "entry",
-
-                    item.get(
-                        "price"
-                    )
-
-                ),
-
-                "tp": item.get(
-
-                    "tp",
-
-                    item.get(
-                        "take_profit"
-                    )
-
-                ),
-
-                "sl": item.get(
-
-                    "sl",
-
-                    item.get(
-                        "stop_loss"
-                    )
-
-                ),
-
-                "confidence": confidence,
-
-                "offer_score": _score(item),
-
-                "expires_after_minutes": OFFER_EXPIRY_MINUTES,
-
-                "created_at": datetime.utcnow().isoformat()
-
-            }
-
-            offers.append(offer)
-
-        offers.sort(
-
-            key=lambda x: x["offer_score"],
-
-            reverse=True
-
-        )
-
-        logger.info(
-
-            f"OFFER ENGINE CREATED {len(offers)} OFFERS"
-
-        )
-
-        return offers[:MAX_OFFERS]
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return []
+
+        return {}
 
 
 
 
 
-def best_offer():
+
+
+
+
+def generate_report_text():
 
     try:
 
-        offers = build_offers()
 
-        if offers:
+        report = get_performance_summary()
 
-            return offers[0]
 
-        return None
+
+        return f"""
+
+<b>📊 Pourya Trader AI Report</b>
+
+
+💰 Total Profit:
+{report.get('total_profit')} USDT
+
+
+📅 Today Profit:
+{report.get('today_profit')} USDT
+
+
+📈 Total Trades:
+{report.get('trades')}
+
+
+✅ Wins:
+{report.get('wins')}
+
+
+❌ Losses:
+{report.get('losses')}
+
+
+🤖 System:
+ACTIVE
+
+"""
+
+
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return None
-
-
-
-
-
-def get_offer_summary():
-
-    try:
-
-        offers = build_offers()
-
-        return {
-
-            "count": len(offers),
-
-            "offers": offers
-
-        }
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return {
-
-            "count": 0,
-
-            "offers": []
-
-        }
