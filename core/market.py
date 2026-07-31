@@ -2,16 +2,33 @@
 
 import requests
 
-import pandas as pd
-
 from core.logger import logger
 
 from config import (
     BASE_URL,
     MARKET_TYPE,
-    REQUEST_TIMEOUT,
-    MAX_RETRIES
+    REQUEST_TIMEOUT
 )
+
+
+
+
+
+if MARKET_TYPE == "FUTURES":
+
+    KLINE_URL = BASE_URL + "/futures/kline"
+
+    TICKER_URL = BASE_URL + "/futures/ticker"
+
+
+else:
+
+    KLINE_URL = BASE_URL + "/spot/kline"
+
+    TICKER_URL = BASE_URL + "/spot/ticker"
+
+
+
 
 
 
@@ -23,46 +40,22 @@ INTERVAL_MAP = {
 
         "15min",
 
+
     "60":
 
         "1hour",
 
+
     "240":
 
-        "4hour"
+        "4hour",
+
+
+    "1D":
+
+        "1day"
 
 }
-
-
-
-
-
-
-
-def get_kline_endpoint():
-
-    if MARKET_TYPE == "FUTURES":
-
-        return (
-
-            BASE_URL
-
-            +
-
-            "/futures/kline"
-
-        )
-
-
-    return (
-
-        BASE_URL
-
-        +
-
-        "/spot/kline"
-
-    )
 
 
 
@@ -73,25 +66,11 @@ def get_kline_endpoint():
 
 def get_market_data(
     symbol,
-    timeframe="15",
+    interval="15",
     limit=200
 ):
 
     try:
-
-
-        interval = INTERVAL_MAP.get(
-
-            str(timeframe),
-
-            "15min"
-
-        )
-
-
-
-        url = get_kline_endpoint()
-
 
 
         params = {
@@ -99,72 +78,38 @@ def get_market_data(
 
             "market":
 
-            symbol,
+                symbol,
 
 
             "period":
 
-            interval,
+                INTERVAL_MAP.get(
+
+                    interval,
+
+                    "15min"
+
+                ),
 
 
             "limit":
 
-            limit
-
+                limit
 
         }
 
 
 
 
-        response = None
+        response = requests.get(
 
+            KLINE_URL,
 
+            params=params,
 
-        for attempt in range(
+            timeout=REQUEST_TIMEOUT
 
-            MAX_RETRIES
-
-        ):
-
-
-            try:
-
-
-                response = requests.get(
-
-                    url,
-
-                    params=params,
-
-                    timeout=REQUEST_TIMEOUT
-
-                )
-
-
-
-                if response.status_code == 200:
-
-                    break
-
-
-
-            except Exception:
-
-
-                if attempt == MAX_RETRIES - 1:
-
-                    raise
-
-
-
-
-
-        if not response:
-
-
-            return None
-
+        )
 
 
 
@@ -181,132 +126,76 @@ def get_market_data(
 
             logger.error(
 
-                data
+                f"KLINE ERROR {data}"
 
             )
 
 
-            return None
+            return []
 
 
 
 
 
+        candles = []
 
-        rows = data.get(
+
+
+        for item in data.get(
 
             "data",
 
             []
 
-        )
+        ):
+
+
+            candles.append(
+
+                {
+
+
+                    "time":
+
+                        item[0],
 
 
 
-        if not rows:
+                    "open":
 
-
-            return None
-
-
+                        float(item[1]),
 
 
 
+                    "close":
 
-        df = pd.DataFrame(
-
-            rows
-
-        )
+                        float(item[2]),
 
 
 
-        if df.empty:
+                    "high":
 
-            return None
-
-
+                        float(item[3]),
 
 
 
-        columns = [
+                    "low":
 
-            "time",
-
-            "open",
-
-            "close",
-
-            "high",
-
-            "low",
-
-            "volume"
-
-        ]
+                        float(item[4]),
 
 
 
-        if len(df.columns) >= 6:
+                    "volume":
 
-            df = df.iloc[:, :6]
+                        float(item[5])
 
-            df.columns = columns
-
-
-
-
-
-        for col in [
-
-            "open",
-
-            "close",
-
-            "high",
-
-            "low",
-
-            "volume"
-
-        ]:
-
-
-            df[col] = pd.to_numeric(
-
-                df[col],
-
-                errors="coerce"
+                }
 
             )
 
 
 
-
-
-        df = df.sort_values(
-
-            "time"
-
-        )
-
-
-
-        df.reset_index(
-
-            drop=True,
-
-            inplace=True
-
-        )
-
-
-
-
-
-        return df
-
-
+        return candles
 
 
 
@@ -316,7 +205,7 @@ def get_market_data(
         logger.exception(e)
 
 
-        return None
+        return []
 
 
 
@@ -333,28 +222,75 @@ def get_latest_price(
     try:
 
 
-        df = get_market_data(
+        params = {
 
-            symbol,
 
-            "15",
+            "market":
 
-            2
+                symbol
+
+        }
+
+
+
+        response = requests.get(
+
+            TICKER_URL,
+
+            params=params,
+
+            timeout=REQUEST_TIMEOUT
 
         )
 
 
 
-        if df is None or df.empty:
+        data = response.json()
+
+
+
+        if data.get(
+
+            "code"
+
+        ) != 0:
 
 
             return None
 
 
 
+
+
+        ticker = data.get(
+
+            "data"
+
+        )
+
+
+
+        if isinstance(
+
+            ticker,
+
+            list
+
+        ):
+
+            ticker = ticker[0]
+
+
+
+
+
         return float(
 
-            df.iloc[-1]["close"]
+            ticker.get(
+
+                "last"
+
+            )
 
         )
 
@@ -374,60 +310,12 @@ def get_latest_price(
 
 
 
-
-
-def get_multi_timeframe_data(
+def get_current_price(
     symbol
 ):
 
-    try:
+    return get_latest_price(
 
+        symbol
 
-        return {
-
-
-            "15":
-
-                get_market_data(
-
-                    symbol,
-
-                    "15"
-
-                ),
-
-
-
-            "60":
-
-                get_market_data(
-
-                    symbol,
-
-                    "60"
-
-                ),
-
-
-
-            "240":
-
-                get_market_data(
-
-                    symbol,
-
-                    "240"
-
-                )
-
-        }
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return {}
+    )
