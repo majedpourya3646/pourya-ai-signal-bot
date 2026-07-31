@@ -1,159 +1,103 @@
 # core/recovery_manager.py
 
-import time
+import os
+import json
 
 from datetime import datetime
 
 from core.logger import logger
 
-from core.config_manager import (
-    get_setting,
-    update_setting
+from core.trade_manager import (
+    get_open_trades
 )
 
-from coinex_trade import (
-    coinex_trade
+from core.database_manager import (
+    insert_log
 )
 
 
 
-SYSTEM_STATE = {
 
-    "internet":
 
-        True,
+RECOVERY_FILE = (
 
+    "data/recovery_state.json"
 
-    "exchange":
+)
 
-        True,
 
 
-    "last_check":
 
-        None,
 
 
-    "recovery_mode":
 
-        False
-
-}
-
-
-
-
-
-def check_exchange_connection():
-
-    try:
-
-
-        result = coinex_trade.get_server_time()
-
-
-
-        if result:
-
-
-            SYSTEM_STATE["exchange"] = True
-
-
-            return True
-
-
-
-        SYSTEM_STATE["exchange"] = False
-
-
-        return False
-
-
-
-    except Exception as e:
-
-
-        logger.warning(
-
-            f"EXCHANGE CONNECTION FAILED {e}"
-
-        )
-
-
-        SYSTEM_STATE["exchange"] = False
-
-
-        return False
-
-
-
-
-
-
-def check_internet():
-
-    try:
-
-
-        exchange_status = check_exchange_connection()
-
-
-
-        if exchange_status:
-
-
-            SYSTEM_STATE["internet"] = True
-
-
-            return True
-
-
-
-        SYSTEM_STATE["internet"] = False
-
-
-        return False
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-def enable_emergency_mode(
-    reason
+def save_recovery_state(
+    state
 ):
 
     try:
 
 
-        update_setting(
+        folder = os.path.dirname(
 
-            "emergency_mode",
-
-            True
+            RECOVERY_FILE
 
         )
 
 
-        SYSTEM_STATE["recovery_mode"] = True
+        if not os.path.exists(
+
+            folder
+
+        ):
+
+
+            os.makedirs(
+
+                folder
+
+            )
 
 
 
-        logger.error(
+        data = {
 
-            f"EMERGENCY MODE ENABLED: {reason}"
 
-        )
+            "state":
+
+                state,
+
+
+            "timestamp":
+
+                datetime.utcnow()
+                .isoformat()
+
+
+        }
+
+
+
+        with open(
+
+            RECOVERY_FILE,
+
+            "w",
+
+            encoding="utf-8"
+
+        ) as file:
+
+
+            json.dump(
+
+                data,
+
+                file,
+
+                indent=4
+
+            )
 
 
 
@@ -174,32 +118,40 @@ def enable_emergency_mode(
 
 
 
-def disable_emergency_mode():
+
+
+def load_recovery_state():
 
     try:
 
 
-        update_setting(
+        if not os.path.exists(
 
-            "emergency_mode",
+            RECOVERY_FILE
 
-            False
-
-        )
+        ):
 
 
-        SYSTEM_STATE["recovery_mode"] = False
+            return None
 
 
 
-        logger.info(
+        with open(
 
-            "EMERGENCY MODE DISABLED"
+            RECOVERY_FILE,
 
-        )
+            "r",
+
+            encoding="utf-8"
+
+        ) as file:
 
 
-        return True
+            return json.load(
+
+                file
+
+            )
 
 
 
@@ -209,37 +161,165 @@ def disable_emergency_mode():
         logger.exception(e)
 
 
-        return False
+        return None
 
 
 
 
 
 
-def system_health_check():
+
+
+def check_open_positions():
 
     try:
 
 
-        SYSTEM_STATE["last_check"] = (
-
-            datetime.utcnow()
-            .isoformat()
-
-        )
+        trades = get_open_trades()
 
 
 
-        internet = check_internet()
+        return {
+
+
+            "count":
+
+                len(trades),
+
+
+            "trades":
+
+                trades
+
+
+        }
 
 
 
-        if not internet:
+    except Exception as e:
 
 
-            enable_emergency_mode(
+        logger.exception(e)
 
-                "NO INTERNET OR EXCHANGE CONNECTION"
+
+        return {
+
+
+            "count":
+
+                0,
+
+
+            "trades":
+
+                []
+
+        }
+
+
+
+
+
+
+
+
+def validate_recovery():
+
+    try:
+
+
+        state = load_recovery_state()
+
+
+
+        positions = check_open_positions()
+
+
+
+        result = {
+
+
+            "previous_state":
+
+                state,
+
+
+            "open_positions":
+
+                positions,
+
+
+            "safe":
+
+                True
+
+
+        }
+
+
+
+        if positions.get(
+
+            "count",
+
+            0
+
+        ) > 0:
+
+
+            logger.info(
+
+                "OPEN POSITIONS FOUND DURING RECOVERY"
+
+            )
+
+
+
+        return result
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {
+
+
+            "safe":
+
+                False
+
+        }
+
+
+
+
+
+
+
+
+def start_recovery():
+
+    try:
+
+
+        recovery = validate_recovery()
+
+
+
+        if not recovery.get(
+
+            "safe"
+
+        ):
+
+
+            enter_safe_mode(
+
+                "RECOVERY FAILED"
 
             )
 
@@ -248,14 +328,29 @@ def system_health_check():
 
 
 
-        if SYSTEM_STATE.get(
+        save_recovery_state(
 
-            "recovery_mode"
+            "SYSTEM_RECOVERED"
 
-        ):
+        )
 
 
-            disable_emergency_mode()
+
+        insert_log(
+
+            "SYSTEM_RECOVERY",
+
+            recovery
+
+        )
+
+
+
+        logger.info(
+
+            "RECOVERY COMPLETED"
+
+        )
 
 
 
@@ -276,39 +371,42 @@ def system_health_check():
 
 
 
-def wait_for_recovery():
+
+
+def enter_safe_mode(
+    reason
+):
 
     try:
 
 
-        logger.info(
+        save_recovery_state(
 
-            "WAITING FOR SYSTEM RECOVERY"
+            "SAFE_MODE"
 
         )
 
 
 
-        while True:
+        insert_log(
 
+            "SAFE_MODE",
 
-            if system_health_check():
+            reason
 
-
-                logger.info(
-
-                    "SYSTEM RECOVERED"
-
-                )
-
-
-                return True
+        )
 
 
 
-            time.sleep(
-                60
-            )
+        logger.warning(
+
+            f"SYSTEM SAFE MODE: {reason}"
+
+        )
+
+
+
+        return True
 
 
 
@@ -325,12 +423,70 @@ def wait_for_recovery():
 
 
 
-def get_system_status():
+
+
+def clear_recovery_state():
 
     try:
 
 
-        return SYSTEM_STATE
+        if os.path.exists(
+
+            RECOVERY_FILE
+
+        ):
+
+
+            os.remove(
+
+                RECOVERY_FILE
+
+            )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def recovery_status():
+
+    try:
+
+
+        state = load_recovery_state()
+
+
+
+        return {
+
+
+            "available":
+
+                bool(state),
+
+
+            "state":
+
+                state
+
+
+        }
 
 
 
