@@ -1,207 +1,85 @@
 # core/trading_loop.py
 
 import time
-from datetime import datetime
 
+from threading import Event
+
+from core.logger import logger
 
 from core.trading_controller import (
     run_trading_cycle
 )
 
-
-from core.position_manager import (
-    check_tp_sl
-)
-
-
-from core.logger import logger
-
-
-from core.config_manager import (
-    get_setting
+from config import (
+    TRADING_INTERVAL
 )
 
 
 
-SYSTEM_STATUS = {
-    "running": False,
-    "last_cycle": None,
-    "errors": 0
-}
+
+
+STOP_EVENT = Event()
+
+RUNNING = False
 
 
 
-def health_check():
-
-    try:
-
-
-        trading_enabled = get_setting(
-            "trading_enabled",
-            True
-        )
-
-
-        emergency = get_setting(
-            "emergency_mode",
-            False
-        )
-
-
-        if not trading_enabled:
-
-            logger.warning(
-                "TRADING DISABLED"
-            )
-
-            return False
 
 
 
-        if emergency:
 
-            logger.warning(
-                "EMERGENCY MODE ACTIVE"
-            )
+def trading_loop():
 
-            return False
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return False
-
-
-
-def process_cycle():
+    global RUNNING
 
     try:
 
-
-        SYSTEM_STATUS["last_cycle"] = (
-            datetime.utcnow()
-            .isoformat()
-        )
-
-
-        if not health_check():
-
-            logger.info(
-                "SYSTEM NOT READY"
-            )
-
-            return []
-
-
-
-        closed = check_tp_sl()
-
-
-        if closed:
-
-            logger.info(
-                f"CLOSED POSITIONS {closed}"
-            )
-
-
-
-        trades = run_trading_cycle()
-
-
-
-        if trades:
-
-            logger.info(
-                f"NEW TRADES {trades}"
-            )
-
-
-
-        SYSTEM_STATUS["errors"] = 0
-
-
-        return trades
-
-
-
-    except Exception as e:
-
-
-        SYSTEM_STATUS["errors"] += 1
-
-
-        logger.exception(e)
-
-
-        return []
-
-
-
-def run_loop():
-
-    try:
+        RUNNING = True
 
 
         logger.info(
-            "PRODUCTION TRADING LOOP STARTED"
+
+            "TRADING LOOP STARTED"
+
         )
 
 
-        SYSTEM_STATUS["running"] = True
+
+        while not STOP_EVENT.is_set():
 
 
 
-        mode = get_setting(
-            "scheduler_mode",
-            "TEST"
-        )
+            try:
 
 
-        while True:
-
-
-            trades = process_cycle()
+                result = run_trading_cycle()
 
 
 
-            if mode == "TEST":
+                if result:
 
+                    logger.info(
 
-                logger.info(
-                    "TEST MODE - STOP LOOP"
-                )
+                        f"TRADING RESULT: {result}"
 
-
-                break
+                    )
 
 
 
-            interval = get_setting(
-                "trading_interval",
-                300
+            except Exception as e:
+
+
+                logger.exception(e)
+
+
+
+
+
+            STOP_EVENT.wait(
+
+                TRADING_INTERVAL
+
             )
-
-
-
-            time.sleep(
-                int(interval)
-            )
-
-
-
-    except KeyboardInterrupt:
-
-
-        logger.info(
-            "TRADING LOOP STOPPED MANUALLY"
-        )
 
 
 
@@ -215,10 +93,108 @@ def run_loop():
     finally:
 
 
-        SYSTEM_STATUS["running"] = False
+        RUNNING = False
 
 
 
-if __name__ == "__main__":
+        logger.info(
 
-    run_loop()
+            "TRADING LOOP STOPPED"
+
+        )
+
+
+
+
+
+
+
+
+
+def start_loop():
+
+    try:
+
+
+        if RUNNING:
+
+            return False
+
+
+
+        STOP_EVENT.clear()
+
+
+
+        trading_loop()
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def stop_loop():
+
+    try:
+
+
+        STOP_EVENT.set()
+
+
+
+        logger.info(
+
+            "STOP SIGNAL SENT"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def loop_status():
+
+    return {
+
+
+        "running":
+
+            RUNNING,
+
+
+        "interval":
+
+            TRADING_INTERVAL
+
+    }
