@@ -456,3 +456,7 @@ def calculate_pnl(
 
 
         return 0
+
+def check_tp_sl():
+
+    return monitor_positions()
