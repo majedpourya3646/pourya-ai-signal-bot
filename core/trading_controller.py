@@ -1,127 +1,33 @@
 # core/trading_controller.py
 
-from datetime import datetime
+from core.logger import logger
 
 from core.auto_trader import (
-    execute_batch
-)
-
-from core.opportunity_engine import (
-    find_best_opportunities
+    execute_auto_trade
 )
 
 from core.trade_manager import (
     get_open_trades
 )
 
-from core.risk_engine import (
-    calculate_trade_quality
+from core.position_manager import (
+    check_tp_sl
 )
 
-from core.logger import logger
+from core.opportunity_engine import (
+    find_best_opportunities
+)
 
 from config import (
-    MIN_CONFIDENCE,
-    MAX_OPEN_TRADES
+    MAX_OPEN_TRADES,
+    MIN_CONFIDENCE
 )
 
 
 
-VALID_SIGNALS = (
-
-    "BUY",
-    "SELL",
-    "STRONG BUY",
-    "STRONG SELL",
-    "EARLY BUY",
-    "EARLY SELL",
-
-)
 
 
-
-def filter_duplicate_symbols(
-    opportunities
-):
-
-    try:
-
-        result = []
-
-        symbols = set()
-
-
-        for item in opportunities:
-
-
-            symbol = item.get(
-                "symbol"
-            )
-
-
-            if not symbol:
-
-                continue
-
-
-            if symbol in symbols:
-
-                continue
-
-
-            symbols.add(symbol)
-
-            result.append(item)
-
-
-        return result
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return []
-
-
-
-def enrich_opportunities(
-    opportunities
-):
-
-    try:
-
-        result = []
-
-
-        for item in opportunities:
-
-
-            quality = calculate_trade_quality(
-                item
-            )
-
-
-            item["quality_score"] = quality
-
-
-            result.append(
-                item
-            )
-
-
-        return result
-
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return []
-
-
-
-def collect_opportunities():
+def get_valid_opportunities():
 
     try:
 
@@ -136,31 +42,26 @@ def collect_opportunities():
 
 
 
-        filtered = []
+
+
+        valid = []
 
 
 
         for item in opportunities:
 
 
-            signal = item.get(
-                "signal",
-                "WAIT"
-            )
-
-
             confidence = float(
+
                 item.get(
+
                     "confidence",
+
                     0
+
                 )
+
             )
-
-
-
-            if signal not in VALID_SIGNALS:
-
-                continue
 
 
 
@@ -170,73 +71,37 @@ def collect_opportunities():
 
 
 
-            filtered.append(
+            valid.append(
+
                 item
+
             )
 
 
 
-        filtered = enrich_opportunities(
-            filtered
-        )
+        return valid
 
-
-
-        filtered = filter_duplicate_symbols(
-            filtered
-        )
-
-
-
-        filtered.sort(
-
-            key=lambda x:
-            (
-                x.get(
-                    "quality_score",
-                    0
-                ),
-
-                x.get(
-                    "confidence",
-                    0
-                )
-
-            ),
-
-            reverse=True
-
-        )
-
-
-        logger.info(
-            f"QUALITY OPPORTUNITIES {len(filtered)}"
-        )
-
-
-        return filtered[:MAX_OPEN_TRADES]
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return []
 
 
 
-def run_trading_cycle():
 
-    cycle_time = datetime.utcnow().isoformat()
 
+
+
+
+
+def can_open_new_trade():
 
     try:
-
-
-        logger.info(
-            f"TRADING CYCLE START {cycle_time}"
-        )
-
 
 
         open_trades = get_open_trades()
@@ -245,63 +110,123 @@ def run_trading_cycle():
 
         if len(open_trades) >= MAX_OPEN_TRADES:
 
-
             logger.info(
-                "MAX OPEN TRADES REACHED"
+
+                "MAX OPEN TRADES LIMIT"
+
             )
 
+            return False
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def run_trading_cycle():
+
+    try:
+
+
+        logger.info(
+
+            "TRADING CYCLE STARTED"
+
+        )
+
+
+
+
+
+        closed = check_tp_sl()
+
+
+
+        if closed:
+
+            logger.info(
+
+                f"CLOSED POSITIONS {closed}"
+
+            )
+
+
+
+
+
+
+
+        if not can_open_new_trade():
 
             return []
 
 
 
-        opportunities = collect_opportunities()
+
+
+
+
+        opportunities = get_valid_opportunities()
 
 
 
         if not opportunities:
 
-
             logger.info(
-                "NO OPPORTUNITIES"
-            )
 
+                "NO VALID OPPORTUNITIES"
+
+            )
 
             return []
 
 
 
-        available_slots = (
-
-            MAX_OPEN_TRADES
-
-            -
-
-            len(open_trades)
-
-        )
 
 
 
-        opportunities = opportunities[
-            :available_slots
-        ]
+
+
+        result = execute_auto_trade()
 
 
 
-        trades = execute_batch(
-            opportunities
-        )
+        if result:
+
+
+            logger.info(
+
+                f"TRADE EXECUTED {result}"
+
+            )
+
+
+            return [
+
+                result
+
+            ]
 
 
 
-        logger.info(
-            f"CYCLE FINISHED | TRADES={len(trades)}"
-        )
 
 
-
-        return trades
+        return []
 
 
 
@@ -312,3 +237,46 @@ def run_trading_cycle():
 
 
         return []
+
+
+
+
+
+
+
+
+
+
+def controller_status():
+
+    try:
+
+
+        return {
+
+
+            "open_trades":
+
+                len(
+
+                    get_open_trades()
+
+                ),
+
+
+
+            "max_open":
+
+                MAX_OPEN_TRADES
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
