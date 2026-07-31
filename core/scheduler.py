@@ -1,80 +1,200 @@
 # core/scheduler.py
 
-import time
 import threading
-import os
+
+import time
+
+from datetime import datetime
+
+from core.logger import logger
 
 from core.trading_loop import (
     run_loop
 )
 
-from core.report_scheduler import (
-    start_report_scheduler
-)
-
-from core.logger import logger
-
-
-MODE = os.getenv(
-    "BOT_MODE",
-    "TEST"
+from core.config_manager import (
+    get_setting
 )
 
 
-def start_trading_thread():
+
+
+SERVICES = []
+
+
+
+
+
+def start_service(
+    target,
+    name
+):
 
     try:
 
-        thread = threading.Thread(
-
-            target=run_loop,
-
-            daemon=False
-
-        )
-
-        thread.start()
-
-        logger.info(
-            "TRADING THREAD STARTED"
-        )
-
-        return thread
-
-    except Exception as e:
-
-        logger.exception(e)
-
-        return None
-
-
-
-
-def start_report_thread():
-
-    try:
 
         thread = threading.Thread(
 
-            target=start_report_scheduler,
+            target=target,
+
+            name=name,
 
             daemon=True
 
         )
 
+
         thread.start()
 
-        logger.info(
-            "REPORT THREAD STARTED"
+
+
+        SERVICES.append(
+
+            {
+
+                "name":
+
+                    name,
+
+
+                "thread":
+
+                    thread,
+
+
+                "started":
+
+                    datetime.utcnow().isoformat()
+
+            }
+
         )
 
-        return thread
+
+        logger.info(
+            f"SERVICE STARTED: {name}"
+        )
+
+
+        return True
+
+
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return None
+
+        return False
+
+
+
+
+
+
+def health_monitor():
+
+    try:
+
+
+        while True:
+
+
+
+            for service in SERVICES:
+
+
+                thread = service.get(
+                    "thread"
+                )
+
+
+                if thread and not thread.is_alive():
+
+
+                    logger.error(
+
+                        f"SERVICE STOPPED: {service.get('name')}"
+
+                    )
+
+
+
+            interval = get_setting(
+
+                "health_check_interval",
+
+                60
+
+            )
+
+
+
+            time.sleep(
+                int(interval)
+            )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+
+
+
+
+
+def daily_report_service():
+
+    try:
+
+
+        while True:
+
+
+            now = datetime.now()
+
+
+
+            if now.hour == 0 and now.minute == 0:
+
+
+                logger.info(
+
+                    "DAILY REPORT TRIGGER"
+
+                )
+
+
+                # اتصال به Report Generator
+
+                # در مرحله بعد کامل می‌شود
+
+
+
+                time.sleep(
+                    60
+                )
+
+
+
+            time.sleep(
+                30
+            )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+
 
 
 
@@ -83,38 +203,89 @@ def start_all_services():
 
     try:
 
-        logger.info(
-            f"SCHEDULER MODE: {MODE}"
+
+
+        SERVICES.clear()
+
+
+
+        trading = start_service(
+
+            run_loop,
+
+            "TRADING_ENGINE"
+
         )
 
-        if MODE == "TEST":
 
-            logger.info(
-                "TEST MODE ENABLED"
-            )
 
-            run_loop()
+        reports = start_service(
 
-            return True
+            daily_report_service,
 
-        start_trading_thread()
+            "REPORT_SERVICE"
 
-        start_report_thread()
-
-        while True:
-
-            time.sleep(60)
-
-    except KeyboardInterrupt:
-
-        logger.info(
-            "SCHEDULER STOPPED"
         )
 
-        return True
+
+
+        monitor = start_service(
+
+            health_monitor,
+
+            "HEALTH_MONITOR"
+
+        )
+
+
+
+        return all([
+
+            trading,
+
+            reports,
+
+            monitor
+
+        ])
+
+
 
     except Exception as e:
 
+
         logger.exception(e)
+
+
+        return False
+
+
+
+
+
+def stop_all_services():
+
+    try:
+
+
+        SERVICES.clear()
+
+
+        logger.info(
+
+            "ALL SERVICES STOP REQUESTED"
+
+        )
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
 
         return False
