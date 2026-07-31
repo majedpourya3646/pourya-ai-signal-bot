@@ -2,64 +2,119 @@
 
 import os
 import shutil
-import datetime
+
+from datetime import datetime
 
 from core.logger import logger
 
-
-
-BACKUP_FOLDER = "backup"
-
-
+from core.config_manager import (
+    get_setting
+)
 
 
 
-def create_project_backup():
+BACKUP_DIR = "backup"
+
+
+
+
+
+BACKUP_FILES = [
+
+    "data/trades.db",
+
+    "data/users.db",
+
+    "data/settings.json"
+
+]
+
+
+
+
+
+
+def create_backup_directory():
 
     try:
 
-        os.makedirs(
-            BACKUP_FOLDER,
-            exist_ok=True
+
+        if not os.path.exists(
+            BACKUP_DIR
+        ):
+
+
+            os.makedirs(
+                BACKUP_DIR
+            )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+def create_backup():
+
+    try:
+
+
+        if not create_backup_directory():
+
+
+            return False
+
+
+
+        timestamp = (
+
+            datetime.utcnow()
+
+            .strftime(
+
+                "%Y%m%d_%H%M%S"
+
+            )
+
         )
 
-
-        timestamp = datetime.datetime.now().strftime(
-            "%Y%m%d_%H%M%S"
-        )
-
-
-        backup_name = (
-            f"pourya_trader_backup_{timestamp}"
-        )
 
 
         backup_path = os.path.join(
-            BACKUP_FOLDER,
-            backup_name
+
+            BACKUP_DIR,
+
+            f"backup_{timestamp}"
+
         )
+
 
 
         os.makedirs(
-            backup_path,
-            exist_ok=True
+            backup_path
         )
 
 
 
-        files = [
-
-            "core",
-
-            "bot.py",
-
-            "config.py"
-
-        ]
+        copied = []
 
 
 
-        for file in files:
+        for file in BACKUP_FILES:
+
 
 
             if os.path.exists(
@@ -68,68 +123,237 @@ def create_project_backup():
 
 
                 destination = os.path.join(
+
                     backup_path,
+
+                    os.path.basename(
+                        file
+                    )
+
+                )
+
+
+                shutil.copy2(
+
+                    file,
+
+                    destination
+
+                )
+
+
+                copied.append(
                     file
                 )
 
 
-                if os.path.isdir(
-                    file
-                ):
-
-                    shutil.copytree(
-                        file,
-                        destination
-                    )
-
-                else:
-
-                    shutil.copy2(
-                        file,
-                        destination
-                    )
-
-
 
         logger.info(
-            f"PROJECT BACKUP CREATED: {backup_path}"
+
+            f"BACKUP CREATED {copied}"
+
         )
 
 
-        return backup_path
+
+        return True
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
-        return None
+
+        return False
 
 
 
 
 
-def get_backups():
+
+def list_backups():
 
     try:
 
+
         if not os.path.exists(
-            BACKUP_FOLDER
+            BACKUP_DIR
         ):
+
 
             return []
 
 
 
-        return os.listdir(
-            BACKUP_FOLDER
+        backups = []
+
+
+
+        for item in os.listdir(
+            BACKUP_DIR
+        ):
+
+
+            path = os.path.join(
+
+                BACKUP_DIR,
+
+                item
+
+            )
+
+
+
+            if os.path.isdir(
+                path
+            ):
+
+
+                backups.append(
+                    item
+                )
+
+
+
+        backups.sort(
+            reverse=True
         )
+
+
+        return backups
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
         return []
+
+
+
+
+
+
+def restore_backup(
+    backup_name
+):
+
+    try:
+
+
+        backup_path = os.path.join(
+
+            BACKUP_DIR,
+
+            backup_name
+
+        )
+
+
+
+        if not os.path.exists(
+            backup_path
+        ):
+
+
+            return False
+
+
+
+
+        for file in BACKUP_FILES:
+
+
+
+            filename = os.path.basename(
+                file
+            )
+
+
+            source = os.path.join(
+
+                backup_path,
+
+                filename
+
+            )
+
+
+
+            if os.path.exists(
+                source
+            ):
+
+
+                shutil.copy2(
+
+                    source,
+
+                    file
+
+                )
+
+
+
+        logger.info(
+
+            f"BACKUP RESTORED {backup_name}"
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+def automatic_backup():
+
+    try:
+
+
+        enabled = get_setting(
+
+            "backup_enabled",
+
+            True
+
+        )
+
+
+
+        if not enabled:
+
+            return False
+
+
+
+        return create_backup()
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
