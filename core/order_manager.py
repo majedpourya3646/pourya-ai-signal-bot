@@ -9,9 +9,10 @@ from core.mt5_connector import (
 
 
 from config import (
-    DEFAULT_LOT,
-    PAPER_TRADING
+    DEFAULT_LOT
 )
+
+
 
 
 
@@ -21,13 +22,13 @@ def create_order(
 
     symbol,
 
-    side,
+    signal,
 
-    volume=None,
+    entry,
 
-    sl=0,
+    tp,
 
-    tp=0
+    sl
 
 ):
 
@@ -36,10 +37,27 @@ def create_order(
 
 
 
-        if volume is None:
+        side = signal.upper()
 
 
-            volume = DEFAULT_LOT
+
+        if side not in [
+
+            "BUY",
+
+            "SELL"
+
+        ]:
+
+
+            logger.error(
+
+                f"INVALID ORDER SIDE {side}"
+
+            )
+
+
+            return None
 
 
 
@@ -48,55 +66,9 @@ def create_order(
 
         logger.info(
 
-            f"CREATING MT5 ORDER {symbol} {side.upper()} LOT={volume}"
+            f"CREATING MT5 ORDER {symbol} {side}"
 
         )
-
-
-
-
-
-
-        if PAPER_TRADING:
-
-
-            logger.info(
-
-                f"PAPER ORDER {symbol} {side} {volume}"
-
-            )
-
-
-            return {
-
-
-                "status":
-
-                    "success",
-
-
-                "mode":
-
-                    "paper",
-
-
-                "symbol":
-
-                    symbol,
-
-
-                "side":
-
-                    side,
-
-
-                "volume":
-
-                    volume
-
-
-            }
-
 
 
 
@@ -109,7 +81,7 @@ def create_order(
 
             side,
 
-            volume,
+            DEFAULT_LOT,
 
             sl,
 
@@ -121,18 +93,23 @@ def create_order(
 
 
 
+
+
+
         if result is None:
 
 
 
             logger.error(
 
-                "MT5 ORDER FAILED"
+                "ORDER FAILED"
 
             )
 
 
+
             return None
+
 
 
 
@@ -150,7 +127,9 @@ def create_order(
             )
 
 
+
             return None
+
 
 
 
@@ -160,20 +139,23 @@ def create_order(
 
         logger.info(
 
-            f"MT5 ORDER SUCCESS {result}"
+            f"MT5 ORDER SUCCESS {symbol}"
 
         )
-
-
 
 
 
         return {
 
 
-            "status":
+            "success":
 
-                "success",
+                True,
+
+
+            "ticket":
+
+                result.order,
 
 
             "symbol":
@@ -186,14 +168,20 @@ def create_order(
                 side,
 
 
-            "volume":
+            "entry":
 
-                volume,
+                entry,
 
 
-            "ticket":
+            "tp":
 
-                result.order
+                tp,
+
+
+            "sl":
+
+                sl
+
 
 
         }
@@ -203,14 +191,82 @@ def create_order(
 
 
 
+
     except Exception as e:
+
 
 
         logger.error(
 
-            f"ORDER MANAGER ERROR {e}"
+            f"CREATE ORDER ERROR {e}"
 
         )
 
 
         return None
+
+
+
+
+
+
+
+def buy(
+
+    symbol,
+
+    entry,
+
+    tp,
+
+    sl
+
+):
+
+
+    return create_order(
+
+        symbol,
+
+        "BUY",
+
+        entry,
+
+        tp,
+
+        sl
+
+    )
+
+
+
+
+
+
+
+def sell(
+
+    symbol,
+
+    entry,
+
+    tp,
+
+    sl
+
+):
+
+
+    return create_order(
+
+        symbol,
+
+        "SELL",
+
+        entry,
+
+        tp,
+
+        sl
+
+    )
