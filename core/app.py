@@ -1,211 +1,233 @@
 # core/app.py
 
-import time
-
 from core.logger import logger
 
-from core.startup_manager import (
-    initialize_system,
-    shutdown_system
+
+from core.mt5_connector import (
+    initialize_mt5,
+    shutdown_mt5
 )
+
+
+from core.database import (
+    initialize_database
+)
+
 
 from core.scheduler import (
-    start_all_services,
-    stop_all_services
+    start_scheduler
+)
+
+
+from core.position_monitor import (
+    start_position_monitor
+)
+
+
+from core.health_monitor import (
+    start_health_monitor
+)
+
+
+from core.report_service import (
+    start_report_service
+)
+
+
+from core.telegram import (
+    send_message
 )
 
 
 
 
 
+def system_health():
 
-APP_RUNNING = False
+    status = {
+
+        "database": True,
+
+        "mt5": True,
+
+        "telegram": True
+
+    }
+
+
+    return status
 
 
 
 
 
-
-
-
-def start_app():
-
-    global APP_RUNNING
-
+def initialize_system():
 
     try:
 
 
         logger.info(
+            "SYSTEM INITIALIZATION STARTED"
+        )
 
-            "APPLICATION STARTING"
 
+
+        initialize_database()
+
+
+        logger.info(
+            "DATABASE INITIALIZED"
+        )
+
+
+
+        mt5_status = initialize_mt5()
+
+
+
+        if not mt5_status:
+
+
+            logger.error(
+                "MT5 CONNECTION FAILED"
+            )
+
+
+            return False
+
+
+
+
+        logger.info(
+            f"HEALTH STATUS {system_health()}"
+        )
+
+
+
+        send_message(
+            "🤖 Pourya Trader AI\n\nMT5 Connected ✅\nSystem Ready"
+        )
+
+
+
+        logger.info(
+            "SYSTEM READY"
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.error(
+            f"SYSTEM INIT ERROR {e}"
+        )
+
+
+        return False
+
+
+
+
+
+def start_services():
+
+
+    logger.info(
+        "TRADING LOOP STARTED"
+    )
+
+
+    start_scheduler()
+
+
+
+    logger.info(
+        "POSITION MONITOR STARTED"
+    )
+
+
+    start_position_monitor()
+
+
+
+    logger.info(
+        "HEALTH MONITOR STARTED"
+    )
+
+
+    start_health_monitor()
+
+
+
+    logger.info(
+        "REPORT SERVICE STARTED"
+    )
+
+
+    start_report_service()
+
+
+
+    logger.info(
+        "ALL SERVICES STARTED"
+    )
+
+
+
+
+
+def shutdown():
+
+    try:
+
+
+        shutdown_mt5()
+
+
+        logger.info(
+            "MT5 SHUTDOWN"
+        )
+
+
+    except Exception as e:
+
+
+        logger.error(
+            f"SHUTDOWN ERROR {e}"
         )
 
 
 
 
 
-        if not initialize_system():
+def run():
 
 
-            logger.error(
-
-                "SYSTEM INITIALIZATION FAILED"
-
-            )
+    logger.info(
+        "APPLICATION STARTING"
+    )
 
 
-            return False
+    if initialize_system():
 
 
-
-
-
-
-        if not start_all_services():
-
-
-            logger.error(
-
-                "SERVICE START FAILED"
-
-            )
-
-
-            return False
-
-
-
-
-
-        APP_RUNNING = True
-
+        start_services()
 
 
         logger.info(
-
             "POURYA TRADER AI RUNNING"
-
         )
 
 
 
-        return True
+    else:
 
 
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-
-def run_forever():
-
-    global APP_RUNNING
-
-
-    try:
-
-
-        if not APP_RUNNING:
-
-
-            if not start_app():
-
-                return
-
-
-
-
-
-        while APP_RUNNING:
-
-
-            time.sleep(
-
-                10
-
-            )
-
-
-
-    except KeyboardInterrupt:
-
-
-        stop_app()
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        stop_app()
-
-
-
-
-
-
-
-def stop_app():
-
-    global APP_RUNNING
-
-
-    try:
-
-
-        logger.info(
-
-            "APPLICATION STOPPING"
-
+        logger.error(
+            "SYSTEM START FAILED"
         )
-
-
-
-        stop_all_services()
-
-
-
-        shutdown_system()
-
-
-
-        APP_RUNNING = False
-
-
-
-        logger.info(
-
-            "APPLICATION STOPPED"
-
-        )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
