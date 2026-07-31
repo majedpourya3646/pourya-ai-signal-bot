@@ -2,11 +2,14 @@
 
 from core.logger import logger
 
-from core.coinex_trade import (
-    coinex_trade
+
+from core.mt5_connector import (
+    send_market_order
 )
 
+
 from config import (
+    DEFAULT_LOT,
     PAPER_TRADING
 )
 
@@ -14,20 +17,43 @@ from config import (
 
 
 
-
-
 def create_order(
+
     symbol,
+
     side,
-    quantity
+
+    volume=None,
+
+    sl=0,
+
+    tp=0
+
 ):
+
 
     try:
 
 
+
+        if volume is None:
+
+
+            volume = DEFAULT_LOT
+
+
+
+
+
+
         logger.info(
-            f"CREATING ORDER {symbol} {side}"
+
+            f"CREATING MT5 ORDER {symbol} {side.upper()} LOT={volume}"
+
         )
+
+
+
 
 
 
@@ -35,11 +61,14 @@ def create_order(
 
 
             logger.info(
-                f"PAPER ORDER | {symbol} | {side} | {quantity}"
+
+                f"PAPER ORDER {symbol} {side} {volume}"
+
             )
 
 
             return {
+
 
                 "status":
 
@@ -61,9 +90,10 @@ def create_order(
                     side,
 
 
-                "quantity":
+                "volume":
 
-                    quantity
+                    volume
+
 
             }
 
@@ -73,13 +103,17 @@ def create_order(
 
 
 
-        result = coinex_trade.create_order(
+        result = send_market_order(
 
             symbol,
 
             side,
 
-            quantity
+            volume,
+
+            sl,
+
+            tp
 
         )
 
@@ -87,11 +121,14 @@ def create_order(
 
 
 
-        if not result:
+        if result is None:
+
 
 
             logger.error(
-                "COINEX ORDER FAILED"
+
+                "MT5 ORDER FAILED"
+
             )
 
 
@@ -101,73 +138,29 @@ def create_order(
 
 
 
-        logger.info(
-            f"LIVE ORDER CREATED {result}"
-        )
 
-
-        return result
+        if result.retcode != 10009 and result.retcode != 10008:
 
 
 
+            logger.error(
 
+                f"MT5 ORDER REJECTED {result}"
 
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return None
-
-
-
-
-
-
-
-
-
-
-def close_order(
-    symbol,
-    side,
-    quantity
-):
-
-    try:
-
-
-        logger.info(
-            f"CLOSING ORDER {symbol}"
-        )
-
-
-
-
-
-        if PAPER_TRADING:
-
-
-            logger.info(
-                f"PAPER CLOSE | {symbol}"
             )
 
 
-            return True
+            return None
 
 
 
 
 
 
-        result = coinex_trade.close_position(
 
-            symbol,
+        logger.info(
 
-            side,
-
-            quantity
+            f"MT5 ORDER SUCCESS {result}"
 
         )
 
@@ -175,21 +168,36 @@ def close_order(
 
 
 
-        if result:
+        return {
 
 
-            logger.info(
-                f"POSITION CLOSED {symbol}"
-            )
+            "status":
+
+                "success",
 
 
-            return True
+            "symbol":
+
+                symbol,
 
 
+            "side":
+
+                side,
 
 
+            "volume":
 
-        return False
+                volume,
+
+
+            "ticket":
+
+                result.order
+
+
+        }
+
 
 
 
@@ -198,103 +206,11 @@ def close_order(
     except Exception as e:
 
 
-        logger.exception(e)
+        logger.error(
 
-
-        return False
-
-
-
-
-
-
-
-
-
-
-def validate_order(
-    symbol,
-    quantity
-):
-
-    try:
-
-
-        if not symbol:
-
-            return False
-
-
-
-
-
-        if float(quantity) <= 0:
-
-            return False
-
-
-
-
-
-        return True
-
-
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
-
-
-
-
-
-
-
-
-
-
-def get_order_status(
-    order_id
-):
-
-    try:
-
-
-        if PAPER_TRADING:
-
-
-            return {
-
-                "status":
-
-                    "filled"
-
-            }
-
-
-
-
-
-        return coinex_trade.get_order_status(
-
-            order_id
+            f"ORDER MANAGER ERROR {e}"
 
         )
-
-
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
 
 
         return None
