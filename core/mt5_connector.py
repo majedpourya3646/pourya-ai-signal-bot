@@ -1,6 +1,8 @@
 # core/mt5_connector.py
 
+
 import MetaTrader5 as mt5
+
 
 from core.logger import logger
 
@@ -21,6 +23,7 @@ from config import (
 
 
 
+
 def initialize_mt5():
 
 
@@ -34,12 +37,13 @@ def initialize_mt5():
 
             logger.error(
 
-                f"MT5 INITIALIZE FAILED {mt5.last_error()}"
+                "MT5 INITIALIZATION FAILED"
 
             )
 
 
             return False
+
 
 
 
@@ -62,18 +66,21 @@ def initialize_mt5():
 
 
 
+
         if not authorized:
 
 
 
             logger.error(
 
-                f"MT5 LOGIN FAILED {mt5.last_error()}"
+                "MT5 LOGIN FAILED"
 
             )
 
 
             return False
+
+
 
 
 
@@ -94,13 +101,14 @@ def initialize_mt5():
 
 
 
+
     except Exception as e:
 
 
 
         logger.error(
 
-            f"MT5 CONNECTION ERROR {e}"
+            f"MT5 CONNECT ERROR {e}"
 
         )
 
@@ -116,7 +124,8 @@ def initialize_mt5():
 
 
 
-def get_price(
+
+def get_symbol_info(
 
     symbol
 
@@ -127,7 +136,7 @@ def get_price(
 
 
 
-        tick = mt5.symbol_info_tick(
+        info = mt5.symbol_info(
 
             symbol
 
@@ -135,8 +144,15 @@ def get_price(
 
 
 
-        if not tick:
+        if info is None:
 
+
+
+            logger.error(
+
+                f"SYMBOL NOT FOUND {symbol}"
+
+            )
 
 
             return None
@@ -146,7 +162,25 @@ def get_price(
 
 
 
-        return tick.bid
+
+
+        if not info.visible:
+
+
+
+            mt5.symbol_select(
+
+                symbol,
+
+                True
+
+            )
+
+
+
+
+
+        return info
 
 
 
@@ -159,13 +193,12 @@ def get_price(
 
         logger.error(
 
-            f"GET PRICE ERROR {e}"
+            f"SYMBOL INFO ERROR {e}"
 
         )
 
 
         return None
-
 
 
 
@@ -195,7 +228,7 @@ def send_market_order(
 
 
 
-        symbol_info = mt5.symbol_info(
+        info = get_symbol_info(
 
             symbol
 
@@ -203,36 +236,10 @@ def send_market_order(
 
 
 
-
-        if symbol_info is None:
-
-
-
-            logger.error(
-
-                f"SYMBOL NOT FOUND {symbol}"
-
-            )
+        if info is None:
 
 
             return None
-
-
-
-
-
-
-        if not symbol_info.visible:
-
-
-
-            mt5.symbol_select(
-
-                symbol,
-
-                True
-
-            )
 
 
 
@@ -248,13 +255,33 @@ def send_market_order(
 
 
 
+        if tick is None:
+
+
+
+            logger.error(
+
+                "NO PRICE DATA"
+
+            )
+
+
+            return None
+
+
+
+
+
+
+
         if side == "BUY":
 
+
+            order_type = mt5.ORDER_TYPE_BUY
 
 
             price = tick.ask
 
-            order_type = mt5.ORDER_TYPE_BUY
 
 
 
@@ -264,9 +291,10 @@ def send_market_order(
 
 
 
-            price = tick.bid
-
             order_type = mt5.ORDER_TYPE_SELL
+
+
+            price = tick.bid
 
 
 
@@ -277,9 +305,11 @@ def send_market_order(
         request = {
 
 
+
             "action":
 
                 mt5.TRADE_ACTION_DEAL,
+
 
 
             "symbol":
@@ -287,9 +317,11 @@ def send_market_order(
                 symbol,
 
 
+
             "volume":
 
                 lot,
+
 
 
             "type":
@@ -297,9 +329,11 @@ def send_market_order(
                 order_type,
 
 
+
             "price":
 
                 price,
+
 
 
             "sl":
@@ -307,9 +341,11 @@ def send_market_order(
                 sl,
 
 
+
             "tp":
 
                 tp,
+
 
 
             "deviation":
@@ -317,9 +353,11 @@ def send_market_order(
                 20,
 
 
+
             "magic":
 
                 20260731,
+
 
 
             "comment":
@@ -327,9 +365,11 @@ def send_market_order(
                 "Pourya Trader AI",
 
 
+
             "type_time":
 
                 mt5.ORDER_TIME_GTC,
+
 
 
             "type_filling":
@@ -357,15 +397,85 @@ def send_market_order(
 
 
 
+
+
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+
+
+
+            logger.error(
+
+                f"MT5 ORDER ERROR {result}"
+
+            )
+
+
+            return None
+
+
+
+
+
+
+
         logger.info(
 
-            f"MT5 ORDER RESULT {result}"
+            f"MT5 ORDER OPENED {symbol} {side}"
 
         )
 
 
 
-        return result
+
+
+
+
+
+        return {
+
+
+
+            "ticket":
+
+                result.order,
+
+
+            "symbol":
+
+                symbol,
+
+
+            "side":
+
+                side,
+
+
+            "volume":
+
+                lot,
+
+
+            "price":
+
+                price,
+
+
+            "sl":
+
+                sl,
+
+
+            "tp":
+
+                tp,
+
+
+            "status":
+
+                "OPEN"
+
+
+        }
 
 
 
@@ -379,47 +489,9 @@ def send_market_order(
 
         logger.error(
 
-            f"SEND ORDER ERROR {e}"
+            f"MT5 ORDER SEND ERROR {e}"
 
         )
 
 
         return None
-
-
-
-
-
-
-
-
-
-
-def shutdown_mt5():
-
-
-    try:
-
-
-
-        mt5.shutdown()
-
-
-
-        logger.info(
-
-            "MT5 CLOSED"
-
-        )
-
-
-
-    except Exception as e:
-
-
-
-        logger.error(
-
-            f"MT5 SHUTDOWN ERROR {e}"
-
-        )
