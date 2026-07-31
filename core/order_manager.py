@@ -2,15 +2,15 @@
 
 from core.logger import logger
 
-
 from core.mt5_connector import (
     send_market_order
 )
 
-
 from config import (
-    DEFAULT_LOT
+    DEFAULT_LOT,
+    PAPER_TRADING
 )
+
 
 
 
@@ -41,6 +41,9 @@ def create_order(
 
 
 
+
+
+
         if side not in [
 
             "BUY",
@@ -48,6 +51,7 @@ def create_order(
             "SELL"
 
         ]:
+
 
 
             logger.error(
@@ -64,11 +68,73 @@ def create_order(
 
 
 
+
         logger.info(
 
             f"CREATING MT5 ORDER {symbol} {side}"
 
         )
+
+
+
+
+
+
+
+        if PAPER_TRADING:
+
+
+
+            logger.info(
+
+                f"PAPER ORDER {symbol} {side} LOT={DEFAULT_LOT}"
+
+            )
+
+
+
+            return {
+
+
+                "status":
+
+                    "PAPER",
+
+
+                "symbol":
+
+                    symbol,
+
+
+                "side":
+
+                    side,
+
+
+                "lot":
+
+                    DEFAULT_LOT,
+
+
+                "entry":
+
+                    entry,
+
+
+                "tp":
+
+                    tp,
+
+
+                "sl":
+
+                    sl
+
+
+            }
+
+
+
 
 
 
@@ -94,42 +160,18 @@ def create_order(
 
 
 
-
-
         if result is None:
 
 
 
             logger.error(
 
-                "ORDER FAILED"
+                "MT5 ORDER FAILED"
 
             )
 
 
-
             return None
-
-
-
-
-
-
-
-        if result.retcode != 10009 and result.retcode != 10008:
-
-
-
-            logger.error(
-
-                f"MT5 ORDER REJECTED {result}"
-
-            )
-
-
-
-            return None
-
 
 
 
@@ -139,52 +181,14 @@ def create_order(
 
         logger.info(
 
-            f"MT5 ORDER SUCCESS {symbol}"
+            "MT5 ORDER SUCCESS"
 
         )
 
 
 
-        return {
 
-
-            "success":
-
-                True,
-
-
-            "ticket":
-
-                result.order,
-
-
-            "symbol":
-
-                symbol,
-
-
-            "side":
-
-                side,
-
-
-            "entry":
-
-                entry,
-
-
-            "tp":
-
-                tp,
-
-
-            "sl":
-
-                sl
-
-
-
-        }
+        return result
 
 
 
@@ -198,75 +202,9 @@ def create_order(
 
         logger.error(
 
-            f"CREATE ORDER ERROR {e}"
+            f"ORDER MANAGER ERROR {e}"
 
         )
 
 
         return None
-
-
-
-
-
-
-
-def buy(
-
-    symbol,
-
-    entry,
-
-    tp,
-
-    sl
-
-):
-
-
-    return create_order(
-
-        symbol,
-
-        "BUY",
-
-        entry,
-
-        tp,
-
-        sl
-
-    )
-
-
-
-
-
-
-
-def sell(
-
-    symbol,
-
-    entry,
-
-    tp,
-
-    sl
-
-):
-
-
-    return create_order(
-
-        symbol,
-
-        "SELL",
-
-        entry,
-
-        tp,
-
-        sl
-
-    )
