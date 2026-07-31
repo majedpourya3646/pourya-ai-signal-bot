@@ -1,11 +1,13 @@
 # core/risk_engine.py
 
-from datetime import datetime
-
 from core.logger import logger
 
 from core.trade_manager import (
     get_open_trades
+)
+
+from core.report_manager import (
+    today_profit
 )
 
 from config import (
@@ -17,54 +19,17 @@ from config import (
 
 
 
-def get_daily_loss_percent():
+
+
+def count_open_trades():
 
     try:
 
-        trades = get_open_trades()
+        return len(
 
-        if not trades:
-            return 0
+            get_open_trades()
 
-
-        total_loss = 0
-        total_balance = 0
-
-
-        for trade in trades:
-
-            pnl = float(
-                trade.get(
-                    "pnl",
-                    0
-                )
-            )
-
-
-            if pnl < 0:
-
-                total_loss += abs(pnl)
-
-
-            total_balance += abs(
-                float(
-                    trade.get(
-                        "balance",
-                        100
-                    )
-                )
-            )
-
-
-        if total_balance <= 0:
-
-            return 0
-
-
-        return (
-            total_loss /
-            total_balance
-        ) * 100
+        )
 
 
     except Exception as e:
@@ -75,86 +40,211 @@ def get_daily_loss_percent():
 
 
 
-def calculate_trade_quality(
-    opportunity
+
+
+
+
+def check_max_open_trades():
+
+    try:
+
+
+        current = count_open_trades()
+
+
+
+        if current >= MAX_OPEN_TRADES:
+
+            return False
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def check_confidence(
+    confidence
 ):
 
     try:
 
-        score = 0
+
+        return float(
+
+            confidence
+
+        ) >= MIN_CONFIDENCE
 
 
-        confidence = float(
-            opportunity.get(
-                "confidence",
-                0
-            )
+
+    except Exception:
+
+
+        return False
+
+
+
+
+
+
+
+def calculate_risk_reward(
+    entry,
+    tp,
+    sl
+):
+
+    try:
+
+
+        reward = abs(
+
+            float(tp)
+
+            -
+
+            float(entry)
+
         )
 
 
-        if confidence >= 90:
 
-            score += 40
+        risk = abs(
 
-        elif confidence >= 75:
+            float(entry)
 
-            score += 30
+            -
 
-        elif confidence >= 65:
+            float(sl)
 
-            score += 20
-
-
-
-        rr = float(
-            opportunity.get(
-                "risk_reward",
-                0
-            )
         )
 
 
-        if rr >= 3:
 
-            score += 30
+        if risk == 0:
 
-        elif rr >= 2:
-
-            score += 20
+            return 0
 
 
 
-        volume = opportunity.get(
-            "volume_confirm",
-            False
-        )
-
-
-        if volume:
-
-            score += 15
+        return reward / risk
 
 
 
-        trend = opportunity.get(
-            "trend_confirm",
-            False
-        )
+    except Exception as e:
 
 
-        if trend:
+        logger.exception(e)
 
-            score += 15
-
-
-
-        return score
-
-
-
-    except:
 
         return 0
+
+
+
+
+
+
+
+def check_risk_reward(
+    entry,
+    tp,
+    sl
+):
+
+    try:
+
+
+        rr = calculate_risk_reward(
+
+            entry,
+
+            tp,
+
+            sl
+
+        )
+
+
+
+        return rr >= MIN_RISK_REWARD
+
+
+
+    except Exception:
+
+
+        return False
+
+
+
+
+
+
+
+def check_daily_loss():
+
+    try:
+
+
+        profit = float(
+
+            today_profit()
+
+        )
+
+
+
+        if profit >= 0:
+
+            return True
+
+
+
+
+
+        loss_percent = abs(
+
+            profit
+
+        )
+
+
+
+        if loss_percent >= MAX_DAILY_LOSS_PERCENT:
+
+            return False
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
 
 
 
@@ -168,185 +258,139 @@ def validate_trade(
 
         if not opportunity:
 
-            return False, "EMPTY OPPORTUNITY"
+            return False
 
 
 
-        symbol = opportunity.get(
-            "symbol"
-        )
 
 
-        signal = opportunity.get(
-            "signal"
-        )
+        if not check_max_open_trades():
+
+            logger.warning(
+
+                "MAX OPEN TRADES REACHED"
+
+            )
+
+            return False
 
 
-        confidence = float(
+
+
+
+        if not check_confidence(
+
             opportunity.get(
+
                 "confidence",
+
                 0
+
             )
-        )
+
+        ):
+
+            logger.warning(
+
+                "LOW CONFIDENCE"
+
+            )
+
+            return False
 
 
-        entry = float(
+
+
+
+        if not check_risk_reward(
+
             opportunity.get(
-                "entry",
-                opportunity.get(
-                    "price",
-                    0
-                )
-            )
-        )
 
+                "entry"
 
-        tp = opportunity.get(
-            "tp",
+            ),
+
             opportunity.get(
-                "take_profit"
-            )
-        )
 
+                "tp"
 
-        sl = opportunity.get(
-            "sl",
+            ),
+
             opportunity.get(
-                "stop_loss"
+
+                "sl"
+
             )
-        )
 
+        ):
 
+            logger.warning(
 
-        if not symbol:
+                "BAD RISK REWARD"
 
-            return False, "MISSING SYMBOL"
+            )
 
+            return False
 
 
-        if signal not in [
 
-            "BUY",
-            "SELL",
-            "STRONG BUY",
-            "STRONG SELL",
-            "EARLY BUY",
-            "EARLY SELL"
 
-        ]:
 
-            return False, "INVALID SIGNAL"
+        if not check_daily_loss():
 
+            logger.warning(
 
+                "DAILY LOSS LIMIT"
 
-        if confidence < MIN_CONFIDENCE:
+            )
 
-            return False, "LOW CONFIDENCE"
+            return False
 
 
 
-        daily_loss = get_daily_loss_percent()
 
 
-        if daily_loss >= MAX_DAILY_LOSS_PERCENT:
+        return True
 
-            return False, "DAILY LOSS LIMIT"
 
 
+    except Exception as e:
 
-        open_trades = get_open_trades()
 
+        logger.exception(e)
 
-        if len(open_trades) >= MAX_OPEN_TRADES:
 
-            return False, "MAX OPEN TRADES"
+        return False
 
 
 
-        for trade in open_trades:
 
 
-            if trade.get(
-                "symbol"
-            ) == symbol:
 
-                return False, "DUPLICATE POSITION"
 
+def risk_summary():
 
+    try:
 
-        if entry <= 0:
 
-            return False, "INVALID ENTRY"
+        return {
 
 
+            "open_trades":
 
-        if not tp or not sl:
+                count_open_trades(),
 
-            return False, "MISSING TP SL"
 
 
+            "max_allowed":
 
-        tp = float(tp)
-        sl = float(sl)
+                MAX_OPEN_TRADES,
 
 
 
-        risk = abs(
-            entry-sl
-        )
+            "daily_profit":
 
-
-        reward = abs(
-            tp-entry
-        )
-
-
-
-        if risk <= 0:
-
-            return False, "INVALID RISK"
-
-
-
-        rr = reward / risk
-
-
-
-        if rr < MIN_RISK_REWARD:
-
-            return False, "LOW RISK REWARD"
-
-
-
-        quality = calculate_trade_quality(
-            opportunity
-        )
-
-
-        if quality < 60:
-
-            return False, "LOW TRADE QUALITY"
-
-
-
-        logger.info(
-            f"""
-            TRADE APPROVED
-            SYMBOL={symbol}
-            RR={rr:.2f}
-            QUALITY={quality}
-            """
-        )
-
-
-
-        return True, {
-
-            "status": "APPROVED",
-
-            "quality": quality,
-
-            "risk_reward": rr
+                today_profit()
 
         }
 
@@ -358,4 +402,4 @@ def validate_trade(
         logger.exception(e)
 
 
-        return False, str(e)
+        return {}
