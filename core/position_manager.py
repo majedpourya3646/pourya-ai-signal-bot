@@ -1,31 +1,14 @@
 # core/position_manager.py
 
+import MetaTrader5 as mt5
+
+
 from core.logger import logger
 
+
 from core.trade_manager import (
-    get_open_trades,
-    close_trade
+    update_trade_status
 )
-
-from core.market import (
-    get_current_price
-)
-
-from core.coinex_trade import (
-    coinex_trade
-)
-
-
-
-
-
-
-TRAILING_STOP_ENABLED = True
-
-TRAILING_PERCENT = 1.5
-
-
-
 
 
 
@@ -33,14 +16,23 @@ TRAILING_PERCENT = 1.5
 
 def monitor_positions():
 
+
     try:
 
 
-        trades = get_open_trades()
+
+        positions = mt5.positions_get()
 
 
 
-        if not trades:
+        if positions is None:
+
+
+            logger.info(
+
+                "NO OPEN POSITIONS"
+
+            )
 
 
             return []
@@ -49,81 +41,70 @@ def monitor_positions():
 
 
 
-        closed = []
+
+
+        active = []
 
 
 
-
-
-        for trade in trades:
-
-
-
-            symbol = trade.get(
-
-                "symbol"
-
-            )
+        for position in positions:
 
 
 
-            side = trade.get(
-
-                "side"
-
-            )
+            data = {
 
 
+                "ticket":
 
-            tp = float(
-
-                trade.get(
-
-                    "tp"
-
-                )
-
-            )
+                    position.ticket,
 
 
+                "symbol":
 
-            sl = float(
-
-                trade.get(
-
-                    "sl"
-
-                )
-
-            )
+                    position.symbol,
 
 
+                "type":
 
-            quantity = float(
+                    position.type,
 
-                trade.get(
 
-                    "quantity"
+                "volume":
 
-                )
+                    position.volume,
 
-            )
+
+                "price_open":
+
+                    position.price_open,
+
+
+                "price_current":
+
+                    position.price_current,
+
+
+                "profit":
+
+                    position.profit
 
 
 
-            trade_id = trade.get(
+            }
 
-                "id"
+
+
+            active.append(
+
+                data
 
             )
 
 
 
+            logger.info(
 
-
-            price = get_current_price(
-
-                symbol
+                f"POSITION {data}"
 
             )
 
@@ -131,10 +112,11 @@ def monitor_positions():
 
 
 
-            if not price:
+            check_position_result(
 
+                data
 
-                continue
+            )
 
 
 
@@ -142,102 +124,20 @@ def monitor_positions():
 
 
 
-            should_close = False
+        return active
 
-            reason = ""
 
-
-
-
-
-
-            if side == "BUY":
-
-
-                if price >= tp:
-
-
-                    should_close = True
-
-                    reason = "TAKE PROFIT"
-
-
-
-
-                elif price <= sl:
-
-
-                    should_close = True
-
-                    reason = "STOP LOSS"
-
-
-
-
-
-
-            elif side == "SELL":
-
-
-                if price <= tp:
-
-
-                    should_close = True
-
-                    reason = "TAKE PROFIT"
-
-
-
-
-                elif price >= sl:
-
-
-                    should_close = True
-
-                    reason = "STOP LOSS"
-
-
-
-
-
-
-
-
-            if should_close:
-
-
-
-                execute_close(
-
-                    trade,
-
-                    price,
-
-                    reason
-
-                )
-
-
-
-                closed.append(
-
-                    trade
-
-                )
-
-
-
-
-
-
-        return closed
 
 
 
     except Exception as e:
 
 
-        logger.exception(e)
+        logger.error(
+
+            f"POSITION MONITOR ERROR {e}"
+
+        )
 
 
         return []
@@ -250,39 +150,26 @@ def monitor_positions():
 
 
 
-def execute_close(
-    trade,
-    price,
-    reason
-):
+def check_position_result(position):
+
 
     try:
 
 
-        symbol = trade.get(
 
-            "symbol"
+        ticket = position.get(
 
-        )
-
-
-        side = trade.get(
-
-            "side"
+            "ticket"
 
         )
 
 
-        quantity = trade.get(
 
-            "quantity"
+        profit = position.get(
 
-        )
+            "profit",
 
-
-        trade_id = trade.get(
-
-            "id"
+            0
 
         )
 
@@ -291,172 +178,221 @@ def execute_close(
 
 
 
-        result = coinex_trade.close_position(
-
-            symbol,
-
-            side,
-
-            quantity
-
-        )
+        if profit > 0:
 
 
 
+            update_trade_status(
 
+                ticket,
 
-
-
-        if result:
-
-
-
-            pnl = calculate_pnl(
-
-                trade,
-
-                price
+                "PROFIT"
 
             )
 
 
 
-            close_trade(
 
-                trade_id,
 
-                price,
-
-                pnl
-
-            )
+        elif profit < 0:
 
 
 
-            logger.info(
+            update_trade_status(
 
-                f"CLOSED {symbol} {reason}"
+                ticket,
+
+                "LOSS"
 
             )
 
 
-
-            return True
-
-
-
-
-
-
-        return False
 
 
 
     except Exception as e:
 
 
-        logger.exception(e)
+        logger.error(
 
+            f"CHECK POSITION ERROR {e}"
 
-        return False
-
-
-
-
+        )
 
 
 
-def calculate_pnl(
-    trade,
-    exit_price
-):
+
+
+
+
+
+
+def close_position(ticket):
+
 
     try:
 
 
-        entry = float(
 
-            trade.get(
+        position = mt5.positions_get(
 
-                "entry"
-
-            )
-
-        )
-
-
-        quantity = float(
-
-            trade.get(
-
-                "quantity"
-
-            )
-
-        )
-
-
-        side = trade.get(
-
-            "side"
+            ticket=ticket
 
         )
 
 
 
+        if not position:
 
 
-        if side == "BUY":
+            return False
 
 
-            pnl = (
 
-                exit_price
 
-                -
 
-                entry
 
-            ) * quantity
+        position = position[0]
+
+
+
+
+
+
+        if position.type == mt5.ORDER_TYPE_BUY:
+
+
+            order_type = mt5.ORDER_TYPE_SELL
+
+
+            price = mt5.symbol_info_tick(
+
+                position.symbol
+
+            ).bid
+
+
 
 
 
         else:
 
 
-            pnl = (
+            order_type = mt5.ORDER_TYPE_BUY
 
-                entry
 
-                -
+            price = mt5.symbol_info_tick(
 
-                exit_price
+                position.symbol
 
-            ) * quantity
-
+            ).ask
 
 
 
 
 
-        return round(
 
-            pnl,
 
-            4
+
+        request = {
+
+
+            "action":
+
+                mt5.TRADE_ACTION_DEAL,
+
+
+            "position":
+
+                ticket,
+
+
+            "symbol":
+
+                position.symbol,
+
+
+            "volume":
+
+                position.volume,
+
+
+            "type":
+
+                order_type,
+
+
+            "price":
+
+                price,
+
+
+            "deviation":
+
+                20,
+
+
+            "magic":
+
+                20260731,
+
+
+            "comment":
+
+                "Close Pourya Trader AI",
+
+
+            "type_time":
+
+                mt5.ORDER_TIME_GTC,
+
+
+            "type_filling":
+
+                mt5.ORDER_FILLING_IOC
+
+
+        }
+
+
+
+
+
+
+
+        result = mt5.order_send(
+
+            request
 
         )
+
+
+
+
+
+        logger.info(
+
+            f"CLOSE POSITION RESULT {result}"
+
+        )
+
+
+
+
+        return result
+
+
 
 
 
     except Exception as e:
 
 
-        logger.exception(e)
+        logger.error(
+
+            f"CLOSE POSITION ERROR {e}"
+
+        )
 
 
-        return 0
-
-def check_tp_sl():
-
-    return monitor_positions()
+        return False
