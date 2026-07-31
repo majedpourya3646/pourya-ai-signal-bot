@@ -1,7 +1,6 @@
 # core/database_manager.py
 
 import sqlite3
-import os
 
 from datetime import datetime
 
@@ -10,49 +9,10 @@ from core.logger import logger
 
 
 
-DATABASE_DIR = "data"
 
-DATABASE_FILE = os.path.join(
-
-    DATABASE_DIR,
-
-    "pourya_trader.db"
-
-)
+DB_PATH = "data/pourya_trader.db"
 
 
-
-
-
-
-
-def create_database_directory():
-
-    try:
-
-
-        if not os.path.exists(
-            DATABASE_DIR
-        ):
-
-
-            os.makedirs(
-                DATABASE_DIR
-            )
-
-
-
-        return True
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        return False
 
 
 
@@ -64,21 +24,11 @@ def get_connection():
     try:
 
 
-        create_database_directory()
+        return sqlite3.connect(
 
-
-
-        conn = sqlite3.connect(
-
-            DATABASE_FILE,
-
-            check_same_thread=False
+            DB_PATH
 
         )
-
-
-        return conn
-
 
 
     except Exception as e:
@@ -94,7 +44,9 @@ def get_connection():
 
 
 
-def create_tables():
+
+
+def initialize_database():
 
     try:
 
@@ -105,6 +57,7 @@ def create_tables():
 
         if not conn:
 
+
             return False
 
 
@@ -113,133 +66,112 @@ def create_tables():
 
 
 
-        cursor.execute(
 
-            """
 
-            CREATE TABLE IF NOT EXISTS users (
+        tables = [
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+        """
 
-                telegram_id TEXT UNIQUE,
+        CREATE TABLE IF NOT EXISTS logs
 
-                username TEXT,
+        (
 
-                active INTEGER DEFAULT 1,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-                trading_mode TEXT DEFAULT 'AUTO',
+            event TEXT,
 
-                notification_level TEXT DEFAULT 'BASIC',
+            details TEXT,
 
-                user_profit_percent REAL DEFAULT 50,
-
-                created_at TEXT
-
-            )
-
-            """
+            created_at TEXT
 
         )
 
+        """,
 
 
 
+        """
 
-        cursor.execute(
+        CREATE TABLE IF NOT EXISTS trades
 
-            """
+        (
 
-            CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id TEXT,
 
-                telegram_id TEXT,
+            symbol TEXT,
 
-                symbol TEXT,
+            side TEXT,
 
-                side TEXT,
+            entry REAL,
 
-                entry REAL,
+            exit REAL,
 
-                exit REAL,
+            quantity REAL,
 
-                quantity REAL,
+            tp REAL,
 
-                leverage REAL,
+            sl REAL,
 
-                pnl REAL DEFAULT 0,
+            pnl REAL,
 
-                status TEXT,
+            status TEXT,
 
-                created_at TEXT,
+            created_at TEXT,
 
-                closed_at TEXT
-
-            )
-
-            """
+            closed_at TEXT
 
         )
 
+        """,
 
 
 
+        """
 
-        cursor.execute(
+        CREATE TABLE IF NOT EXISTS settings
 
-            """
+        (
 
-            CREATE TABLE IF NOT EXISTS payments (
+            key TEXT PRIMARY KEY,
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                telegram_id TEXT,
-
-                amount REAL,
-
-                plan TEXT,
-
-                status TEXT,
-
-                created_at TEXT
-
-            )
-
-            """
+            value TEXT
 
         )
 
+        """,
+
+
+
+        ]
 
 
 
 
-        cursor.execute(
 
-            """
+        for table in tables:
 
-            CREATE TABLE IF NOT EXISTS system_logs (
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cursor.execute(
 
-                event TEXT,
-
-                details TEXT,
-
-                created_at TEXT
+                table
 
             )
-
-            """
-
-        )
-
-
 
 
 
         conn.commit()
 
         conn.close()
+
+
+
+        logger.info(
+
+            "DATABASE INITIALIZED"
+
+        )
 
 
 
@@ -261,9 +193,10 @@ def create_tables():
 
 
 
+
 def insert_log(
     event,
-    details=None
+    details
 ):
 
     try:
@@ -281,7 +214,7 @@ def insert_log(
 
             """
 
-            INSERT INTO system_logs
+            INSERT INTO logs
 
             (
 
@@ -303,7 +236,8 @@ def insert_log(
 
                 str(details),
 
-                datetime.utcnow().isoformat()
+                datetime.utcnow()
+                .isoformat()
 
             )
 
@@ -334,7 +268,9 @@ def insert_log(
 
 
 
-def database_status():
+
+
+def get_logs():
 
     try:
 
@@ -343,11 +279,100 @@ def database_status():
 
 
 
-        if not conn:
-
-            return False
+        cursor = conn.cursor()
 
 
+
+        cursor.execute(
+
+            """
+
+            SELECT *
+
+            FROM logs
+
+            ORDER BY id DESC
+
+            """
+
+        )
+
+
+
+        rows = cursor.fetchall()
+
+
+
+        conn.close()
+
+
+
+        return rows
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return []
+
+
+
+
+
+
+
+
+def save_setting(
+    key,
+    value
+):
+
+    try:
+
+
+        conn = get_connection()
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            INSERT OR REPLACE INTO settings
+
+            (
+
+                key,
+
+                value
+
+            )
+
+            VALUES (?,?)
+
+            """,
+
+            (
+
+                key,
+
+                str(value)
+
+            )
+
+        )
+
+
+
+        conn.commit()
 
         conn.close()
 
@@ -357,7 +382,10 @@ def database_status():
 
 
 
-    except:
+    except Exception as e:
+
+
+        logger.exception(e)
 
 
         return False
@@ -367,12 +395,101 @@ def database_status():
 
 
 
-def initialize_database():
+
+
+def get_setting(
+    key,
+    default=None
+):
 
     try:
 
 
-        return create_tables()
+        conn = get_connection()
+
+
+
+        cursor = conn.cursor()
+
+
+
+        cursor.execute(
+
+            """
+
+            SELECT value
+
+            FROM settings
+
+            WHERE key=?
+
+            """,
+
+            (
+
+                key,
+
+            )
+
+        )
+
+
+
+        result = cursor.fetchone()
+
+
+
+        conn.close()
+
+
+
+        if result:
+
+
+            return result[0]
+
+
+
+        return default
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return default
+
+
+
+
+
+
+
+
+def database_status():
+
+    try:
+
+
+        conn = get_connection()
+
+
+
+        if conn:
+
+
+            conn.close()
+
+
+
+            return True
+
+
+
+        return False
 
 
 
