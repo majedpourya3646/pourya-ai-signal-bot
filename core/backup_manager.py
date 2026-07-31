@@ -7,45 +7,47 @@ from datetime import datetime
 
 from core.logger import logger
 
-from core.config_manager import (
-    get_setting
+
+
+
+
+SOURCE_DATABASE = (
+
+    "data/pourya_trader.db"
+
 )
 
 
 
-BACKUP_DIR = "backup"
+BACKUP_FOLDER = (
 
+    "data/backups"
 
-
-
-
-BACKUP_FILES = [
-
-    "data/trades.db",
-
-    "data/users.db",
-
-    "data/settings.json"
-
-]
+)
 
 
 
 
 
 
-def create_backup_directory():
+
+
+def create_backup_folder():
 
     try:
 
 
         if not os.path.exists(
-            BACKUP_DIR
+
+            BACKUP_FOLDER
+
         ):
 
 
             os.makedirs(
-                BACKUP_DIR
+
+                BACKUP_FOLDER
+
             )
 
 
@@ -67,19 +69,40 @@ def create_backup_directory():
 
 
 
-def create_backup():
+
+
+def create_database_backup():
 
     try:
 
 
-        if not create_backup_directory():
+        create_backup_folder()
+
+
+
+        if not os.path.exists(
+
+            SOURCE_DATABASE
+
+        ):
+
+
+            logger.warning(
+
+                "DATABASE NOT FOUND"
+
+            )
 
 
             return False
 
 
 
-        timestamp = (
+        filename = (
+
+            "backup_"
+
+            +
 
             datetime.utcnow()
 
@@ -89,74 +112,43 @@ def create_backup():
 
             )
 
-        )
+            +
 
-
-
-        backup_path = os.path.join(
-
-            BACKUP_DIR,
-
-            f"backup_{timestamp}"
+            ".db"
 
         )
 
 
 
-        os.makedirs(
-            backup_path
+        destination = os.path.join(
+
+            BACKUP_FOLDER,
+
+            filename
+
         )
 
 
 
-        copied = []
+        shutil.copy2(
 
+            SOURCE_DATABASE,
 
+            destination
 
-        for file in BACKUP_FILES:
-
-
-
-            if os.path.exists(
-                file
-            ):
-
-
-                destination = os.path.join(
-
-                    backup_path,
-
-                    os.path.basename(
-                        file
-                    )
-
-                )
-
-
-                shutil.copy2(
-
-                    file,
-
-                    destination
-
-                )
-
-
-                copied.append(
-                    file
-                )
+        )
 
 
 
         logger.info(
 
-            f"BACKUP CREATED {copied}"
+            f"DATABASE BACKUP CREATED {destination}"
 
         )
 
 
 
-        return True
+        return destination
 
 
 
@@ -167,6 +159,8 @@ def create_backup():
 
 
         return False
+
+
 
 
 
@@ -178,12 +172,15 @@ def list_backups():
     try:
 
 
-        if not os.path.exists(
-            BACKUP_DIR
-        ):
+        create_backup_folder()
 
 
-            return []
+
+        files = os.listdir(
+
+            BACKUP_FOLDER
+
+        )
 
 
 
@@ -191,35 +188,30 @@ def list_backups():
 
 
 
-        for item in os.listdir(
-            BACKUP_DIR
-        ):
+        for file in files:
 
 
-            path = os.path.join(
+            if file.endswith(
 
-                BACKUP_DIR,
+                ".db"
 
-                item
-
-            )
-
-
-
-            if os.path.isdir(
-                path
             ):
 
 
                 backups.append(
-                    item
+
+                    file
+
                 )
 
 
 
         backups.sort(
+
             reverse=True
+
         )
+
 
 
         return backups
@@ -239,25 +231,29 @@ def list_backups():
 
 
 
+
+
 def restore_backup(
-    backup_name
+    filename
 ):
 
     try:
 
 
-        backup_path = os.path.join(
+        path = os.path.join(
 
-            BACKUP_DIR,
+            BACKUP_FOLDER,
 
-            backup_name
+            filename
 
         )
 
 
 
         if not os.path.exists(
-            backup_path
+
+            path
+
         ):
 
 
@@ -265,44 +261,19 @@ def restore_backup(
 
 
 
+        shutil.copy2(
 
-        for file in BACKUP_FILES:
+            path,
 
+            SOURCE_DATABASE
 
-
-            filename = os.path.basename(
-                file
-            )
-
-
-            source = os.path.join(
-
-                backup_path,
-
-                filename
-
-            )
+        )
 
 
 
-            if os.path.exists(
-                source
-            ):
+        logger.warning(
 
-
-                shutil.copy2(
-
-                    source,
-
-                    file
-
-                )
-
-
-
-        logger.info(
-
-            f"BACKUP RESTORED {backup_name}"
+            f"DATABASE RESTORED {filename}"
 
         )
 
@@ -325,28 +296,52 @@ def restore_backup(
 
 
 
-def automatic_backup():
+
+
+def cleanup_old_backups(
+    keep=20
+):
 
     try:
 
 
-        enabled = get_setting(
-
-            "backup_enabled",
-
-            True
-
-        )
+        backups = list_backups()
 
 
 
-        if not enabled:
-
-            return False
+        if len(backups) <= keep:
 
 
+            return True
 
-        return create_backup()
+
+
+        remove_files = backups[
+
+            keep:
+
+        ]
+
+
+
+        for file in remove_files:
+
+
+            os.remove(
+
+                os.path.join(
+
+                    BACKUP_FOLDER,
+
+                    file
+
+                )
+
+            )
+
+
+
+        return True
 
 
 
@@ -357,3 +352,57 @@ def automatic_backup():
 
 
         return False
+
+
+
+
+
+
+
+
+def backup_status():
+
+    try:
+
+
+        return {
+
+
+            "enabled":
+
+                True,
+
+
+            "count":
+
+                len(
+
+                    list_backups()
+
+                ),
+
+
+            "last":
+
+                (
+
+                    list_backups()[0]
+
+                    if list_backups()
+
+                    else None
+
+                )
+
+
+        }
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return {}
