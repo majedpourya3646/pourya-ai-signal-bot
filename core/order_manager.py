@@ -1,101 +1,111 @@
 # core/order_manager.py
 
-from datetime import datetime
+from core.logger import logger
 
 from coinex_trade import coinex_trade
 
-from core.config_manager import (
-    get_setting
-)
-
-from core.logger import logger
-
 from config import (
-    LEVERAGE
+    RISK_PER_TRADE,
+    INITIAL_BALANCE,
+    PAPER_TRADING,
+    ORDER_TYPE
 )
+
+
+
 
 
 def calculate_quantity(
     balance,
-    price,
-    stop_loss=None
+    entry,
+    stop_loss
 ):
 
     try:
 
-        risk_percent = float(
-            get_setting(
-                "risk_percent",
-                1
-            )
-        )
 
-        balance = float(balance)
-        price = float(price)
+        if not balance or not entry or not stop_loss:
 
-        if balance <= 0 or price <= 0:
             return 0
+
+
+
 
 
         risk_amount = (
-            balance *
-            risk_percent /
+
+            float(balance)
+
+            *
+
+            float(RISK_PER_TRADE)
+
+            /
+
             100
+
         )
 
 
-        if stop_loss:
-
-            stop_loss = float(stop_loss)
-
-            risk_distance = abs(
-                price -
-                stop_loss
-            )
 
 
-            if risk_distance > 0:
 
-                quantity = (
-                    risk_amount /
-                    risk_distance
-                )
+        distance = abs(
 
-            else:
+            float(entry)
 
-                quantity = (
-                    risk_amount /
-                    price
-                )
+            -
+
+            float(stop_loss)
+
+        )
 
 
-        else:
-
-            quantity = (
-                risk_amount /
-                price
-            )
 
 
-        if quantity <= 0:
+
+        if distance <= 0:
+
             return 0
 
 
+
+
+
+        quantity = risk_amount / distance
+
+
+
+
+
         return round(
+
             quantity,
+
             6
+
         )
+
 
 
     except Exception as e:
 
+
         logger.exception(e)
+
 
         return 0
 
 
 
-def validate_order(
+
+
+
+
+
+
+
+def validate_order_params(
     symbol,
     side,
     quantity
@@ -103,32 +113,26 @@ def validate_order(
 
     try:
 
+
         if not symbol:
 
             return False
 
 
-        side = side.upper()
-
 
         if side not in [
-            "BUY",
-            "SELL"
-        ]:
 
-            logger.error(
-                f"INVALID SIDE {side}"
-            )
+            "BUY",
+
+            "SELL"
+
+        ]:
 
             return False
 
 
 
         if float(quantity) <= 0:
-
-            logger.error(
-                f"INVALID QUANTITY {quantity}"
-            )
 
             return False
 
@@ -137,11 +141,18 @@ def validate_order(
         return True
 
 
-    except Exception as e:
 
-        logger.exception(e)
+    except Exception:
+
 
         return False
+
+
+
+
+
+
+
 
 
 
@@ -149,98 +160,94 @@ def create_order(
     symbol,
     side,
     quantity,
-    leverage=LEVERAGE,
-    stop_loss=None,
-    take_profit=None
+    leverage=1
 ):
 
     try:
 
 
-        if not validate_order(
+        if not validate_order_params(
+
             symbol,
+
             side,
+
             quantity
+
         ):
+
+            logger.error(
+
+                "INVALID ORDER PARAMS"
+
+            )
 
             return None
 
 
 
-        side = side.upper()
 
 
+        logger.info(
 
-        paper = get_setting(
-            "paper_trading",
-            True
+            f"CREATING ORDER {symbol} {side}"
+
         )
 
 
-        order_time = datetime.utcnow().isoformat()
 
 
 
-        if paper:
+        if PAPER_TRADING:
 
 
-            order = {
+            return {
 
 
-                "code": 0,
+                "status":
+
+                    "PAPER",
 
 
-                "status": "PAPER",
+                "symbol":
+
+                    symbol,
 
 
-                "created_at": order_time,
+                "side":
+
+                    side,
 
 
-                "data": {
+                "quantity":
 
-                    "symbol": symbol,
+                    quantity,
 
-                    "side": side,
 
-                    "quantity": quantity,
+                "type":
 
-                    "leverage": leverage,
+                    ORDER_TYPE,
 
-                    "stop_loss": stop_loss,
 
-                    "take_profit": take_profit,
+                "leverage":
 
-                    "order_id": "PAPER"
-
-                }
+                    leverage
 
             }
 
 
-            logger.info(
-                f"PAPER ORDER CREATED | {symbol} | {side} | {quantity}"
-            )
-
-
-            return order
-
-
-
-        logger.info(
-            f"REAL ORDER REQUEST | {symbol} | {side} | {quantity}"
-        )
 
 
 
         result = coinex_trade.create_order(
 
-            market=symbol,
+            symbol,
 
-            side=side,
+            side,
 
-            amount=quantity,
+            quantity,
 
-            leverage=leverage
+            leverage
 
         )
 
@@ -250,7 +257,9 @@ def create_order(
 
 
             logger.error(
-                f"ORDER FAILED | {symbol}"
+
+                "EXCHANGE ORDER FAILED"
+
             )
 
 
@@ -258,13 +267,6 @@ def create_order(
 
 
 
-        result["created_at"] = order_time
-
-
-
-        logger.info(
-            f"ORDER SUCCESS | {symbol} | {side}"
-        )
 
 
         return result
@@ -281,37 +283,31 @@ def create_order(
 
 
 
-def cancel_order(
-    order_id,
-    symbol
+
+
+
+
+
+
+
+def close_order(
+    symbol,
+    side,
+    quantity
 ):
 
     try:
 
 
-        if not order_id or not symbol:
+        return coinex_trade.close_position(
 
-            return False
+            symbol,
 
+            side,
 
-
-        result = coinex_trade.cancel_order(
-
-            order_id,
-
-            symbol
+            quantity
 
         )
-
-
-        if result:
-
-            logger.info(
-                f"ORDER CANCELLED | {symbol} | {order_id}"
-            )
-
-
-        return result
 
 
 
@@ -321,28 +317,23 @@ def cancel_order(
         logger.exception(e)
 
 
-        return False
+        return None
 
 
 
-def get_order_status(
-    order_id,
-    symbol
-):
+
+
+
+
+
+
+
+def get_balance():
 
     try:
 
 
-        result = coinex_trade.get_order_status(
-
-            order_id,
-
-            symbol
-
-        )
-
-
-        return result
+        return coinex_trade.get_balance()
 
 
 
