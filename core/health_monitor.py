@@ -1,14 +1,60 @@
 # core/health_monitor.py
 
-import os
-import sqlite3
 import time
+import os
 
-from core.database_manager import (
-    DATABASE_PATH
-)
+from datetime import datetime
 
 from core.logger import logger
+
+from core.database_manager import (
+    database_status
+)
+
+from core.recovery_manager import (
+    enter_safe_mode
+)
+
+from core.communication_manager import (
+    send_notification
+)
+
+from coinex_trade import (
+    coinex_trade
+)
+
+
+
+
+
+HEALTH_STATUS = {
+
+
+    "system":
+
+        True,
+
+
+    "database":
+
+        True,
+
+
+    "api":
+
+        True,
+
+
+    "internet":
+
+        True
+
+
+}
+
+
+
+
 
 
 
@@ -16,39 +62,138 @@ def check_database():
 
     try:
 
-        if not os.path.exists(
-            DATABASE_PATH
-        ):
 
-            return False
+        status = database_status()
 
 
 
-        connection = sqlite3.connect(
-            DATABASE_PATH
-        )
+        HEALTH_STATUS["database"] = status
 
 
-        cursor = connection.cursor()
 
-
-        cursor.execute(
-            "SELECT 1"
-        )
-
-
-        connection.close()
-
-
-        return True
+        return status
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
+
+        HEALTH_STATUS["database"] = False
+
+
         return False
+
+
+
+
+
+
+
+
+def check_exchange_api():
+
+    try:
+
+
+        result = coinex_trade.get_ticker(
+
+            "BTCUSDT"
+
+        )
+
+
+
+        status = bool(
+
+            result
+
+        )
+
+
+
+        HEALTH_STATUS["api"] = status
+
+
+
+        return status
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        HEALTH_STATUS["api"] = False
+
+
+        return False
+
+
+
+
+
+
+
+
+def check_internet():
+
+    try:
+
+
+        import requests
+
+
+
+        response = requests.get(
+
+            "https://api.coinex.com",
+
+            timeout=5
+
+        )
+
+
+
+        status = (
+
+            response.status_code < 500
+
+        )
+
+
+
+        HEALTH_STATUS["internet"] = status
+
+
+
+        return status
+
+
+
+    except Exception as e:
+
+
+        logger.warning(
+
+            "INTERNET CHECK FAILED"
+
+        )
+
+
+        HEALTH_STATUS["internet"] = False
+
+
+
+        return False
+
+
+
+
 
 
 
@@ -57,122 +202,254 @@ def check_disk_space():
 
     try:
 
-        stat = os.statvfs(
-            "."
+
+        usage = os.statvfs(
+
+            "/"
+
         )
+
 
 
         free = (
-            stat.f_bavail
+
+            usage.f_bavail
+
             *
-            stat.f_frsize
-        )
 
-
-        total = (
-            stat.f_blocks
-            *
-            stat.f_frsize
-        )
-
-
-        if total == 0:
-
-            return {
-
-                "free_percent": 0,
-
-                "healthy": False
-
-            }
-
-
-
-        percent = round(
-
-            free
-            /
-            total
-            *
-            100,
-
-            2
+            usage.f_frsize
 
         )
 
 
-        return {
 
-            "free_percent": percent,
+        gb = free / (
 
-            "healthy": percent > 10
+            1024 ** 3
 
-        }
+        )
+
+
+
+        if gb < 1:
+
+
+            logger.warning(
+
+                "LOW DISK SPACE"
+
+            )
+
+
+            return False
+
+
+
+        return True
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
 
-        return {
-
-            "free_percent": 0,
-
-            "healthy": False
-
-        }
+        return False
 
 
 
 
-def system_health():
+
+
+
+
+def run_health_check():
 
     try:
 
-        database_status = check_database()
 
-        disk_status = check_disk_space()
-
+        result = {
 
 
-        return {
+            "database":
 
-            "database": database_status,
+                check_database(),
 
-            "disk": disk_status,
 
-            "healthy": (
-                database_status
-                and
-                disk_status.get(
-                    "healthy",
-                    False
-                )
-            ),
+            "api":
 
-            "timestamp": int(
-                time.time()
-            )
+                check_exchange_api(),
+
+
+            "internet":
+
+                check_internet(),
+
+
+            "disk":
+
+                check_disk_space(),
+
+
+            "time":
+
+                datetime.utcnow()
+                .isoformat()
+
 
         }
+
+
+
+        failed = []
+
+
+
+        for key,value in result.items():
+
+
+            if value is False:
+
+
+                failed.append(
+
+                    key
+
+                )
+
+
+
+        if failed:
+
+
+            handle_failure(
+
+                failed
+
+            )
+
+
+
+        return result
 
 
 
     except Exception as e:
 
+
         logger.exception(e)
 
 
-        return {
+        return {}
 
-            "database": False,
 
-            "disk": {},
 
-            "healthy": False,
 
-            "timestamp": 0
 
-        }
+
+
+
+def handle_failure(
+    failures
+):
+
+    try:
+
+
+        message = f"""
+
+⚠️ SYSTEM WARNING
+
+
+مشکل شناسایی شد:
+
+{failures}
+
+
+زمان:
+
+{datetime.now()}
+
+"""
+
+
+
+        logger.warning(
+
+            message
+
+        )
+
+
+
+        enter_safe_mode(
+
+            str(failures)
+
+        )
+
+
+
+        return True
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+
+def monitor_loop():
+
+    try:
+
+
+        while True:
+
+
+            status = run_health_check()
+
+
+
+            logger.info(
+
+                f"HEALTH STATUS {status}"
+
+            )
+
+
+
+            time.sleep(
+
+                60
+
+            )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+
+
+
+
+
+
+def get_health_status():
+
+    return HEALTH_STATUS
