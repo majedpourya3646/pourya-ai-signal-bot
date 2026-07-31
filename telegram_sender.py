@@ -2,49 +2,104 @@
 
 import requests
 
+from core.logger import logger
+
 from config import (
     BOT_TOKEN,
-    CHAT_ID
+    CHAT_ID,
+    REQUEST_TIMEOUT
 )
 
-from core.logger import logger
+
 
 
 
 TELEGRAM_URL = (
+
     "https://api.telegram.org/bot"
-    + BOT_TOKEN
-    + "/sendMessage"
+
+    +
+
+    BOT_TOKEN
+
+    +
+
+    "/sendMessage"
+
 )
 
 
 
+
+
+
+
+
 def send_message(
-    message
+    message,
+    chat_id=None,
+    parse_mode="HTML"
 ):
 
     try:
 
 
-        if not BOT_TOKEN or not CHAT_ID:
+        if not BOT_TOKEN:
 
-            logger.error(
-                "Telegram config missing"
+            logger.warning(
+
+                "TELEGRAM TOKEN NOT SET"
+
             )
 
             return False
 
 
 
+
+
+        target = chat_id or CHAT_ID
+
+
+
+
+
+        if not target:
+
+            logger.warning(
+
+                "TELEGRAM CHAT ID NOT SET"
+
+            )
+
+            return False
+
+
+
+
+
         payload = {
 
-            "chat_id": CHAT_ID,
 
-            "text": message,
+            "chat_id":
 
-            "parse_mode": "HTML"
+                target,
+
+
+
+            "text":
+
+                message,
+
+
+
+            "parse_mode":
+
+                parse_mode
 
         }
+
+
 
 
 
@@ -54,30 +109,190 @@ def send_message(
 
             json=payload,
 
-            timeout=20
+            timeout=REQUEST_TIMEOUT
 
         )
 
 
 
-        logger.info(
 
-            f"Telegram status: {response.status_code}"
+
+        if response.status_code == 200:
+
+
+            logger.info(
+
+                "TELEGRAM MESSAGE SENT"
+
+            )
+
+
+            return True
+
+
+
+
+
+
+        logger.error(
+
+            f"TELEGRAM ERROR {response.text}"
 
         )
 
 
+        return False
 
-        return response.status_code == 200
+
 
 
 
     except Exception as e:
 
 
-        logger.exception(
-            e
-        )
+        logger.exception(e)
 
 
         return False
+
+
+
+
+
+
+
+def send_trade_alert(
+    trade
+):
+
+    try:
+
+
+        message = f"""
+
+<b>🚀 New Trade</b>
+
+
+🪙 Symbol:
+{trade.get('symbol')}
+
+
+📈 Side:
+{trade.get('side')}
+
+
+💰 Entry:
+{trade.get('entry')}
+
+
+🎯 TP:
+{trade.get('tp')}
+
+
+🛑 SL:
+{trade.get('sl')}
+
+
+📊 Confidence:
+{trade.get('confidence')}%
+
+
+🤖 Pourya Trader AI
+
+"""
+
+
+
+        return send_message(
+
+            message
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def send_close_alert(
+    trade
+):
+
+    try:
+
+
+        message = f"""
+
+<b>🔔 Trade Closed</b>
+
+
+🪙 Symbol:
+{trade.get('symbol')}
+
+
+📌 Reason:
+{trade.get('reason')}
+
+
+💵 PNL:
+{trade.get('pnl')} USDT
+
+
+🤖 Pourya Trader AI
+
+"""
+
+
+
+        return send_message(
+
+            message
+
+        )
+
+
+
+    except Exception as e:
+
+
+        logger.exception(e)
+
+
+        return False
+
+
+
+
+
+
+
+def send_error(
+    error
+):
+
+    return send_message(
+
+        f"""
+
+<b>⚠️ SYSTEM ERROR</b>
+
+
+{error}
+
+
+🤖 Pourya Trader AI
+
+"""
+
+    )
