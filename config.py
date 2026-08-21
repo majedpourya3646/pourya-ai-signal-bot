@@ -62,7 +62,7 @@ MARKET_TYPE = "FOREX"
 
 ORDER_TYPE = "market"
 
-PAPER_TRADING = False
+PAPER_TRADING = ture
 
 
 # ===========================
