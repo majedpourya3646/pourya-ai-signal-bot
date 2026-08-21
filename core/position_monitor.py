@@ -8,7 +8,7 @@ from core.logger import logger
 from core.trade_manager import (
     update_trade_status,
     get_open_trades,
-    close_trade
+    get_trade_by_id
 )
 
 from core.telegram import (
@@ -16,12 +16,19 @@ from core.telegram import (
 )
 
 
-MONITOR_INTERVAL = 10
+# ===========================
+# Settings
+# ===========================
 
+MONITOR_INTERVAL = 10
 
 RUNNING = False
 THREAD = None
 
+
+# ===========================
+# Get MT5 Positions
+# ===========================
 
 def get_mt5_positions():
 
@@ -33,164 +40,63 @@ def get_mt5_positions():
 
             return []
 
-        return positions
+        return list(
+            positions
+        )
 
     except Exception as e:
 
-        logger.exception(
-            f"GET POSITIONS ERROR {e}"
+        logger.error(
+            f"GET MT5 POSITIONS ERROR {e}"
         )
 
         return []
 
 
-def find_position_for_trade(trade):
+# ===========================
+# Find Position By Ticket
+# ===========================
+
+def find_position_by_ticket(
+    ticket
+):
 
     try:
 
-        trade_ticket = trade.get(
-            "ticket"
-        )
+        if not ticket:
 
-        symbol = trade.get(
-            "symbol"
-        )
+            return None
 
         positions = get_mt5_positions()
 
-        # ===========================
-        # First: Match by ticket
-        # ===========================
+        for position in positions:
 
-        if trade_ticket:
+            if int(
+                position.ticket
+            ) == int(
+                ticket
+            ):
 
-            try:
-
-                trade_ticket = int(
-                    trade_ticket
-                )
-
-            except Exception:
-
-                trade_ticket = None
-
-        if trade_ticket:
-
-            for position in positions:
-
-                if int(position.ticket) == trade_ticket:
-
-                    return position
-
-        # ===========================
-        # Fallback: Match by symbol
-        # ===========================
-
-        if symbol:
-
-            matching = [
-
-                position
-
-                for position in positions
-
-                if position.symbol == symbol
-
-            ]
-
-            if len(matching) == 1:
-
-                return matching[0]
+                return position
 
         return None
 
     except Exception as e:
 
-        logger.exception(
+        logger.error(
             f"FIND POSITION ERROR {e}"
         )
 
         return None
 
 
-def check_position(trade):
+# ===========================
+# Check Position
+# ===========================
 
-    try:
-
-        position = find_position_for_trade(
-            trade
-        )
-
-        if position is None:
-
-            return {
-
-                "open":
-                    False,
-
-                "ticket":
-                    trade.get("ticket"),
-
-                "profit":
-                    0.0,
-
-                "volume":
-                    trade.get("quantity", 0),
-
-                "price_open":
-                    trade.get("entry"),
-
-                "price_current":
-                    None
-
-            }
-
-        return {
-
-            "open":
-                True,
-
-            "ticket":
-                position.ticket,
-
-            "symbol":
-                position.symbol,
-
-            "profit":
-                float(position.profit),
-
-            "volume":
-                float(position.volume),
-
-            "price_open":
-                float(position.price_open),
-
-            "price_current":
-                float(position.price_current),
-
-            "sl":
-                float(position.sl),
-
-            "tp":
-                float(position.tp)
-
-        }
-
-    except Exception as e:
-
-        logger.exception(
-            f"CHECK POSITION ERROR {e}"
-        )
-
-        return None
-
-
-def get_closed_trade_profit(trade):
-
-    """
-    Try to find the final realized profit
-    of a closed MT5 position.
-    """
+def check_position(
+    trade
+):
 
     try:
 
@@ -198,79 +104,176 @@ def get_closed_trade_profit(trade):
             "ticket"
         )
 
+        symbol = trade.get(
+            "symbol"
+        )
+
+        # ---------------------------------
+        # Prefer ticket
+        # ---------------------------------
+
+        position = find_position_by_ticket(
+            ticket
+        )
+
+        # ---------------------------------
+        # Fallback by symbol
+        # ---------------------------------
+
+        if position is None and symbol:
+
+            positions = get_mt5_positions()
+
+            for item in positions:
+
+                if item.symbol == symbol:
+
+                    position = item
+
+                    break
+
+        # ---------------------------------
+        # Position Still Open
+        # ---------------------------------
+
+        if position is not None:
+
+            return {
+
+                "open":
+                    True,
+
+                "ticket":
+                    position.ticket,
+
+                "symbol":
+                    position.symbol,
+
+                "profit":
+                    float(
+                        position.profit
+                    ),
+
+                "volume":
+                    float(
+                        position.volume
+                    ),
+
+                "price_open":
+                    float(
+                        position.price_open
+                    ),
+
+                "price_current":
+                    float(
+                        position.price_current
+                    ),
+
+                "sl":
+                    float(
+                        position.sl
+                    ),
+
+                "tp":
+                    float(
+                        position.tp
+                    )
+
+            }
+
+        # ---------------------------------
+        # Position Closed
+        # ---------------------------------
+
+        return {
+
+            "open":
+                False,
+
+            "ticket":
+                ticket,
+
+            "symbol":
+                symbol,
+
+            "profit":
+                0.0
+
+        }
+
+    except Exception as e:
+
+        logger.error(
+            f"CHECK POSITION ERROR {e}"
+        )
+
+        return None
+
+
+# ===========================
+# Get Closed Position Profit
+# ===========================
+
+def get_closed_position_profit(
+    ticket
+):
+
+    try:
+
         if not ticket:
 
             return 0.0
 
-        ticket = int(
-            ticket
-        )
-
-        # Search recent history
-        from_time = (
-            time.time() - 86400
-        )
+        # ---------------------------------
+        # Search history
+        # ---------------------------------
 
         deals = mt5.history_deals_get(
-            from_time,
-            time.time()
+            ticket=int(ticket)
         )
 
-        if deals is None:
+        if deals:
 
-            return 0.0
+            total_profit = 0.0
 
-        total_profit = 0.0
+            for deal in deals:
 
-        for deal in deals:
-
-            if int(
-                getattr(
-                    deal,
-                    "position_id",
-                    0
+                total_profit += float(
+                    deal.profit
                 )
-            ) != ticket:
 
-                continue
-
-            total_profit += float(
-                getattr(
-                    deal,
-                    "profit",
-                    0.0
+                total_profit += float(
+                    getattr(
+                        deal,
+                        "swap",
+                        0
+                    )
                 )
-            )
 
-            total_profit += float(
-                getattr(
-                    deal,
-                    "commission",
-                    0.0
+                total_profit += float(
+                    getattr(
+                        deal,
+                        "commission",
+                        0
+                    )
                 )
-            )
 
-            total_profit += float(
-                getattr(
-                    deal,
-                    "swap",
-                    0.0
-                )
-            )
+            return total_profit
 
-        return round(
-            total_profit,
-            2
-        )
+        return 0.0
 
     except Exception as e:
 
-        logger.exception(
+        logger.error(
             f"CLOSED PROFIT ERROR {e}"
         )
 
         return 0.0
 
+
+# ===========================
+# Close Trade Report
+# ===========================
 
 def close_trade_report(
     trade,
@@ -293,20 +296,39 @@ def close_trade_report(
             "id"
         )
 
+        if profit > 0:
+
+            status = "PROFIT"
+
+            emoji = "🟢"
+
+        elif profit < 0:
+
+            status = "LOSS"
+
+            emoji = "🔴"
+
+        else:
+
+            status = "BREAKEVEN"
+
+            emoji = "⚪"
+
         message = f"""
-📊 معامله بسته شد
+{emoji} معامله بسته شد
 
 ارز: {symbol}
 
 نوع: {side}
 
-شناسه: {trade_id}
-
 سود/ضرر:
-{round(float(profit), 2)} $
+{profit:.2f} $
 
 وضعیت:
-CLOSED
+{status}
+
+شماره معامله:
+{trade_id}
 
 🤖 Pourya Trader AI
 """
@@ -317,12 +339,19 @@ CLOSED
 
     except Exception as e:
 
-        logger.exception(
-            f"REPORT ERROR {e}"
+        logger.error(
+            f"CLOSE REPORT ERROR {e}"
         )
 
 
-def process_closed_trade(trade):
+# ===========================
+# Process Closed Trade
+# ===========================
+
+def process_closed_trade(
+    trade,
+    status
+):
 
     try:
 
@@ -330,29 +359,42 @@ def process_closed_trade(trade):
             "id"
         )
 
-        if not trade_id:
-
-            logger.error(
-                "CLOSED TRADE WITHOUT DATABASE ID"
-            )
-
-            return
-
-        profit = get_closed_trade_profit(
-            trade
+        ticket = trade.get(
+            "ticket"
         )
 
-        close_trade(
+        # ---------------------------------
+        # Get real MT5 profit
+        # ---------------------------------
+
+        profit = get_closed_position_profit(
+            ticket
+        )
+
+        # ---------------------------------
+        # Update database
+        # ---------------------------------
+
+        update_trade_status(
+
             trade_id,
-            0,
-            profit
+
+            "CLOSED",
+
+            pnl=profit
+
         )
 
         logger.info(
             f"TRADE CLOSED "
             f"ID={trade_id} "
+            f"TICKET={ticket} "
             f"PNL={profit}"
         )
+
+        # ---------------------------------
+        # Telegram
+        # ---------------------------------
 
         close_trade_report(
             trade,
@@ -361,10 +403,14 @@ def process_closed_trade(trade):
 
     except Exception as e:
 
-        logger.exception(
+        logger.error(
             f"PROCESS CLOSED TRADE ERROR {e}"
         )
 
+
+# ===========================
+# Monitor Loop
+# ===========================
 
 def monitor_positions():
 
@@ -398,35 +444,35 @@ def monitor_positions():
 
                     continue
 
-                # ===========================
+                # ---------------------------------
                 # Position still open
-                # ===========================
+                # ---------------------------------
 
                 if status.get(
                     "open"
                 ):
 
-                    logger.debug(
+                    logger.info(
                         f"POSITION ACTIVE "
                         f"{trade.get('symbol')} "
-                        f"PROFIT={status.get('profit')}"
+                        f"TICKET={status.get('ticket')} "
+                        f"PNL={status.get('profit')}"
                     )
 
                     continue
 
-                # ===========================
+                # ---------------------------------
                 # Position closed
-                # ===========================
-
-                logger.info(
-                    f"POSITION CLOSED "
-                    f"{trade.get('symbol')} "
-                    f"TICKET={trade.get('ticket')}"
-                )
+                # ---------------------------------
 
                 process_closed_trade(
-                    trade
+                    trade,
+                    status
                 )
+
+            time.sleep(
+                MONITOR_INTERVAL
+            )
 
         except Exception as e:
 
@@ -434,10 +480,14 @@ def monitor_positions():
                 f"POSITION MONITOR ERROR {e}"
             )
 
-        time.sleep(
-            MONITOR_INTERVAL
-        )
+            time.sleep(
+                MONITOR_INTERVAL
+            )
 
+
+# ===========================
+# Start Position Monitor
+# ===========================
 
 def start_position_monitor():
 
@@ -477,7 +527,6 @@ def start_position_monitor():
     except Exception as e:
 
         RUNNING = False
-        THREAD = None
 
         logger.exception(
             f"POSITION MONITOR START ERROR {e}"
@@ -486,16 +535,17 @@ def start_position_monitor():
         return False
 
 
+# ===========================
+# Stop Position Monitor
+# ===========================
+
 def stop_position_monitor():
 
     global RUNNING
-    global THREAD
 
     try:
 
         RUNNING = False
-
-        THREAD = None
 
         logger.info(
             "POSITION MONITOR STOPPED"
