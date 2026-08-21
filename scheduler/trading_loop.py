@@ -4,7 +4,7 @@ import threading
 from core.logger import logger
 
 from core.opportunity_engine import (
-    find_best_opportunity
+    get_best_opportunity
 )
 
 from core.auto_trader import (
@@ -21,20 +21,6 @@ THREAD = None
 
 
 def trading_loop():
-    """
-    Main trading loop.
-
-    Flow:
-        Market Analysis
-            ↓
-        Best Opportunity
-            ↓
-        Risk / Confidence Check
-            ↓
-        Auto Trader
-            ↓
-        MT5 Order Manager
-    """
 
     global RUNNING
 
@@ -50,7 +36,15 @@ def trading_loop():
                 "SCANNING MARKET OPPORTUNITIES"
             )
 
-            opportunity = find_best_opportunity()
+            # ===========================
+            # Market Analysis
+            # ===========================
+
+            opportunity = get_best_opportunity()
+
+            # ===========================
+            # No Opportunity
+            # ===========================
 
             if not opportunity:
 
@@ -61,11 +55,13 @@ def trading_loop():
             else:
 
                 symbol = opportunity.get(
-                    "symbol"
+                    "symbol",
+                    "UNKNOWN"
                 )
 
                 signal = opportunity.get(
-                    "signal"
+                    "signal",
+                    "NONE"
                 )
 
                 confidence = opportunity.get(
@@ -73,12 +69,22 @@ def trading_loop():
                     0
                 )
 
+                score = opportunity.get(
+                    "opportunity_score",
+                    0
+                )
+
                 logger.info(
                     f"BEST OPPORTUNITY "
                     f"{symbol} "
                     f"SIGNAL={signal} "
-                    f"CONFIDENCE={confidence}"
+                    f"CONFIDENCE={confidence} "
+                    f"SCORE={score}"
                 )
+
+                # ===========================
+                # Execute Trade
+                # ===========================
 
                 result = execute_trade(
                     opportunity
@@ -87,13 +93,17 @@ def trading_loop():
                 if result:
 
                     logger.info(
-                        f"TRADE EXECUTED {symbol}"
+                        f"TRADE EXECUTED "
+                        f"{symbol} "
+                        f"ID={result.get('id')} "
+                        f"TICKET={result.get('ticket')}"
                     )
 
                 else:
 
                     logger.info(
-                        f"TRADE NOT EXECUTED {symbol}"
+                        f"TRADE NOT EXECUTED "
+                        f"{symbol}"
                     )
 
         except Exception as e:
@@ -101,6 +111,10 @@ def trading_loop():
             logger.exception(
                 f"TRADING LOOP ERROR {e}"
             )
+
+        # ===========================
+        # Scheduler Delay
+        # ===========================
 
         time.sleep(
             SCHEDULER_INTERVAL
@@ -125,9 +139,13 @@ def start_trading_loop():
         RUNNING = True
 
         THREAD = threading.Thread(
+
             target=trading_loop,
+
             daemon=True,
+
             name="TradingLoop"
+
         )
 
         THREAD.start()
@@ -142,6 +160,8 @@ def start_trading_loop():
 
         RUNNING = False
 
+        THREAD = None
+
         logger.exception(
             f"TRADING LOOP START ERROR {e}"
         )
@@ -152,10 +172,13 @@ def start_trading_loop():
 def stop_trading_loop():
 
     global RUNNING
+    global THREAD
 
     try:
 
         RUNNING = False
+
+        THREAD = None
 
         logger.info(
             "TRADING LOOP STOPPED"
