@@ -1,10 +1,7 @@
 from core.logger import logger
 
 from core.mt5_connector import (
-    send_market_order,
-    get_symbol_info,
-    get_symbol_tick,
-    normalize_volume
+    send_market_order
 )
 
 from config import (
@@ -23,10 +20,6 @@ def create_order(
 
     try:
 
-        # ===========================
-        # Validate side
-        # ===========================
-
         side = str(
             signal
         ).upper()
@@ -42,48 +35,10 @@ def create_order(
 
             return None
 
-        # ===========================
-        # Validate symbol
-        # ===========================
-
-        info = get_symbol_info(
-            symbol
-        )
-
-        if info is None:
-
-            logger.error(
-                f"MT5 SYMBOL INVALID {symbol}"
-            )
-
-            return None
-
-        # ===========================
-        # Normalize lot
-        # ===========================
-
-        lot = normalize_volume(
-            symbol,
-            DEFAULT_LOT
-        )
-
-        if lot is None:
-
-            logger.error(
-                f"INVALID LOT {symbol}"
-            )
-
-            return None
-
-        # ===========================
-        # Log
-        # ===========================
-
         logger.info(
             f"CREATING MT5 ORDER "
             f"{symbol} "
-            f"{side} "
-            f"LOT={lot}"
+            f"{side}"
         )
 
         # ===========================
@@ -96,7 +51,7 @@ def create_order(
                 f"PAPER ORDER "
                 f"{symbol} "
                 f"{side} "
-                f"LOT={lot}"
+                f"LOT={DEFAULT_LOT}"
             )
 
             return {
@@ -111,22 +66,19 @@ def create_order(
                     side,
 
                 "volume":
-                    lot,
-
-                "lot":
-                    lot,
+                    DEFAULT_LOT,
 
                 "price":
-                    float(entry),
+                    entry,
 
                 "entry":
-                    float(entry),
+                    entry,
 
                 "tp":
-                    float(tp),
+                    tp,
 
                 "sl":
-                    float(sl),
+                    sl,
 
                 "ticket":
                     None
@@ -134,7 +86,7 @@ def create_order(
             }
 
         # ===========================
-        # Live MT5 Order
+        # Real MT5 Order
         # ===========================
 
         result = send_market_order(
@@ -143,17 +95,13 @@ def create_order(
 
             side=side,
 
-            lot=lot,
+            lot=DEFAULT_LOT,
 
             sl=sl,
 
             tp=tp
 
         )
-
-        # ===========================
-        # Failed
-        # ===========================
 
         if result is None:
 
@@ -164,14 +112,9 @@ def create_order(
 
             return None
 
-        # ===========================
-        # Success
-        # ===========================
-
         logger.info(
             f"MT5 ORDER SUCCESS "
             f"{symbol} "
-            f"{side} "
             f"TICKET={result.get('ticket')}"
         )
 
