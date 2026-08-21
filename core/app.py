@@ -139,7 +139,7 @@ def run():
 
 
     if not initialize_system():
-
+        return
 
         logger.error(
             "SYSTEM START FAILED"
