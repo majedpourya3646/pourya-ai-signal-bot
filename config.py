@@ -103,6 +103,8 @@ DEFAULT_TP = 5.0
 
 DEFAULT_SL = 2.0
 
+DEFAULT_LOT = 0.01
+
 
 # ===========================
 # Balance
