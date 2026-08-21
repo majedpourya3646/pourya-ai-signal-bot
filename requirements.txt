@@ -26,4 +26,4 @@ colorlog>=6.8.2
 
 pytz>=2024.1
 
-MetaTrader5
+
