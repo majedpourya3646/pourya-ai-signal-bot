@@ -1,23 +1,27 @@
+# core/auto_trader.py
+
 from core.logger import logger
 
 from core.order_manager import (
-    create_order
+    open_market_position,
+    get_positions,
 )
 
 from core.trade_manager import (
     save_trade,
-    get_open_trades
+    get_open_trades,
 )
 
 from config import (
     MIN_CONFIDENCE,
-    MAX_OPEN_TRADES
+    MAX_OPEN_TRADES,
+    DEFAULT_LOT,
 )
 
 
-# ===========================
+# ============================================================
 # Execute Trade
-# ===========================
+# ============================================================
 
 def execute_trade(
     opportunity
@@ -33,9 +37,9 @@ def execute_trade(
 
             return None
 
-        # ===========================
+        # ====================================================
         # Opportunity Data
-        # ===========================
+        # ====================================================
 
         symbol = opportunity.get(
             "symbol"
@@ -64,9 +68,28 @@ def execute_trade(
             "sl"
         )
 
-        # ===========================
+        # Optional lot from opportunity.
+        # If unavailable, use DEFAULT_LOT.
+        lot = opportunity.get(
+            "lot",
+            DEFAULT_LOT
+        )
+
+        try:
+
+            lot = float(lot)
+
+        except (TypeError, ValueError):
+
+            logger.error(
+                f"INVALID LOT {lot}"
+            )
+
+            return None
+
+        # ====================================================
         # Basic Validation
-        # ===========================
+        # ====================================================
 
         if not symbol:
 
@@ -75,6 +98,14 @@ def execute_trade(
             )
 
             return None
+
+        symbol = str(
+            symbol
+        ).strip()
+
+        signal = str(
+            signal
+        ).upper().strip()
 
         if signal not in (
             "BUY",
@@ -90,7 +121,8 @@ def execute_trade(
         if entry is None:
 
             logger.error(
-                f"TRADE REJECTED {symbol} - NO ENTRY"
+                f"TRADE REJECTED "
+                f"{symbol} - NO ENTRY"
             )
 
             return None
@@ -98,7 +130,8 @@ def execute_trade(
         if tp is None:
 
             logger.error(
-                f"TRADE REJECTED {symbol} - NO TP"
+                f"TRADE REJECTED "
+                f"{symbol} - NO TP"
             )
 
             return None
@@ -106,14 +139,30 @@ def execute_trade(
         if sl is None:
 
             logger.error(
-                f"TRADE REJECTED {symbol} - NO SL"
+                f"TRADE REJECTED "
+                f"{symbol} - NO SL"
             )
 
             return None
 
-        # ===========================
+        try:
+
+            entry = float(entry)
+            tp = float(tp)
+            sl = float(sl)
+
+        except (TypeError, ValueError):
+
+            logger.error(
+                f"INVALID PRICE DATA "
+                f"{symbol}"
+            )
+
+            return None
+
+        # ====================================================
         # Confidence
-        # ===========================
+        # ====================================================
 
         logger.info(
             f"TRADE CHECK "
@@ -127,30 +176,34 @@ def execute_trade(
             logger.info(
                 f"TRADE REJECTED "
                 f"{symbol} "
-                f"LOW CONFIDENCE"
+                f"LOW CONFIDENCE "
+                f"{confidence} < {MIN_CONFIDENCE}"
             )
 
             return None
 
-        # ===========================
-        # Max Open Trades
-        # ===========================
+        # ====================================================
+        # Open Trades - Database
+        # ====================================================
 
         open_trades = get_open_trades()
 
-        if len(
-            open_trades
-        ) >= MAX_OPEN_TRADES:
+        if open_trades is None:
+
+            open_trades = []
+
+        if len(open_trades) >= MAX_OPEN_TRADES:
 
             logger.info(
-                "MAX OPEN TRADES REACHED"
+                f"MAX OPEN TRADES REACHED "
+                f"{len(open_trades)}/{MAX_OPEN_TRADES}"
             )
 
             return None
 
-        # ===========================
-        # Duplicate Symbol Protection
-        # ===========================
+        # ====================================================
+        # Duplicate Symbol - Database
+        # ====================================================
 
         for trade in open_trades:
 
@@ -161,58 +214,118 @@ def execute_trade(
                 logger.info(
                     f"TRADE REJECTED "
                     f"{symbol} "
-                    f"ALREADY OPEN"
+                    f"ALREADY OPEN IN DATABASE"
                 )
 
                 return None
 
-        # ===========================
-        # Execute Order
-        # ===========================
+        # ====================================================
+        # Duplicate Symbol - MT5
+        # ====================================================
 
-        logger.info(
-            f"TRADE APPROVED "
-            f"{symbol} "
-            f"{signal}"
+        mt5_positions = get_positions(
+            symbol=symbol
         )
 
-        order = create_order(
+        if mt5_positions:
 
-            symbol,
+            logger.info(
+                f"TRADE REJECTED "
+                f"{symbol} "
+                f"ALREADY OPEN IN MT5"
+            )
 
-            signal,
+            return None
 
-            entry,
+        # ====================================================
+        # Trade Approval
+        # ====================================================
 
-            tp,
+        logger.info(
+            "================================"
+        )
 
-            sl
+        logger.info(
+            "TRADE APPROVED"
+        )
+
+        logger.info(
+            f"SYMBOL={symbol}"
+        )
+
+        logger.info(
+            f"SIGNAL={signal}"
+        )
+
+        logger.info(
+            f"CONFIDENCE={confidence}"
+        )
+
+        logger.info(
+            f"ENTRY_SIGNAL={entry}"
+        )
+
+        logger.info(
+            f"SL={sl}"
+        )
+
+        logger.info(
+            f"TP={tp}"
+        )
+
+        logger.info(
+            f"LOT={lot}"
+        )
+
+        logger.info(
+            "================================"
+        )
+
+        # ====================================================
+        # Execute Market Order on MT5
+        # ====================================================
+
+        order = open_market_position(
+
+            symbol=symbol,
+
+            side=signal,
+
+            lot=lot,
+
+            sl=sl,
+
+            tp=tp,
+
+            confidence=confidence
 
         )
 
         if not order:
 
             logger.error(
-                f"ORDER CREATION FAILED "
-                f"{symbol}"
+                f"MT5 ORDER FAILED "
+                f"{symbol} "
+                f"{signal}"
             )
 
             return None
 
-        # ===========================
+        # ====================================================
         # Order Result
-        # ===========================
+        # ====================================================
 
         ticket = order.get(
             "ticket"
         )
 
+        deal = order.get(
+            "deal"
+        )
+
         volume = order.get(
             "volume",
-            order.get(
-                "lot",
-                0
-            )
+            lot
         )
 
         executed_price = order.get(
@@ -220,14 +333,40 @@ def execute_trade(
             entry
         )
 
-        # ===========================
+        executed_sl = order.get(
+            "sl",
+            sl
+        )
+
+        executed_tp = order.get(
+            "tp",
+            tp
+        )
+
+        # ====================================================
+        # Validate Ticket
+        # ====================================================
+
+        if ticket is None:
+
+            logger.error(
+                f"MT5 ORDER RETURNED "
+                f"NO TICKET {symbol}"
+            )
+
+            return None
+
+        # ====================================================
         # Save Trade
-        # ===========================
+        # ====================================================
 
         trade = {
 
             "ticket":
                 ticket,
+
+            "deal":
+                deal,
 
             "symbol":
                 symbol,
@@ -239,12 +378,15 @@ def execute_trade(
                 executed_price,
 
             "tp":
-                tp,
+                executed_tp,
 
             "sl":
-                sl,
+                executed_sl,
 
             "quantity":
+                volume,
+
+            "lot":
                 volume,
 
             "confidence":
@@ -255,9 +397,24 @@ def execute_trade(
 
         }
 
-        trade_id = save_trade(
-            trade
-        )
+        try:
+
+            trade_id = save_trade(
+                trade
+            )
+
+        except Exception as exc:
+
+            logger.exception(
+                f"TRADE DATABASE SAVE ERROR "
+                f"{symbol} {exc}"
+            )
+
+            trade_id = None
+
+        # ====================================================
+        # Database Failure Protection
+        # ====================================================
 
         if trade_id is None:
 
@@ -266,28 +423,133 @@ def execute_trade(
                 f"{symbol}"
             )
 
-            return None
+            # IMPORTANT:
+            # The MT5 position is already open.
+            # We do NOT automatically open another order.
+            #
+            # This position must be reconciled later
+            # by the database/position manager.
+
+            return {
+
+                **trade,
+
+                "database_saved":
+                    False
+
+            }
+
+        # ====================================================
+        # Final Trade Object
+        # ====================================================
 
         trade["id"] = trade_id
 
-        # ===========================
+        trade["database_saved"] = True
+
+        # ====================================================
         # Success
-        # ===========================
+        # ====================================================
 
         logger.info(
-            f"TRADE SAVED "
-            f"ID={trade_id} "
-            f"TICKET={ticket} "
-            f"{symbol} "
-            f"{signal}"
+            "================================"
+        )
+
+        logger.info(
+            "MT5 TRADE OPENED SUCCESSFULLY"
+        )
+
+        logger.info(
+            f"ID={trade_id}"
+        )
+
+        logger.info(
+            f"TICKET={ticket}"
+        )
+
+        logger.info(
+            f"DEAL={deal}"
+        )
+
+        logger.info(
+            f"SYMBOL={symbol}"
+        )
+
+        logger.info(
+            f"SIDE={signal}"
+        )
+
+        logger.info(
+            f"VOLUME={volume}"
+        )
+
+        logger.info(
+            f"PRICE={executed_price}"
+        )
+
+        logger.info(
+            f"SL={executed_sl}"
+        )
+
+        logger.info(
+            f"TP={executed_tp}"
+        )
+
+        logger.info(
+            "================================"
         )
 
         return trade
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"AUTO TRADER ERROR {e}"
+            f"AUTO TRADER ERROR {exc}"
         )
 
         return None
+
+
+# ============================================================
+# Execute Multiple Opportunities
+# ============================================================
+
+def execute_opportunities(
+    opportunities
+):
+    """
+    Execute a list of opportunities.
+
+    Each opportunity is passed through the same
+    validation and MT5 execution pipeline.
+    """
+
+    results = []
+
+    if not opportunities:
+
+        return results
+
+    try:
+
+        for opportunity in opportunities:
+
+            result = execute_trade(
+                opportunity
+            )
+
+            if result:
+
+                results.append(
+                    result
+                )
+
+        return results
+
+    except Exception as exc:
+
+        logger.exception(
+            f"EXECUTE OPPORTUNITIES ERROR {exc}"
+        )
+
+        return results
