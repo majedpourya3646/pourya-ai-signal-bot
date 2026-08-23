@@ -114,13 +114,22 @@ INITIAL_BALANCE = 1000.0
 # ==========================================
 
 SYMBOLS = [
-    "EURUSD",
-    "GBPUSD",
-    "USDJPY",
-    "XAUUSD",
-    "BTCUSD",
+    "XAUUSD"
 ]
 
+TIMEFRAME = "M15"
+
+TIMEFRAMES = [
+    "M15",
+    "H1",
+    "H4"
+]
+
+MAX_OPEN_TRADES = 1
+
+DEFAULT_LOT = 0.01
+
+PAPER_TRADING = True
 
 # ==========================================
 # Timeframes
