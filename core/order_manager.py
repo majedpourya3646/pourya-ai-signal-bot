@@ -1,3 +1,5 @@
+# core/order_manager.py
+
 from typing import Optional, Dict, Any
 
 from core.logger import logger
@@ -11,6 +13,10 @@ from core.mt5_connector import (
     normalize_price,
     get_open_positions,
     send_market_order,
+)
+
+from core.position_manager import (
+    close_position as mt5_close_position
 )
 
 
@@ -29,20 +35,27 @@ DEFAULT_DEVIATION = 20
 # Helpers
 # ============================================================
 
-def _normalize_side(side: str) -> Optional[str]:
-    """
-    Normalize BUY / SELL signal.
-    """
+def _normalize_side(
+    side: str
+) -> Optional[str]:
 
     if side is None:
         return None
 
-    side = str(side).upper().strip()
+    side = str(
+        side
+    ).upper().strip()
 
-    if side in ("BUY", "STRONG BUY"):
+    if side in (
+        "BUY",
+        "STRONG BUY"
+    ):
         return "BUY"
 
-    if side in ("SELL", "STRONG SELL"):
+    if side in (
+        "SELL",
+        "STRONG SELL"
+    ):
         return "SELL"
 
     return None
@@ -53,9 +66,6 @@ def _normalize_side(side: str) -> Optional[str]:
 # ============================================================
 
 def check_connection() -> bool:
-    """
-    Check MT5 connection before every execution.
-    """
 
     try:
 
@@ -91,7 +101,7 @@ def get_account():
         if account is None:
 
             logger.error(
-                "ORDER MANAGER: ACCOUNT INFO UNAVAILABLE"
+                "ACCOUNT INFO UNAVAILABLE"
             )
 
             return None
@@ -117,7 +127,9 @@ def get_position_count() -> int:
 
         positions = get_open_positions()
 
-        return len(positions)
+        return len(
+            positions
+        )
 
     except Exception as exc:
 
@@ -142,7 +154,9 @@ def has_open_position(
             symbol=symbol
         )
 
-        return len(positions) > 0
+        return len(
+            positions
+        ) > 0
 
     except Exception as exc:
 
@@ -151,7 +165,7 @@ def has_open_position(
             f"{symbol} {exc}"
         )
 
-        return False
+        return True
 
 
 # ============================================================
@@ -164,6 +178,10 @@ def validate_symbol(
 
     try:
 
+        if not symbol:
+
+            return False
+
         info = get_symbol_info(
             symbol
         )
@@ -171,7 +189,7 @@ def validate_symbol(
         if info is None:
 
             logger.error(
-                f"SYMBOL VALIDATION FAILED {symbol}"
+                f"SYMBOL NOT FOUND {symbol}"
             )
 
             return False
@@ -228,6 +246,10 @@ def validate_prices(
         sl = float(sl)
         tp = float(tp)
 
+        if sl <= 0 or tp <= 0:
+
+            return False
+
         if side == "BUY":
 
             current_price = float(
@@ -256,7 +278,7 @@ def validate_prices(
 
                 return False
 
-        elif side == "SELL":
+        else:
 
             current_price = float(
                 tick.bid
@@ -307,6 +329,14 @@ def validate_volume(
 
     try:
 
+        lot = float(
+            lot
+        )
+
+        if lot <= 0:
+
+            return None
+
         normalized = normalize_volume(
             symbol,
             lot
@@ -321,10 +351,6 @@ def validate_volume(
             return None
 
         if normalized <= 0:
-
-            logger.error(
-                f"ZERO VOLUME {symbol}"
-            )
 
             return None
 
@@ -341,7 +367,7 @@ def validate_volume(
 
 
 # ============================================================
-# Risk / Position Limit
+# Position Limit
 # ============================================================
 
 def validate_position_limit() -> bool:
@@ -353,7 +379,7 @@ def validate_position_limit() -> bool:
         if count >= MAX_OPEN_POSITIONS:
 
             logger.warning(
-                "MAX OPEN POSITIONS REACHED "
+                f"MAX OPEN POSITIONS "
                 f"{count}/{MAX_OPEN_POSITIONS}"
             )
 
@@ -371,7 +397,7 @@ def validate_position_limit() -> bool:
 
 
 # ============================================================
-# Order Request Validation
+# Order Validation
 # ============================================================
 
 def validate_order(
@@ -393,7 +419,7 @@ def validate_order(
     if side is None:
 
         logger.error(
-            f"INVALID SIDE {side}"
+            "INVALID ORDER SIDE"
         )
 
         return False
@@ -419,12 +445,10 @@ def validate_order(
 
         return False
 
-    volume = validate_volume(
+    if validate_volume(
         symbol,
         lot
-    )
-
-    if volume is None:
+    ) is None:
 
         return False
 
@@ -441,7 +465,7 @@ def validate_order(
 
 
 # ============================================================
-# Execute Market Order
+# Open Market Position
 # ============================================================
 
 def open_market_position(
@@ -462,15 +486,7 @@ def open_market_position(
 
         if side is None:
 
-            logger.error(
-                "ORDER REJECTED: INVALID SIDE"
-            )
-
             return None
-
-        # ----------------------------------------
-        # Validate
-        # ----------------------------------------
 
         if not validate_order(
             symbol,
@@ -487,10 +503,6 @@ def open_market_position(
 
             return None
 
-        # ----------------------------------------
-        # Normalize
-        # ----------------------------------------
-
         volume = normalize_volume(
             symbol,
             lot
@@ -506,35 +518,26 @@ def open_market_position(
             tp
         )
 
-        # ----------------------------------------
-        # Log
-        # ----------------------------------------
+        if (
+            volume is None
+            or sl is None
+            or tp is None
+        ):
+
+            return None
 
         logger.info(
             "================================"
         )
 
         logger.info(
-            "MT5 MARKET ORDER"
+            f"MT5 MARKET ORDER "
+            f"{symbol} {side}"
         )
 
         logger.info(
-            f"SYMBOL={symbol}"
-        )
-
-        logger.info(
-            f"SIDE={side}"
-        )
-
-        logger.info(
-            f"LOT={volume}"
-        )
-
-        logger.info(
-            f"SL={sl}"
-        )
-
-        logger.info(
+            f"LOT={volume} "
+            f"SL={sl} "
             f"TP={tp}"
         )
 
@@ -547,10 +550,6 @@ def open_market_position(
         logger.info(
             "================================"
         )
-
-        # ----------------------------------------
-        # Send
-        # ----------------------------------------
 
         result = send_market_order(
 
@@ -566,7 +565,7 @@ def open_market_position(
 
         )
 
-        if result is None:
+        if not result:
 
             logger.error(
                 f"MT5 ORDER FAILED "
@@ -574,10 +573,6 @@ def open_market_position(
             )
 
             return None
-
-        # ----------------------------------------
-        # Result
-        # ----------------------------------------
 
         ticket = result.get(
             "ticket"
@@ -587,38 +582,55 @@ def open_market_position(
             "deal"
         )
 
+        if ticket is None:
+
+            logger.error(
+                f"ORDER WITHOUT TICKET "
+                f"{symbol}"
+            )
+
+            return None
+
         response = {
 
             "success": True,
 
-            "symbol": symbol,
+            "symbol":
+                symbol,
 
-            "side": side,
+            "side":
+                side,
 
-            "volume": volume,
+            "volume":
+                volume,
 
-            "price": result.get(
-                "price"
-            ),
+            "price":
+                result.get(
+                    "price"
+                ),
 
-            "sl": sl,
+            "sl":
+                sl,
 
-            "tp": tp,
+            "tp":
+                tp,
 
-            "ticket": ticket,
+            "ticket":
+                ticket,
 
-            "deal": deal,
+            "deal":
+                deal,
 
-            "confidence": confidence,
+            "confidence":
+                confidence,
 
-            "status": "OPEN"
+            "status":
+                "OPEN"
 
         }
 
         logger.info(
             f"MT5 POSITION OPENED "
-            f"{symbol} "
-            f"{side} "
             f"TICKET={ticket} "
             f"DEAL={deal}"
         )
@@ -636,27 +648,107 @@ def open_market_position(
 
 
 # ============================================================
+# Create Order Compatibility Wrapper
+# ============================================================
+
+def create_order(
+    symbol: str,
+    side: str,
+    entry: float,
+    tp: float,
+    sl: float,
+    lot: Optional[float] = None,
+    confidence: Optional[float] = None
+):
+
+    """
+    Backward-compatible wrapper.
+
+    The MT5 market price is determined by the broker.
+    Therefore entry is used for validation/logging only.
+    """
+
+    try:
+
+        from config import DEFAULT_LOT
+
+        if lot is None:
+
+            lot = DEFAULT_LOT
+
+        logger.info(
+            f"CREATE ORDER "
+            f"{symbol} {side} "
+            f"EXPECTED_ENTRY={entry}"
+        )
+
+        return open_market_position(
+
+            symbol=symbol,
+
+            side=side,
+
+            lot=lot,
+
+            sl=sl,
+
+            tp=tp,
+
+            confidence=confidence
+
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            f"CREATE ORDER ERROR {exc}"
+        )
+
+        return None
+
+
+# ============================================================
 # Close Position
 # ============================================================
 
 def close_position(
-    symbol: str
+    ticket: int
 ) -> bool:
 
-    """
-    Placeholder for the next Position Manager stage.
+    try:
 
-    Closing will be implemented through MT5
-    using the opposite market order and
-    position ticket.
-    """
+        if ticket is None:
 
-    logger.warning(
-        f"CLOSE POSITION NOT IMPLEMENTED YET "
-        f"{symbol}"
-    )
+            return False
 
-    return False
+        result = mt5_close_position(
+            ticket
+        )
+
+        if result:
+
+            logger.info(
+                f"POSITION CLOSED "
+                f"TICKET={ticket}"
+            )
+
+            return True
+
+        logger.error(
+            f"POSITION CLOSE FAILED "
+            f"TICKET={ticket}"
+        )
+
+        return False
+
+    except Exception as exc:
+
+        logger.exception(
+            f"CLOSE POSITION ERROR "
+            f"TICKET={ticket} {exc}"
+        )
+
+        return False
 
 
 # ============================================================
