@@ -1,27 +1,24 @@
-# core/auto_trader.py
-
 from core.logger import logger
 
 from core.order_manager import (
-    open_market_position,
-    get_positions,
+    open_market_position
 )
 
 from core.trade_manager import (
     save_trade,
-    get_open_trades,
+    get_open_trades
 )
 
 from config import (
     MIN_CONFIDENCE,
     MAX_OPEN_TRADES,
     DEFAULT_LOT,
+    PAPER_TRADING
 )
 
 
-# ============================================================
-# Execute Trade
-# ============================================================
+XAUUSD_SYMBOL = "XAUUSD"
+
 
 def execute_trade(
     opportunity
@@ -32,22 +29,28 @@ def execute_trade(
         if not opportunity:
 
             logger.info(
-                "NO OPPORTUNITY PROVIDED"
+                "NO OPPORTUNITY"
             )
 
             return None
 
-        # ====================================================
-        # Opportunity Data
-        # ====================================================
+        # ===========================
+        # Data
+        # ===========================
 
-        symbol = opportunity.get(
-            "symbol"
-        )
+        symbol = str(
+            opportunity.get(
+                "symbol",
+                ""
+            )
+        ).upper()
 
-        signal = opportunity.get(
-            "signal"
-        )
+        signal = str(
+            opportunity.get(
+                "signal",
+                ""
+            )
+        ).upper()
 
         confidence = float(
             opportunity.get(
@@ -68,222 +71,160 @@ def execute_trade(
             "sl"
         )
 
-        # Optional lot from opportunity.
-        # If unavailable, use DEFAULT_LOT.
-        lot = opportunity.get(
-            "lot",
-            DEFAULT_LOT
-        )
+        # ===========================
+        # XAUUSD Only
+        # ===========================
 
-        try:
+        if symbol != XAUUSD_SYMBOL:
 
-            lot = float(lot)
-
-        except (TypeError, ValueError):
-
-            logger.error(
-                f"INVALID LOT {lot}"
+            logger.warning(
+                f"TRADE REJECTED "
+                f"ONLY XAUUSD ALLOWED: {symbol}"
             )
 
             return None
 
-        # ====================================================
-        # Basic Validation
-        # ====================================================
-
-        if not symbol:
-
-            logger.error(
-                "TRADE REJECTED - NO SYMBOL"
-            )
-
-            return None
-
-        symbol = str(
-            symbol
-        ).strip()
-
-        signal = str(
-            signal
-        ).upper().strip()
+        # ===========================
+        # Signal
+        # ===========================
 
         if signal not in (
             "BUY",
             "SELL"
         ):
 
-            logger.error(
+            logger.warning(
                 f"INVALID SIGNAL {signal}"
             )
 
             return None
 
-        if entry is None:
-
-            logger.error(
-                f"TRADE REJECTED "
-                f"{symbol} - NO ENTRY"
-            )
-
-            return None
-
-        if tp is None:
-
-            logger.error(
-                f"TRADE REJECTED "
-                f"{symbol} - NO TP"
-            )
-
-            return None
-
-        if sl is None:
-
-            logger.error(
-                f"TRADE REJECTED "
-                f"{symbol} - NO SL"
-            )
-
-            return None
-
-        try:
-
-            entry = float(entry)
-            tp = float(tp)
-            sl = float(sl)
-
-        except (TypeError, ValueError):
-
-            logger.error(
-                f"INVALID PRICE DATA "
-                f"{symbol}"
-            )
-
-            return None
-
-        # ====================================================
+        # ===========================
         # Confidence
-        # ====================================================
-
-        logger.info(
-            f"TRADE CHECK "
-            f"{symbol} "
-            f"SIGNAL={signal} "
-            f"CONFIDENCE={confidence}"
-        )
+        # ===========================
 
         if confidence < MIN_CONFIDENCE:
 
             logger.info(
                 f"TRADE REJECTED "
-                f"{symbol} "
-                f"LOW CONFIDENCE "
-                f"{confidence} < {MIN_CONFIDENCE}"
+                f"LOW CONFIDENCE={confidence}"
             )
 
             return None
 
-        # ====================================================
-        # Open Trades - Database
-        # ====================================================
+        # ===========================
+        # Price Validation
+        # ===========================
+
+        if (
+            entry is None
+            or tp is None
+            or sl is None
+        ):
+
+            logger.error(
+                "ENTRY / TP / SL MISSING"
+            )
+
+            return None
+
+        entry = float(entry)
+        tp = float(tp)
+        sl = float(sl)
+
+        # ===========================
+        # Open Trades
+        # ===========================
 
         open_trades = get_open_trades()
-
-        if open_trades is None:
-
-            open_trades = []
 
         if len(open_trades) >= MAX_OPEN_TRADES:
 
             logger.info(
-                f"MAX OPEN TRADES REACHED "
-                f"{len(open_trades)}/{MAX_OPEN_TRADES}"
+                "MAX OPEN TRADES REACHED"
             )
 
             return None
 
-        # ====================================================
-        # Duplicate Symbol - Database
-        # ====================================================
+        # ===========================
+        # Duplicate XAUUSD
+        # ===========================
 
         for trade in open_trades:
 
-            if trade.get(
-                "symbol"
-            ) == symbol:
+            if str(
+                trade.get(
+                    "symbol",
+                    ""
+                )
+            ).upper() == XAUUSD_SYMBOL:
 
                 logger.info(
-                    f"TRADE REJECTED "
-                    f"{symbol} "
-                    f"ALREADY OPEN IN DATABASE"
+                    "XAUUSD POSITION ALREADY EXISTS"
                 )
 
                 return None
 
-        # ====================================================
-        # Duplicate Symbol - MT5
-        # ====================================================
+        # ===========================
+        # Paper Trading
+        # ===========================
 
-        mt5_positions = get_positions(
-            symbol=symbol
-        )
+        if PAPER_TRADING:
 
-        if mt5_positions:
-
-            logger.info(
-                f"TRADE REJECTED "
-                f"{symbol} "
-                f"ALREADY OPEN IN MT5"
+            logger.warning(
+                "PAPER TRADING ENABLED"
             )
 
-            return None
+            trade = {
 
-        # ====================================================
-        # Trade Approval
-        # ====================================================
+                "ticket": None,
+
+                "symbol": symbol,
+
+                "side": signal,
+
+                "entry": entry,
+
+                "tp": tp,
+
+                "sl": sl,
+
+                "quantity": DEFAULT_LOT,
+
+                "confidence": confidence,
+
+                "status": "PAPER_OPEN"
+
+            }
+
+            trade_id = save_trade(
+                trade
+            )
+
+            if trade_id is not None:
+
+                trade["id"] = trade_id
+
+            logger.info(
+                f"PAPER TRADE "
+                f"{symbol} "
+                f"{signal} "
+                f"ENTRY={entry} "
+                f"SL={sl} "
+                f"TP={tp}"
+            )
+
+            return trade
+
+        # ===========================
+        # Real MT5 Order
+        # ===========================
 
         logger.info(
-            "================================"
+            f"EXECUTING MT5 ORDER "
+            f"{symbol} "
+            f"{signal}"
         )
-
-        logger.info(
-            "TRADE APPROVED"
-        )
-
-        logger.info(
-            f"SYMBOL={symbol}"
-        )
-
-        logger.info(
-            f"SIGNAL={signal}"
-        )
-
-        logger.info(
-            f"CONFIDENCE={confidence}"
-        )
-
-        logger.info(
-            f"ENTRY_SIGNAL={entry}"
-        )
-
-        logger.info(
-            f"SL={sl}"
-        )
-
-        logger.info(
-            f"TP={tp}"
-        )
-
-        logger.info(
-            f"LOT={lot}"
-        )
-
-        logger.info(
-            "================================"
-        )
-
-        # ====================================================
-        # Execute Market Order on MT5
-        # ====================================================
 
         order = open_market_position(
 
@@ -291,7 +232,7 @@ def execute_trade(
 
             side=signal,
 
-            lot=lot,
+            lot=DEFAULT_LOT,
 
             sl=sl,
 
@@ -305,68 +246,22 @@ def execute_trade(
 
             logger.error(
                 f"MT5 ORDER FAILED "
-                f"{symbol} "
-                f"{signal}"
+                f"{symbol}"
             )
 
             return None
 
-        # ====================================================
-        # Order Result
-        # ====================================================
-
-        ticket = order.get(
-            "ticket"
-        )
-
-        deal = order.get(
-            "deal"
-        )
-
-        volume = order.get(
-            "volume",
-            lot
-        )
-
-        executed_price = order.get(
-            "price",
-            entry
-        )
-
-        executed_sl = order.get(
-            "sl",
-            sl
-        )
-
-        executed_tp = order.get(
-            "tp",
-            tp
-        )
-
-        # ====================================================
-        # Validate Ticket
-        # ====================================================
-
-        if ticket is None:
-
-            logger.error(
-                f"MT5 ORDER RETURNED "
-                f"NO TICKET {symbol}"
-            )
-
-            return None
-
-        # ====================================================
+        # ===========================
         # Save Trade
-        # ====================================================
+        # ===========================
 
         trade = {
 
             "ticket":
-                ticket,
+                order.get("ticket"),
 
             "deal":
-                deal,
+                order.get("deal"),
 
             "symbol":
                 symbol,
@@ -375,19 +270,22 @@ def execute_trade(
                 signal,
 
             "entry":
-                executed_price,
+                order.get(
+                    "price",
+                    entry
+                ),
 
             "tp":
-                executed_tp,
+                tp,
 
             "sl":
-                executed_sl,
+                sl,
 
             "quantity":
-                volume,
-
-            "lot":
-                volume,
+                order.get(
+                    "volume",
+                    DEFAULT_LOT
+                ),
 
             "confidence":
                 confidence,
@@ -397,106 +295,24 @@ def execute_trade(
 
         }
 
-        try:
-
-            trade_id = save_trade(
-                trade
-            )
-
-        except Exception as exc:
-
-            logger.exception(
-                f"TRADE DATABASE SAVE ERROR "
-                f"{symbol} {exc}"
-            )
-
-            trade_id = None
-
-        # ====================================================
-        # Database Failure Protection
-        # ====================================================
+        trade_id = save_trade(
+            trade
+        )
 
         if trade_id is None:
 
             logger.error(
-                f"TRADE DATABASE SAVE FAILED "
-                f"{symbol}"
+                "TRADE DATABASE SAVE FAILED"
             )
 
-            # IMPORTANT:
-            # The MT5 position is already open.
-            # We do NOT automatically open another order.
-            #
-            # This position must be reconciled later
-            # by the database/position manager.
-
-            return {
-
-                **trade,
-
-                "database_saved":
-                    False
-
-            }
-
-        # ====================================================
-        # Final Trade Object
-        # ====================================================
+            return None
 
         trade["id"] = trade_id
 
-        trade["database_saved"] = True
-
-        # ====================================================
-        # Success
-        # ====================================================
-
         logger.info(
-            "================================"
-        )
-
-        logger.info(
-            "MT5 TRADE OPENED SUCCESSFULLY"
-        )
-
-        logger.info(
-            f"ID={trade_id}"
-        )
-
-        logger.info(
-            f"TICKET={ticket}"
-        )
-
-        logger.info(
-            f"DEAL={deal}"
-        )
-
-        logger.info(
-            f"SYMBOL={symbol}"
-        )
-
-        logger.info(
-            f"SIDE={signal}"
-        )
-
-        logger.info(
-            f"VOLUME={volume}"
-        )
-
-        logger.info(
-            f"PRICE={executed_price}"
-        )
-
-        logger.info(
-            f"SL={executed_sl}"
-        )
-
-        logger.info(
-            f"TP={executed_tp}"
-        )
-
-        logger.info(
-            "================================"
+            f"MT5 TRADE SAVED "
+            f"ID={trade_id} "
+            f"TICKET={trade.get('ticket')}"
         )
 
         return trade
@@ -508,48 +324,3 @@ def execute_trade(
         )
 
         return None
-
-
-# ============================================================
-# Execute Multiple Opportunities
-# ============================================================
-
-def execute_opportunities(
-    opportunities
-):
-    """
-    Execute a list of opportunities.
-
-    Each opportunity is passed through the same
-    validation and MT5 execution pipeline.
-    """
-
-    results = []
-
-    if not opportunities:
-
-        return results
-
-    try:
-
-        for opportunity in opportunities:
-
-            result = execute_trade(
-                opportunity
-            )
-
-            if result:
-
-                results.append(
-                    result
-                )
-
-        return results
-
-    except Exception as exc:
-
-        logger.exception(
-            f"EXECUTE OPPORTUNITIES ERROR {exc}"
-        )
-
-        return results
