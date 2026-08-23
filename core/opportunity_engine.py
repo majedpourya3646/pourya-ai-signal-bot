@@ -1,7 +1,13 @@
+# core/opportunity_engine.py
+
 from core.logger import logger
 
 from core.market_signal_bridge import (
     analyze_market_symbols
+)
+
+from core.trade_manager import (
+    get_open_trades
 )
 
 from config import (
@@ -9,10 +15,10 @@ from config import (
     MAX_OPEN_TRADES
 )
 
-from core.trade_manager import (
-    get_open_trades
-)
 
+# ============================================================
+# Calculate Opportunity Score
+# ============================================================
 
 def calculate_opportunity_score(item):
 
@@ -26,10 +32,6 @@ def calculate_opportunity_score(item):
                 0
             )
         )
-
-        # ---------------------------
-        # Confidence
-        # ---------------------------
 
         if confidence >= 80:
 
@@ -47,9 +49,9 @@ def calculate_opportunity_score(item):
 
             return 0
 
-        # ---------------------------
+        # ----------------------------------------------------
         # Signal
-        # ---------------------------
+        # ----------------------------------------------------
 
         signal = str(
             item.get(
@@ -58,33 +60,34 @@ def calculate_opportunity_score(item):
             )
         ).upper()
 
-        if signal in (
+        if signal not in (
             "BUY",
             "SELL"
         ):
 
-            score += 20
-
-        else:
-
             return 0
 
-        # ---------------------------
-        # Multi timeframe
-        # ---------------------------
+        score += 20
+
+        # ----------------------------------------------------
+        # Multi Timeframe
+        # ----------------------------------------------------
 
         timeframes = item.get(
             "timeframes",
             {}
         )
 
-        if len(timeframes) >= 3:
+        if isinstance(
+            timeframes,
+            dict
+        ) and len(timeframes) >= 3:
 
             score += 20
 
-        # ---------------------------
+        # ----------------------------------------------------
         # Entry / TP / SL
-        # ---------------------------
+        # ----------------------------------------------------
 
         entry = item.get(
             "entry"
@@ -126,6 +129,10 @@ def calculate_opportunity_score(item):
 
                         score += 20
 
+                    elif rr >= 1.5:
+
+                        score += 10
+
             except (
                 TypeError,
                 ValueError
@@ -135,14 +142,18 @@ def calculate_opportunity_score(item):
 
         return score
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"OPPORTUNITY SCORE ERROR {e}"
+            f"OPPORTUNITY SCORE ERROR {exc}"
         )
 
         return 0
 
+
+# ============================================================
+# Validate Opportunity
+# ============================================================
 
 def validate_opportunity(item):
 
@@ -182,6 +193,10 @@ def validate_opportunity(item):
             "sl"
         )
 
+        # ----------------------------------------------------
+        # Basic
+        # ----------------------------------------------------
+
         if not symbol:
 
             return False
@@ -197,8 +212,8 @@ def validate_opportunity(item):
 
             logger.info(
                 f"REJECTED {symbol} | "
-                f"CONFIDENCE {confidence} < "
-                f"{MIN_CONFIDENCE}"
+                f"CONFIDENCE={confidence} "
+                f"< {MIN_CONFIDENCE}"
             )
 
             return False
@@ -216,13 +231,43 @@ def validate_opportunity(item):
 
             return False
 
-        entry = float(entry)
-        tp = float(tp)
-        sl = float(sl)
+        try:
 
-        # ---------------------------
-        # BUY validation
-        # ---------------------------
+            entry = float(entry)
+            tp = float(tp)
+            sl = float(sl)
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            logger.info(
+                f"REJECTED {symbol} | "
+                "INVALID PRICE DATA"
+            )
+
+            return False
+
+        # ----------------------------------------------------
+        # Positive Prices
+        # ----------------------------------------------------
+
+        if entry <= 0:
+
+            return False
+
+        if tp <= 0:
+
+            return False
+
+        if sl <= 0:
+
+            return False
+
+        # ----------------------------------------------------
+        # BUY
+        # ----------------------------------------------------
 
         if signal == "BUY":
 
@@ -244,11 +289,11 @@ def validate_opportunity(item):
 
                 return False
 
-        # ---------------------------
-        # SELL validation
-        # ---------------------------
+        # ----------------------------------------------------
+        # SELL
+        # ----------------------------------------------------
 
-        if signal == "SELL":
+        elif signal == "SELL":
 
             if tp >= entry:
 
@@ -268,38 +313,119 @@ def validate_opportunity(item):
 
                 return False
 
+        # ----------------------------------------------------
+        # Risk / Reward
+        # ----------------------------------------------------
+
+        risk = abs(
+            entry - sl
+        )
+
+        reward = abs(
+            tp - entry
+        )
+
+        if risk <= 0:
+
+            logger.info(
+                f"REJECTED {symbol} | "
+                "ZERO RISK"
+            )
+
+            return False
+
+        rr = reward / risk
+
+        if rr < 1.5:
+
+            logger.info(
+                f"REJECTED {symbol} | "
+                f"LOW RISK REWARD={rr:.2f}"
+            )
+
+            return False
+
         return True
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"OPPORTUNITY VALIDATION ERROR {e}"
+            f"OPPORTUNITY VALIDATION ERROR {exc}"
         )
 
         return False
 
 
+# ============================================================
+# Check Duplicate Trade
+# ============================================================
+
+def has_open_trade(
+    symbol
+):
+
+    try:
+
+        open_trades = get_open_trades()
+
+        if not open_trades:
+
+            return False
+
+        for trade in open_trades:
+
+            if str(
+                trade.get(
+                    "symbol",
+                    ""
+                )
+            ).upper() == str(
+                symbol
+            ).upper():
+
+                return True
+
+        return False
+
+    except Exception as exc:
+
+        logger.error(
+            f"DUPLICATE TRADE CHECK ERROR {exc}"
+        )
+
+        return True
+
+
+# ============================================================
+# Scan Opportunities
+# ============================================================
+
 def scan_opportunities():
 
     try:
 
-        # ---------------------------
-        # Max open trades
-        # ---------------------------
+        # ----------------------------------------------------
+        # Open Trades
+        # ----------------------------------------------------
 
         open_trades = get_open_trades()
+
+        if open_trades is None:
+
+            open_trades = []
 
         if len(open_trades) >= MAX_OPEN_TRADES:
 
             logger.info(
-                "MAX OPEN TRADES REACHED"
+                f"MAX OPEN TRADES REACHED "
+                f"{len(open_trades)}/{MAX_OPEN_TRADES}"
             )
 
             return []
 
-        # ---------------------------
-        # Market analysis
-        # ---------------------------
+        # ----------------------------------------------------
+        # Market Analysis
+        # ----------------------------------------------------
 
         markets = analyze_market_symbols()
 
@@ -313,9 +439,9 @@ def scan_opportunities():
 
         opportunities = []
 
-        # ---------------------------
-        # Analyze markets
-        # ---------------------------
+        # ----------------------------------------------------
+        # Analyze Markets
+        # ----------------------------------------------------
 
         for item in markets:
 
@@ -326,14 +452,16 @@ def scan_opportunities():
                     "UNKNOWN"
                 )
 
+                signal = str(
+                    item.get(
+                        "signal",
+                        "NONE"
+                    )
+                ).upper()
+
                 confidence = item.get(
                     "confidence",
                     0
-                )
-
-                signal = item.get(
-                    "signal",
-                    "NONE"
                 )
 
                 logger.info(
@@ -342,9 +470,24 @@ def scan_opportunities():
                     f"CONFIDENCE={confidence}"
                 )
 
-                # -------------------
+                # ------------------------------------------------
+                # Duplicate protection
+                # ------------------------------------------------
+
+                if has_open_trade(
+                    symbol
+                ):
+
+                    logger.info(
+                        f"SKIP {symbol} | "
+                        "TRADE ALREADY OPEN"
+                    )
+
+                    continue
+
+                # ------------------------------------------------
                 # Validation
-                # -------------------
+                # ------------------------------------------------
 
                 if not validate_opportunity(
                     item
@@ -352,9 +495,9 @@ def scan_opportunities():
 
                     continue
 
-                # -------------------
+                # ------------------------------------------------
                 # Score
-                # -------------------
+                # ------------------------------------------------
 
                 score = calculate_opportunity_score(
                     item
@@ -368,43 +511,106 @@ def scan_opportunities():
                     "opportunity_score"
                 ] = score
 
+                # ------------------------------------------------
+                # Risk / Reward
+                # ------------------------------------------------
+
+                try:
+
+                    entry = float(
+                        item.get(
+                            "entry"
+                        )
+                    )
+
+                    tp = float(
+                        item.get(
+                            "tp"
+                        )
+                    )
+
+                    sl = float(
+                        item.get(
+                            "sl"
+                        )
+                    )
+
+                    risk = abs(
+                        entry - sl
+                    )
+
+                    reward = abs(
+                        tp - entry
+                    )
+
+                    item[
+                        "risk_reward"
+                    ] = (
+                        reward / risk
+                        if risk > 0
+                        else 0
+                    )
+
+                except Exception:
+
+                    item[
+                        "risk_reward"
+                    ] = 0
+
                 logger.info(
-                    f"OPPORTUNITY {symbol} "
-                    f"SCORE={score}"
+                    f"OPPORTUNITY {symbol} | "
+                    f"SIGNAL={signal} | "
+                    f"CONFIDENCE={confidence} | "
+                    f"SCORE={score} | "
+                    f"RR={item.get('risk_reward')}"
                 )
 
                 opportunities.append(
                     item
                 )
 
-            except Exception as e:
+            except Exception as exc:
 
                 logger.exception(
-                    f"OPPORTUNITY ITEM ERROR {e}"
+                    f"OPPORTUNITY ITEM ERROR {exc}"
                 )
 
-        # ---------------------------
+        # ----------------------------------------------------
         # Sort
-        # ---------------------------
+        # ----------------------------------------------------
 
         opportunities.sort(
-            key=lambda x: x.get(
-                "opportunity_score",
-                0
+            key=lambda x: (
+                x.get(
+                    "opportunity_score",
+                    0
+                ),
+                x.get(
+                    "confidence",
+                    0
+                ),
+                x.get(
+                    "risk_reward",
+                    0
+                )
             ),
             reverse=True
         )
 
         return opportunities
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"SCAN OPPORTUNITIES ERROR {e}"
+            f"SCAN OPPORTUNITIES ERROR {exc}"
         )
 
         return []
 
+
+# ============================================================
+# Get Best Opportunity
+# ============================================================
 
 def get_best_opportunity():
 
@@ -423,26 +629,29 @@ def get_best_opportunity():
         best = opportunities[0]
 
         logger.info(
-            f"BEST OPPORTUNITY "
-            f"{best.get('symbol')} "
-            f"SCORE={best.get('opportunity_score')}"
+            f"BEST OPPORTUNITY | "
+            f"{best.get('symbol')} | "
+            f"SIGNAL={best.get('signal')} | "
+            f"CONFIDENCE={best.get('confidence')} | "
+            f"SCORE={best.get('opportunity_score')} | "
+            f"RR={best.get('risk_reward')}"
         )
 
         return best
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"BEST OPPORTUNITY ERROR {e}"
+            f"BEST OPPORTUNITY ERROR {exc}"
         )
 
         return None
 
 
-def find_best_opportunity():
+# ============================================================
+# Compatibility Wrapper
+# ============================================================
 
-    """
-    Compatibility wrapper for trading_loop.py.
-    """
+def find_best_opportunity():
 
     return get_best_opportunity()
