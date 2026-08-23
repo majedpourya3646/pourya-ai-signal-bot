@@ -2,6 +2,10 @@
 
 from core.logger import logger
 
+from core.xauusd_engine import (
+    get_xauusd_opportunity
+)
+
 from core.auto_trader import (
     execute_trade
 )
@@ -10,70 +14,11 @@ from core.position_manager import (
     monitor_positions
 )
 
-from core.opportunity_engine import (
-    get_best_opportunity
-)
-
-from core.mt5_connector import (
-    initialize_mt5,
-    is_connected,
-    shutdown_mt5
-)
-
-
-# ============================================================
-# Trading Configuration
-# ============================================================
 
 TRADING_ENABLED = True
 
-MT5_READY = False
 
-
-# ============================================================
-# Initialize Trading System
-# ============================================================
-
-def initialize_trading():
-
-    global MT5_READY
-
-    try:
-
-        if not initialize_mt5():
-
-            MT5_READY = False
-
-            logger.error(
-                "TRADING SYSTEM INITIALIZATION FAILED"
-            )
-
-            return False
-
-        MT5_READY = True
-
-        logger.info(
-            "TRADING SYSTEM READY"
-        )
-
-        return True
-
-    except Exception as exc:
-
-        MT5_READY = False
-
-        logger.exception(
-            f"TRADING INITIALIZATION ERROR {exc}"
-        )
-
-        return False
-
-
-# ============================================================
-# Trading Cycle
-# ============================================================
-
-def trading_cycle():
+def run_trading_cycle():
 
     try:
 
@@ -85,93 +30,44 @@ def trading_cycle():
 
             return None
 
-        # ----------------------------------------------------
-        # MT5 Connection
-        # ----------------------------------------------------
+        logger.info(
+            "XAUUSD TRADING CYCLE START"
+        )
 
-        if not is_connected():
+        # ===========================
+        # Monitor Positions
+        # ===========================
 
-            logger.warning(
-                "MT5 NOT CONNECTED - RECONNECTING"
+        positions = monitor_positions()
+
+        if positions:
+
+            logger.info(
+                f"OPEN POSITIONS: {len(positions)}"
             )
 
-            if not initialize_trading():
-
-                logger.error(
-                    "TRADING CYCLE STOPPED - MT5 UNAVAILABLE"
-                )
-
-                return None
-
-        # ----------------------------------------------------
-        # Start
-        # ----------------------------------------------------
-
-        logger.info(
-            "================================"
-        )
-
-        logger.info(
-            "MT5 TRADING CYCLE START"
-        )
-
-        logger.info(
-            "================================"
-        )
-
-        # ----------------------------------------------------
-        # Monitor Existing Positions
-        # ----------------------------------------------------
-
-        try:
-
-            position_result = monitor_positions()
-
-            if position_result:
-
-                logger.info(
-                    f"POSITION UPDATE "
-                    f"{position_result}"
-                )
-
-        except Exception as exc:
-
-            logger.exception(
-                f"POSITION MONITOR ERROR {exc}"
-            )
-
-        # ----------------------------------------------------
+        # ===========================
         # Find Opportunity
-        # ----------------------------------------------------
+        # ===========================
 
-        try:
-
-            opportunity = get_best_opportunity()
-
-        except Exception as exc:
-
-            logger.exception(
-                f"OPPORTUNITY ENGINE ERROR {exc}"
-            )
-
-            return None
+        opportunity = get_xauusd_opportunity()
 
         if not opportunity:
 
             logger.info(
-                "NO VALID OPPORTUNITY"
+                "NO XAUUSD OPPORTUNITY"
             )
 
             return None
 
         logger.info(
-            f"OPPORTUNITY FOUND "
+            f"XAUUSD OPPORTUNITY "
             f"{opportunity}"
         )
 
-        # ----------------------------------------------------
-        # Execute Trade
-        # ----------------------------------------------------
+        # ===========================
+        # Execute
+        # ===========================
 
         trade = execute_trade(
             opportunity
@@ -180,14 +76,14 @@ def trading_cycle():
         if trade:
 
             logger.info(
-                f"MT5 TRADE EXECUTED "
+                f"XAUUSD TRADE EXECUTED "
                 f"{trade}"
             )
 
         else:
 
             logger.info(
-                "TRADE NOT EXECUTED"
+                "XAUUSD TRADE NOT EXECUTED"
             )
 
         return trade
@@ -201,9 +97,10 @@ def trading_cycle():
         return None
 
 
-# ============================================================
-# Enable Trading
-# ============================================================
+def trading_cycle():
+
+    return run_trading_cycle()
+
 
 def enable_trading():
 
@@ -218,84 +115,21 @@ def enable_trading():
     return True
 
 
-# ============================================================
-# Disable Trading
-# ============================================================
-
 def disable_trading():
 
     global TRADING_ENABLED
 
     TRADING_ENABLED = False
 
-    logger.warning(
+    logger.info(
         "TRADING DISABLED"
     )
 
     return True
 
 
-# ============================================================
-# Trading Status
-# ============================================================
-
 def trading_status():
 
-    try:
-
-        return {
-
-            "enabled":
-                TRADING_ENABLED,
-
-            "mt5_ready":
-                MT5_READY,
-
-            "mt5_connected":
-                is_connected()
-
-        }
-
-    except Exception:
-
-        return {
-
-            "enabled":
-                TRADING_ENABLED,
-
-            "mt5_ready":
-                False,
-
-            "mt5_connected":
-                False
-
-        }
-
-
-# ============================================================
-# Shutdown Trading System
-# ============================================================
-
-def shutdown_trading():
-
-    global MT5_READY
-
-    try:
-
-        shutdown_mt5()
-
-        MT5_READY = False
-
-        logger.info(
-            "TRADING SYSTEM SHUTDOWN"
-        )
-
-        return True
-
-    except Exception as exc:
-
-        logger.exception(
-            f"TRADING SHUTDOWN ERROR {exc}"
-        )
-
-        return False
+    return {
+        "enabled": TRADING_ENABLED
+    }
