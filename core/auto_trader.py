@@ -17,7 +17,7 @@ from config import (
 )
 
 
-XAUUSD_SYMBOL = "XAUUSD"
+XAUUSD_SYMBOL = "XAUUSD.st"
 
 
 def execute_trade(
