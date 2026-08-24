@@ -35,10 +35,6 @@ def initialize_system():
         "SYSTEM INITIALIZATION STARTED"
     )
 
-    # ===========================
-    # Database
-    # ===========================
-
     database_status = initialize_database()
 
     if not database_status:
@@ -52,10 +48,6 @@ def initialize_system():
     logger.info(
         "DATABASE INITIALIZED"
     )
-
-    # ===========================
-    # MT5
-    # ===========================
 
     mt5_status = initialize_mt5()
 
@@ -80,10 +72,6 @@ def start_services():
         "STARTING SERVICES"
     )
 
-    # ===========================
-    # Trading Loop
-    # ===========================
-
     trading_status = start_trading_loop()
 
     if not trading_status:
@@ -94,10 +82,6 @@ def start_services():
 
         return False
 
-    # ===========================
-    # Position Monitor
-    # ===========================
-
     position_status = start_position_monitor()
 
     if not position_status:
@@ -107,11 +91,8 @@ def start_services():
         )
 
         try:
-
             stop_trading_loop()
-
         except Exception as e:
-
             logger.exception(
                 f"TRADING LOOP STOP ERROR {e}"
             )
@@ -136,11 +117,8 @@ def stop_app():
         )
 
         try:
-
             shutdown_mt5()
-
         except Exception as e:
-
             logger.exception(
                 f"MT5 SHUTDOWN ERROR {e}"
             )
@@ -153,10 +131,6 @@ def stop_app():
 
     RUNNING = False
 
-    # ===========================
-    # Stop Trading
-    # ===========================
-
     try:
 
         stop_trading_loop()
@@ -167,10 +141,6 @@ def stop_app():
             f"TRADING LOOP STOP ERROR {e}"
         )
 
-    # ===========================
-    # Stop Position Monitor
-    # ===========================
-
     try:
 
         stop_position_monitor()
@@ -180,10 +150,6 @@ def stop_app():
         logger.exception(
             f"POSITION MONITOR STOP ERROR {e}"
         )
-
-    # ===========================
-    # Shutdown MT5
-    # ===========================
 
     try:
 
@@ -210,10 +176,6 @@ def run():
         "APPLICATION STARTING"
     )
 
-    # ===========================
-    # Initialize System
-    # ===========================
-
     if not initialize_system():
 
         logger.error(
@@ -222,10 +184,6 @@ def run():
 
         return False
 
-    # ===========================
-    # Start Services
-    # ===========================
-
     if not start_services():
 
         logger.error(
@@ -233,11 +191,8 @@ def run():
         )
 
         try:
-
             shutdown_mt5()
-
         except Exception as e:
-
             logger.exception(
                 f"MT5 SHUTDOWN ERROR {e}"
             )
@@ -245,10 +200,6 @@ def run():
         return False
 
     RUNNING = True
-
-    # ===========================
-    # Telegram Notification
-    # ===========================
 
     try:
 
@@ -278,17 +229,11 @@ Version: 2.1.0-MT5
         "POURYA TRADER AI RUNNING"
     )
 
-    # ===========================
-    # Main Process
-    # ===========================
-
     try:
 
         while RUNNING:
 
-            time.sleep(
-                1
-            )
+            time.sleep(1)
 
     except KeyboardInterrupt:
 
