@@ -11,8 +11,8 @@ from core.mt5_connector import (
     shutdown_mt5
 )
 
-from core.telegram import (
-    send_message
+from core.telegram_notifier import (
+    notify_system
 )
 
 from core.position_monitor import (
@@ -20,7 +20,7 @@ from core.position_monitor import (
     stop_position_monitor
 )
 
-from scheduler.trading_loop import (
+from core.trading_loop import (
     start_trading_loop,
     stop_trading_loop
 )
@@ -80,6 +80,10 @@ def start_services():
         "STARTING SERVICES"
     )
 
+    # ===========================
+    # Trading Loop
+    # ===========================
+
     trading_status = start_trading_loop()
 
     if not trading_status:
@@ -90,6 +94,10 @@ def start_services():
 
         return False
 
+    # ===========================
+    # Position Monitor
+    # ===========================
+
     position_status = start_position_monitor()
 
     if not position_status:
@@ -98,7 +106,15 @@ def start_services():
             "POSITION MONITOR FAILED"
         )
 
-        stop_trading_loop()
+        try:
+
+            stop_trading_loop()
+
+        except Exception as e:
+
+            logger.exception(
+                f"TRADING LOOP STOP ERROR {e}"
+            )
 
         return False
 
@@ -119,7 +135,15 @@ def stop_app():
             "APPLICATION ALREADY STOPPED"
         )
 
-        shutdown_mt5()
+        try:
+
+            shutdown_mt5()
+
+        except Exception as e:
+
+            logger.exception(
+                f"MT5 SHUTDOWN ERROR {e}"
+            )
 
         return True
 
@@ -187,7 +211,7 @@ def run():
     )
 
     # ===========================
-    # Initialize
+    # Initialize System
     # ===========================
 
     if not initialize_system():
@@ -208,19 +232,27 @@ def run():
             "SERVICE START FAILED"
         )
 
-        shutdown_mt5()
+        try:
+
+            shutdown_mt5()
+
+        except Exception as e:
+
+            logger.exception(
+                f"MT5 SHUTDOWN ERROR {e}"
+            )
 
         return False
 
     RUNNING = True
 
     # ===========================
-    # Telegram
+    # Telegram Notification
     # ===========================
 
     try:
 
-        send_message(
+        notify_system(
             """
 🤖 Pourya Trader AI
 
@@ -230,6 +262,8 @@ def run():
 ✅ Position Monitor Active
 
 Broker: MT5
+Symbol: XAUUSD
+Timeframes: M15 / H1 / H4
 Version: 2.1.0-MT5
 """
         )
