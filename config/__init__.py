@@ -114,7 +114,7 @@ INITIAL_BALANCE = 1000.0
 # ==========================================
 
 SYMBOLS = [
-    "XAUUSD"
+    "XAUUSD.st"
 ]
 
 TIMEFRAME = "M15"
