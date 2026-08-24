@@ -16,7 +16,7 @@ from config import (
 # Configuration
 # ============================================================
 
-XAUUSD_SYMBOL = "XAUUSD"
+XAUUSD_SYMBOL = "XAUUSD.st"
 
 REQUIRED_TIMEFRAMES = (
     "M15",
