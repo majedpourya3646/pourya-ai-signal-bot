@@ -2,8 +2,8 @@
 
 from core.logger import logger
 
-from core.xauusd_engine import (
-    get_xauusd_opportunity
+from core.opportunity_engine import (
+    get_best_opportunity
 )
 
 from core.auto_trader import (
@@ -15,8 +15,16 @@ from core.position_manager import (
 )
 
 
+# ============================================================
+# Trading Configuration
+# ============================================================
+
 TRADING_ENABLED = True
 
+
+# ============================================================
+# Run Trading Cycle
+# ============================================================
 
 def run_trading_cycle():
 
@@ -31,53 +39,182 @@ def run_trading_cycle():
             return None
 
         logger.info(
-            "XAUUSD TRADING CYCLE START"
+            "================================"
         )
 
-        # ===========================
-        # Monitor Positions
-        # ===========================
+        logger.info(
+            "XAUUSD AUTO TRADING CYCLE START"
+        )
 
-        positions = monitor_positions()
+        logger.info(
+            "================================"
+        )
 
-        if positions:
+        # ====================================================
+        # Monitor Existing Positions
+        # ====================================================
 
-            logger.info(
-                f"OPEN POSITIONS: {len(positions)}"
+        try:
+
+            positions = monitor_positions()
+
+            if positions:
+
+                logger.info(
+                    f"OPEN POSITIONS: "
+                    f"{len(positions)}"
+                )
+
+            else:
+
+                logger.info(
+                    "NO OPEN POSITIONS"
+                )
+
+        except Exception as exc:
+
+            logger.exception(
+                f"POSITION MONITOR ERROR {exc}"
             )
 
-        # ===========================
-        # Find Opportunity
-        # ===========================
+            # Fail-safe:
+            # If position monitoring fails,
+            # do not open a new trade.
+            return None
 
-        opportunity = get_xauusd_opportunity()
+        # ====================================================
+        # Find Best Opportunity
+        # ====================================================
+
+        opportunity = get_best_opportunity()
 
         if not opportunity:
 
             logger.info(
-                "NO XAUUSD OPPORTUNITY"
+                "NO VALID XAUUSD OPPORTUNITY"
             )
 
             return None
 
+        # ====================================================
+        # Opportunity Information
+        # ====================================================
+
         logger.info(
-            f"XAUUSD OPPORTUNITY "
-            f"{opportunity}"
+            "================================"
         )
 
-        # ===========================
-        # Execute
-        # ===========================
+        logger.info(
+            "VALID XAUUSD OPPORTUNITY FOUND"
+        )
+
+        logger.info(
+            f"SYMBOL="
+            f"{opportunity.get('symbol')}"
+        )
+
+        logger.info(
+            f"SIGNAL="
+            f"{opportunity.get('signal')}"
+        )
+
+        logger.info(
+            f"CONFIDENCE="
+            f"{opportunity.get('confidence')}"
+        )
+
+        logger.info(
+            f"ENTRY="
+            f"{opportunity.get('entry')}"
+        )
+
+        logger.info(
+            f"SL="
+            f"{opportunity.get('sl')}"
+        )
+
+        logger.info(
+            f"TP="
+            f"{opportunity.get('tp')}"
+        )
+
+        logger.info(
+            f"RR="
+            f"{opportunity.get('risk_reward')}"
+        )
+
+        logger.info(
+            f"SCORE="
+            f"{opportunity.get('opportunity_score')}"
+        )
+
+        logger.info(
+            "================================"
+        )
+
+        # ====================================================
+        # Execute Trade
+        # ====================================================
+
+        logger.info(
+            "SENDING OPPORTUNITY TO AUTO TRADER"
+        )
 
         trade = execute_trade(
             opportunity
         )
 
+        # ====================================================
+        # Trade Result
+        # ====================================================
+
         if trade:
 
             logger.info(
-                f"XAUUSD TRADE EXECUTED "
-                f"{trade}"
+                "================================"
+            )
+
+            logger.info(
+                "XAUUSD TRADE EXECUTED"
+            )
+
+            logger.info(
+                f"ID="
+                f"{trade.get('id')}"
+            )
+
+            logger.info(
+                f"TICKET="
+                f"{trade.get('ticket')}"
+            )
+
+            logger.info(
+                f"SIDE="
+                f"{trade.get('side')}"
+            )
+
+            logger.info(
+                f"ENTRY="
+                f"{trade.get('entry')}"
+            )
+
+            logger.info(
+                f"SL="
+                f"{trade.get('sl')}"
+            )
+
+            logger.info(
+                f"TP="
+                f"{trade.get('tp')}"
+            )
+
+            logger.info(
+                f"STATUS="
+                f"{trade.get('status')}"
+            )
+
+            logger.info(
+                "================================"
             )
 
         else:
@@ -97,10 +234,18 @@ def run_trading_cycle():
         return None
 
 
+# ============================================================
+# Compatibility Wrapper
+# ============================================================
+
 def trading_cycle():
 
     return run_trading_cycle()
 
+
+# ============================================================
+# Enable Trading
+# ============================================================
 
 def enable_trading():
 
@@ -115,6 +260,10 @@ def enable_trading():
     return True
 
 
+# ============================================================
+# Disable Trading
+# ============================================================
+
 def disable_trading():
 
     global TRADING_ENABLED
@@ -128,8 +277,15 @@ def disable_trading():
     return True
 
 
+# ============================================================
+# Trading Status
+# ============================================================
+
 def trading_status():
 
     return {
-        "enabled": TRADING_ENABLED
+
+        "enabled":
+            TRADING_ENABLED
+
     }
