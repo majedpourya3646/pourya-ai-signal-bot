@@ -10,10 +10,22 @@ from core.trade_manager import (
     get_open_trades
 )
 
+from core.order_manager import (
+    get_position_count,
+    has_open_position
+)
+
 from config import (
     MIN_CONFIDENCE,
     MAX_OPEN_TRADES
 )
+
+
+# ============================================================
+# Configuration
+# ============================================================
+
+XAUUSD_SYMBOL = "XAUUSD.st"
 
 
 # ============================================================
@@ -32,6 +44,10 @@ def calculate_opportunity_score(item):
                 0
             )
         )
+
+        # ----------------------------------------------------
+        # Confidence
+        # ----------------------------------------------------
 
         if confidence >= 80:
 
@@ -58,7 +74,7 @@ def calculate_opportunity_score(item):
                 "signal",
                 ""
             )
-        ).upper()
+        ).upper().strip()
 
         if signal not in (
             "BUY",
@@ -78,10 +94,10 @@ def calculate_opportunity_score(item):
             {}
         )
 
-        if isinstance(
-            timeframes,
-            dict
-        ) and len(timeframes) >= 3:
+        if (
+            isinstance(timeframes, dict)
+            and len(timeframes) >= 3
+        ):
 
             score += 20
 
@@ -163,16 +179,19 @@ def validate_opportunity(item):
 
             return False
 
-        symbol = item.get(
-            "symbol"
-        )
+        symbol = str(
+            item.get(
+                "symbol",
+                ""
+            )
+        ).upper().strip()
 
         signal = str(
             item.get(
                 "signal",
                 ""
             )
-        ).upper()
+        ).upper().strip()
 
         confidence = float(
             item.get(
@@ -194,12 +213,21 @@ def validate_opportunity(item):
         )
 
         # ----------------------------------------------------
-        # Basic
+        # Symbol
         # ----------------------------------------------------
 
-        if not symbol:
+        if symbol != XAUUSD_SYMBOL:
+
+            logger.info(
+                f"REJECTED {symbol} | "
+                f"ONLY {XAUUSD_SYMBOL}"
+            )
 
             return False
+
+        # ----------------------------------------------------
+        # Signal
+        # ----------------------------------------------------
 
         if signal not in (
             "BUY",
@@ -207,6 +235,10 @@ def validate_opportunity(item):
         ):
 
             return False
+
+        # ----------------------------------------------------
+        # Confidence
+        # ----------------------------------------------------
 
         if confidence < MIN_CONFIDENCE:
 
@@ -217,6 +249,10 @@ def validate_opportunity(item):
             )
 
             return False
+
+        # ----------------------------------------------------
+        # Prices
+        # ----------------------------------------------------
 
         if (
             entry is None
@@ -250,18 +286,14 @@ def validate_opportunity(item):
             return False
 
         # ----------------------------------------------------
-        # Positive Prices
+        # Positive prices
         # ----------------------------------------------------
 
-        if entry <= 0:
-
-            return False
-
-        if tp <= 0:
-
-            return False
-
-        if sl <= 0:
+        if (
+            entry <= 0
+            or tp <= 0
+            or sl <= 0
+        ):
 
             return False
 
@@ -293,7 +325,7 @@ def validate_opportunity(item):
         # SELL
         # ----------------------------------------------------
 
-        elif signal == "SELL":
+        if signal == "SELL":
 
             if tp >= entry:
 
@@ -366,33 +398,65 @@ def has_open_trade(
 
     try:
 
+        symbol = str(
+            symbol
+        ).upper().strip()
+
+        # ----------------------------------------------------
+        # Database
+        # ----------------------------------------------------
+
         open_trades = get_open_trades()
 
-        if not open_trades:
+        if open_trades:
 
-            return False
+            for trade in open_trades:
 
-        for trade in open_trades:
+                trade_symbol = str(
+                    trade.get(
+                        "symbol",
+                        ""
+                    )
+                ).upper().strip()
 
-            if str(
-                trade.get(
-                    "symbol",
-                    ""
-                )
-            ).upper() == str(
-                symbol
-            ).upper():
+                status = str(
+                    trade.get(
+                        "status",
+                        ""
+                    )
+                ).upper().strip()
 
-                return True
+                if (
+                    trade_symbol == symbol
+                    and status in (
+                        "OPEN",
+                        "PAPER_OPEN",
+                        "ACTIVE",
+                    )
+                ):
+
+                    return True
+
+        # ----------------------------------------------------
+        # MT5
+        # ----------------------------------------------------
+
+        if has_open_position(
+            symbol
+        ):
+
+            return True
 
         return False
 
     except Exception as exc:
 
         logger.error(
-            f"DUPLICATE TRADE CHECK ERROR {exc}"
+            f"DUPLICATE TRADE CHECK ERROR "
+            f"{symbol} {exc}"
         )
 
+        # Fail-safe
         return True
 
 
@@ -405,7 +469,33 @@ def scan_opportunities():
     try:
 
         # ----------------------------------------------------
-        # Open Trades
+        # Position limit
+        # ----------------------------------------------------
+
+        try:
+
+            position_count = get_position_count()
+
+            if position_count >= MAX_OPEN_TRADES:
+
+                logger.info(
+                    f"MAX MT5 POSITIONS REACHED "
+                    f"{position_count}/"
+                    f"{MAX_OPEN_TRADES}"
+                )
+
+                return []
+
+        except Exception as exc:
+
+            logger.error(
+                f"POSITION COUNT ERROR {exc}"
+            )
+
+            return []
+
+        # ----------------------------------------------------
+        # Database open trades
         # ----------------------------------------------------
 
         open_trades = get_open_trades()
@@ -418,7 +508,8 @@ def scan_opportunities():
 
             logger.info(
                 f"MAX OPEN TRADES REACHED "
-                f"{len(open_trades)}/{MAX_OPEN_TRADES}"
+                f"{len(open_trades)}/"
+                f"{MAX_OPEN_TRADES}"
             )
 
             return []
@@ -440,24 +531,30 @@ def scan_opportunities():
         opportunities = []
 
         # ----------------------------------------------------
-        # Analyze Markets
+        # Analyze only XAUUSD
         # ----------------------------------------------------
 
         for item in markets:
 
             try:
 
-                symbol = item.get(
-                    "symbol",
-                    "UNKNOWN"
-                )
+                symbol = str(
+                    item.get(
+                        "symbol",
+                        ""
+                    )
+                ).upper().strip()
+
+                if symbol != XAUUSD_SYMBOL:
+
+                    continue
 
                 signal = str(
                     item.get(
                         "signal",
                         "NONE"
                     )
-                ).upper()
+                ).upper().strip()
 
                 confidence = item.get(
                     "confidence",
@@ -629,12 +726,47 @@ def get_best_opportunity():
         best = opportunities[0]
 
         logger.info(
-            f"BEST OPPORTUNITY | "
-            f"{best.get('symbol')} | "
-            f"SIGNAL={best.get('signal')} | "
-            f"CONFIDENCE={best.get('confidence')} | "
-            f"SCORE={best.get('opportunity_score')} | "
+            "================================"
+        )
+
+        logger.info(
+            "BEST OPPORTUNITY"
+        )
+
+        logger.info(
+            f"SYMBOL={best.get('symbol')}"
+        )
+
+        logger.info(
+            f"SIGNAL={best.get('signal')}"
+        )
+
+        logger.info(
+            f"CONFIDENCE={best.get('confidence')}"
+        )
+
+        logger.info(
+            f"SCORE={best.get('opportunity_score')}"
+        )
+
+        logger.info(
             f"RR={best.get('risk_reward')}"
+        )
+
+        logger.info(
+            f"ENTRY={best.get('entry')}"
+        )
+
+        logger.info(
+            f"SL={best.get('sl')}"
+        )
+
+        logger.info(
+            f"TP={best.get('tp')}"
+        )
+
+        logger.info(
+            "================================"
         )
 
         return best
