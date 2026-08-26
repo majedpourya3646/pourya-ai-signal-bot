@@ -19,6 +19,11 @@ from core.position_manager import (
     close_position as mt5_close_position
 )
 
+from config import (
+    DEFAULT_LOT,
+    PAPER_TRADING,
+)
+
 
 # ============================================================
 # Configuration
@@ -26,7 +31,7 @@ from core.position_manager import (
 
 MAGIC_NUMBER = 20260731
 
-MAX_OPEN_POSITIONS = 3
+MAX_OPEN_POSITIONS = 1
 
 DEFAULT_DEVIATION = 20
 
@@ -42,9 +47,7 @@ def _normalize_side(
     if side is None:
         return None
 
-    side = str(
-        side
-    ).upper().strip()
+    side = str(side).upper().strip()
 
     if side in (
         "BUY",
@@ -127,9 +130,7 @@ def get_position_count() -> int:
 
         positions = get_open_positions()
 
-        return len(
-            positions
-        )
+        return len(positions)
 
     except Exception as exc:
 
@@ -154,9 +155,7 @@ def has_open_position(
             symbol=symbol
         )
 
-        return len(
-            positions
-        ) > 0
+        return len(positions) > 0
 
     except Exception as exc:
 
@@ -165,6 +164,9 @@ def has_open_position(
             f"{symbol} {exc}"
         )
 
+        # Fail-safe:
+        # if we cannot verify existing positions,
+        # do NOT allow a new trade.
         return True
 
 
@@ -248,6 +250,13 @@ def validate_prices(
 
         if sl <= 0 or tp <= 0:
 
+            logger.error(
+                f"INVALID SL/TP VALUES "
+                f"{symbol} "
+                f"SL={sl} "
+                f"TP={tp}"
+            )
+
             return False
 
         if side == "BUY":
@@ -329,9 +338,7 @@ def validate_volume(
 
     try:
 
-        lot = float(
-            lot
-        )
+        lot = float(lot)
 
         if lot <= 0:
 
@@ -486,6 +493,10 @@ def open_market_position(
 
         if side is None:
 
+            logger.error(
+                f"INVALID SIDE {side}"
+            )
+
             return None
 
         if not validate_order(
@@ -526,6 +537,31 @@ def open_market_position(
 
             return None
 
+        tick = get_symbol_tick(
+            symbol
+        )
+
+        if tick is None:
+
+            return None
+
+        if side == "BUY":
+
+            expected_price = float(
+                tick.ask
+            )
+
+        else:
+
+            expected_price = float(
+                tick.bid
+            )
+
+        expected_price = normalize_price(
+            symbol,
+            expected_price
+        )
+
         logger.info(
             "================================"
         )
@@ -537,6 +573,7 @@ def open_market_position(
 
         logger.info(
             f"LOT={volume} "
+            f"PRICE={expected_price} "
             f"SL={sl} "
             f"TP={tp}"
         )
@@ -548,8 +585,65 @@ def open_market_position(
             )
 
         logger.info(
+            f"PAPER_TRADING={PAPER_TRADING}"
+        )
+
+        logger.info(
             "================================"
         )
+
+        # ====================================================
+        # PAPER TRADING SAFETY
+        # ====================================================
+
+        if PAPER_TRADING:
+
+            logger.warning(
+                "PAPER TRADING ACTIVE - "
+                "NO REAL ORDER WILL BE SENT"
+            )
+
+            return {
+
+                "success": True,
+
+                "paper_trading": True,
+
+                "symbol":
+                    symbol,
+
+                "side":
+                    side,
+
+                "volume":
+                    volume,
+
+                "price":
+                    expected_price,
+
+                "sl":
+                    sl,
+
+                "tp":
+                    tp,
+
+                "ticket":
+                    None,
+
+                "deal":
+                    None,
+
+                "confidence":
+                    confidence,
+
+                "status":
+                    "PAPER_OPEN"
+
+            }
+
+        # ====================================================
+        # REAL MT5 ORDER
+        # ====================================================
 
         result = send_market_order(
 
@@ -594,6 +688,8 @@ def open_market_position(
         response = {
 
             "success": True,
+
+            "paper_trading": False,
 
             "symbol":
                 symbol,
@@ -664,13 +760,12 @@ def create_order(
     """
     Backward-compatible wrapper.
 
-    The MT5 market price is determined by the broker.
-    Therefore entry is used for validation/logging only.
+    MT5 determines the actual market entry price.
+    The supplied entry is therefore used for
+    logging/compatibility only.
     """
 
     try:
-
-        from config import DEFAULT_LOT
 
         if lot is None:
 
@@ -721,6 +816,16 @@ def close_position(
 
             return False
 
+        # Paper trades do not have real tickets.
+        if PAPER_TRADING:
+
+            logger.info(
+                f"PAPER POSITION CLOSED "
+                f"TICKET={ticket}"
+            )
+
+            return True
+
         result = mt5_close_position(
             ticket
         )
@@ -768,7 +873,8 @@ def get_positions(
     except Exception as exc:
 
         logger.error(
-            f"GET POSITIONS ERROR {exc}"
+            f"GET POSITIONS ERROR "
+            f"{exc}"
         )
 
         return []
