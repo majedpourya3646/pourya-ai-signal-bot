@@ -1,0 +1,34 @@
+name: Runner Git Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  git-test:
+    runs-on: self-hosted
+
+    steps:
+      - name: Check Git
+        shell: powershell
+        run: |
+          git --version
+
+      - name: Clone develop branch
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "https://x-access-token:$env:GH_TOKEN@github.com/${{ github.repository }}.git"
+
+          if (Test-Path "test-repo") {
+              Remove-Item "test-repo" -Recurse -Force
+          }
+
+          git clone --branch develop --single-branch $repo test-repo
+
+      - name: Verify repository
+        shell: powershell
+        run: |
+          Set-Location test-repo
+          git log -1 --oneline
+          Write-Host "Repository clone successful."
