@@ -11,7 +11,7 @@ from core.trade_manager import (
     get_trade_by_id
 )
 
-from core.telegram import (
+from telegram_sender import (
     send_message
 )
 
