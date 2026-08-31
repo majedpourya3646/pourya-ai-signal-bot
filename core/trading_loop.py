@@ -1,7 +1,5 @@
 # core/trading_loop.py
 
-import time
-
 from threading import Event
 
 from core.logger import logger
@@ -47,7 +45,7 @@ def trading_loop():
         )
 
         # ----------------------------------------------------
-        # Initialize MT5
+        # Initialize MT5 / Trading Engine
         # ----------------------------------------------------
 
         if not initialize_trading():
@@ -56,7 +54,7 @@ def trading_loop():
                 "MT5 INITIALIZATION FAILED"
             )
 
-            return
+            return False
 
         # ----------------------------------------------------
         # Main Loop
@@ -88,11 +86,15 @@ def trading_loop():
                 SCHEDULER_INTERVAL
             )
 
+        return True
+
     except Exception as exc:
 
         logger.exception(
             f"TRADING LOOP ERROR {exc}"
         )
+
+        return False
 
     finally:
 
