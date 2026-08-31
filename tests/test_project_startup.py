@@ -1,15 +1,29 @@
-# tests/test_project_startup.py
-# Full startup/import validation for Pourya Trader AI
-# Does NOT open real trades.
-
 from __future__ import annotations
 
 import importlib
 import logging
 import sys
 import traceback
+from pathlib import Path
 
 
+# ----------------------------------------------------------------------
+# PROJECT ROOT
+# ----------------------------------------------------------------------
+# When this file is executed directly:
+#     python tests/test_project_startup.py
+# Python puts "tests" in sys.path, not necessarily the project root.
+# Add the project root explicitly so imports such as "core.xauusd_engine"
+# work correctly.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+# ----------------------------------------------------------------------
+# LOGGING
+# ----------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -18,6 +32,9 @@ logging.basicConfig(
 logger = logging.getLogger("startup-test")
 
 
+# ----------------------------------------------------------------------
+# MODULES
+# ----------------------------------------------------------------------
 MODULES = [
     "config",
     "core",
@@ -36,10 +53,27 @@ MODULES = [
 ]
 
 
+# ----------------------------------------------------------------------
+# IMPORT TEST
+# ----------------------------------------------------------------------
 def test_imports() -> bool:
     logger.info("=" * 70)
     logger.info("IMPORT TEST")
     logger.info("=" * 70)
+
+    logger.info("Project root: %s", PROJECT_ROOT)
+
+    if not PROJECT_ROOT.exists():
+        logger.error("[FAIL] Project root does not exist.")
+        return False
+
+    core_path = PROJECT_ROOT / "core"
+
+    if not core_path.exists():
+        logger.error("[FAIL] core directory not found: %s", core_path)
+        return False
+
+    logger.info("[OK] core directory found: %s", core_path)
 
     failed = []
 
@@ -47,21 +81,36 @@ def test_imports() -> bool:
         try:
             importlib.import_module(module_name)
             logger.info("[OK] %s", module_name)
+
         except Exception as exc:
             failed.append((module_name, exc))
-            logger.error("[FAIL] %s -> %s", module_name, exc)
+            logger.error(
+                "[FAIL] %s -> %s",
+                module_name,
+                exc,
+            )
 
     if failed:
         logger.error("")
         logger.error("FAILED MODULES:")
+
         for module_name, exc in failed:
-            logger.error(" - %s: %s", module_name, exc)
+            logger.error(
+                " - %s: %s",
+                module_name,
+                exc,
+            )
+
         return False
 
+    logger.info("")
     logger.info("All project modules imported successfully.")
     return True
 
 
+# ----------------------------------------------------------------------
+# APP TEST
+# ----------------------------------------------------------------------
 def test_app_class() -> bool:
     logger.info("=" * 70)
     logger.info("APP CLASS TEST")
@@ -70,21 +119,31 @@ def test_app_class() -> bool:
     try:
         from core.app import App
 
-        logger.info("[OK] App imported: %s", App)
+        logger.info(
+            "[OK] App imported: %s",
+            App,
+        )
 
         app = App()
 
-        logger.info("[OK] App instance created: %s", type(app).__name__)
+        logger.info(
+            "[OK] App instance created: %s",
+            type(app).__name__,
+        )
 
-        if hasattr(app, "run"):
+        if hasattr(app, "run") and callable(app.run):
             logger.info("[OK] App.run() exists")
-        elif hasattr(app, "start"):
-            logger.info("[OK] App.start() exists")
-        else:
-            logger.error("[FAIL] App has neither run() nor start()")
-            return False
+            return True
 
-        return True
+        if hasattr(app, "start") and callable(app.start):
+            logger.info("[OK] App.start() exists")
+            return True
+
+        logger.error(
+            "[FAIL] App has neither callable run() nor start()"
+        )
+
+        return False
 
     except Exception:
         logger.error("[FAIL] App initialization failed")
@@ -92,6 +151,9 @@ def test_app_class() -> bool:
         return False
 
 
+# ----------------------------------------------------------------------
+# MT5 CONNECTOR TEST
+# ----------------------------------------------------------------------
 def test_mt5_connector() -> bool:
     logger.info("=" * 70)
     logger.info("MT5 CONNECTOR TEST")
@@ -112,7 +174,9 @@ def test_mt5_connector() -> bool:
         if hasattr(connector, "is_connected"):
             logger.info("[OK] is_connected() exists")
         else:
-            logger.warning("[WARN] is_connected() not found")
+            logger.warning(
+                "[WARN] is_connected() not found"
+            )
 
         return True
 
@@ -122,6 +186,9 @@ def test_mt5_connector() -> bool:
         return False
 
 
+# ----------------------------------------------------------------------
+# XAUUSD ENGINE TEST
+# ----------------------------------------------------------------------
 def test_xauusd_engine() -> bool:
     logger.info("=" * 70)
     logger.info("XAUUSD ENGINE TEST")
@@ -130,13 +197,20 @@ def test_xauusd_engine() -> bool:
     try:
         from core.xauusd_engine import get_xauusd_opportunity
 
-        logger.info("[OK] get_xauusd_opportunity imported")
+        logger.info(
+            "[OK] get_xauusd_opportunity imported"
+        )
 
         if not callable(get_xauusd_opportunity):
-            logger.error("[FAIL] get_xauusd_opportunity is not callable")
+            logger.error(
+                "[FAIL] get_xauusd_opportunity is not callable"
+            )
             return False
 
-        logger.info("[OK] XAUUSD opportunity function is callable")
+        logger.info(
+            "[OK] XAUUSD opportunity function is callable"
+        )
+
         return True
 
     except Exception:
@@ -145,10 +219,30 @@ def test_xauusd_engine() -> bool:
         return False
 
 
+# ----------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------
 def main() -> int:
     logger.info("")
+    logger.info("=" * 70)
     logger.info("POURYA TRADER AI - STARTUP VALIDATION")
-    logger.info("Python: %s", sys.version)
+    logger.info("=" * 70)
+
+    logger.info(
+        "Python: %s",
+        sys.version.replace("\n", " "),
+    )
+
+    logger.info(
+        "Python executable: %s",
+        sys.executable,
+    )
+
+    logger.info(
+        "Project root: %s",
+        PROJECT_ROOT,
+    )
+
     logger.info("=" * 70)
 
     results = {
@@ -172,13 +266,19 @@ def main() -> int:
 
     if all(results.values()):
         logger.info("")
+        logger.info("=" * 70)
         logger.info("PROJECT STARTUP VALIDATION: PASS")
         logger.info("NO TRADE WAS EXECUTED.")
+        logger.info("=" * 70)
+
         return 0
 
     logger.error("")
+    logger.error("=" * 70)
     logger.error("PROJECT STARTUP VALIDATION: FAIL")
     logger.error("Fix the reported error before enabling live trading.")
+    logger.error("=" * 70)
+
     return 1
 
 
