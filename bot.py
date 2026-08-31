@@ -1,71 +1,43 @@
 # bot.py
+# Keep this file as the project entry point.
 
+from __future__ import annotations
+
+import logging
 import sys
 
-from core.logger import logger
 
-from core.app import (
-    run_forever,
-    stop_app
-)
-
-
-
-
-
-
-
-def main():
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
 
     try:
+        from core.app import App
 
+        app = App()
 
-        logger.info(
+        if hasattr(app, "run"):
+            app.run()
+        elif hasattr(app, "start"):
+            app.start()
+        else:
+            logging.error(
+                "core.app.App does not expose run() or start()."
+            )
+            return 1
 
-            "STARTING POURYA TRADER AI"
-
-        )
-
-
-
-        run_forever()
-
-
+        return 0
 
     except KeyboardInterrupt:
+        logging.info("Bot stopped by user.")
+        return 0
 
-
-        logger.info(
-
-            "STOP SIGNAL RECEIVED"
-
-        )
-
-
-        stop_app()
-
-
-
-    except Exception as e:
-
-
-        logger.exception(e)
-
-
-        stop_app()
-
-
-
-        sys.exit(1)
-
-
-
-
-
-
+    except Exception:
+        logging.exception("Fatal error while starting Pourya Trader AI.")
+        return 1
 
 
 if __name__ == "__main__":
-
-
-    main()
+    sys.exit(main())
