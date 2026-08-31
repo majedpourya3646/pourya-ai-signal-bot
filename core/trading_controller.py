@@ -289,3 +289,71 @@ def trading_status():
             TRADING_ENABLED
 
     }
+# ============================================================
+# MT5 Trading Initialization
+# ============================================================
+
+def initialize_trading():
+
+    try:
+
+        from core.mt5_connector import initialize_mt5
+
+        logger.info(
+            "TRADING ENGINE INITIALIZATION STARTED"
+        )
+
+        status = initialize_mt5()
+
+        if status:
+
+            logger.info(
+                "TRADING ENGINE INITIALIZED"
+            )
+
+        else:
+
+            logger.error(
+                "TRADING ENGINE INITIALIZATION FAILED"
+            )
+
+        return status
+
+    except Exception as exc:
+
+        logger.exception(
+            f"TRADING INITIALIZATION ERROR {exc}"
+        )
+
+        return False
+
+
+# ============================================================
+# MT5 Trading Shutdown
+# ============================================================
+
+def shutdown_trading():
+
+    try:
+
+        from core.mt5_connector import shutdown_mt5
+
+        logger.info(
+            "TRADING ENGINE SHUTDOWN STARTED"
+        )
+
+        shutdown_mt5()
+
+        logger.info(
+            "TRADING ENGINE SHUTDOWN COMPLETE"
+        )
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            f"TRADING SHUTDOWN ERROR {exc}"
+        )
+
+        return False
