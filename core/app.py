@@ -1,324 +1,452 @@
-from __future__ import annotations
+# core/app.py
 
-import signal
-import sys
 import time
 
 from core.logger import logger
 
+from core.database_manager import (
+    initialize_database
+)
 
-class App:
-    """
-    Main application bootstrap for Pourya Trader AI.
+from core.mt5_connector import (
+    initialize_mt5,
+    shutdown_mt5,
+    is_connected,
+    get_account_info
+)
 
-    Initializes:
-        MT5 connector
-        Trading controller
-        Position monitor
-        Trading loop
-    """
+from core.telegram_notifier import (
+    notify_system
+)
 
-    def __init__(
-        self,
-        mt5_connector,
-        trading_controller,
-        position_monitor,
-        trading_loop,
-    ):
-        self.mt5_connector = mt5_connector
-        self.trading_controller = trading_controller
-        self.position_monitor = position_monitor
-        self.trading_loop = trading_loop
+from core.position_monitor import (
+    start_position_monitor,
+    stop_position_monitor
+)
 
-        self.running = False
-        self._shutdown_requested = False
+from scheduler.trading_loop import (
+    start_trading_loop,
+    stop_trading_loop,
+    trading_loop_status
+)
 
-    # ------------------------------------------------------------------
-    # START
-    # ------------------------------------------------------------------
 
-    def start(self) -> bool:
-        if self.running:
-            logger.warning("Application is already running.")
-            return True
+RUNNING = False
 
-        logger.info("=" * 60)
-        logger.info("Pourya Trader AI starting...")
-        logger.info("=" * 60)
 
-        try:
-            if not self._initialize_mt5():
-                logger.error("MT5 initialization failed.")
-                return False
+# ============================================================
+# SYSTEM INITIALIZATION
+# ============================================================
 
-            if not self._validate_components():
-                logger.error("Application component validation failed.")
-                self._shutdown()
-                return False
+def initialize_system():
 
-            self._register_signal_handlers()
+    logger.info("=" * 60)
+    logger.info("SYSTEM INITIALIZATION STARTED")
+    logger.info("=" * 60)
 
-            self.running = True
-            self._shutdown_requested = False
+    # --------------------------------------------------------
+    # Database
+    # --------------------------------------------------------
 
-            self.trading_loop.start()
+    try:
 
-            logger.info("=" * 60)
-            logger.info("Pourya Trader AI is RUNNING")
-            logger.info("=" * 60)
+        database_status = initialize_database()
 
-            return True
-
-        except Exception as exc:
-            logger.exception(
-                "Application startup failed: %s",
-                exc,
-            )
-            self._shutdown()
-            return False
-
-    # ------------------------------------------------------------------
-    # MAIN LOOP
-    # ------------------------------------------------------------------
-
-    def run(self) -> int:
-        if not self.running:
-            if not self.start():
-                return 1
-
-        try:
-            while self.running and not self._shutdown_requested:
-                time.sleep(1)
-
-        except KeyboardInterrupt:
-            logger.info("Keyboard interrupt received.")
-
-        except Exception as exc:
-            logger.exception(
-                "Application runtime error: %s",
-                exc,
-            )
-            return 1
-
-        finally:
-            self._shutdown()
-
-        return 0
-
-    # ------------------------------------------------------------------
-    # MT5
-    # ------------------------------------------------------------------
-
-    def _initialize_mt5(self) -> bool:
-        connector = self.mt5_connector
-
-        if connector is None:
-            logger.error("MT5 connector is missing.")
-            return False
-
-        try:
-            if hasattr(connector, "connect"):
-                result = connector.connect()
-                return self._result_success(result)
-
-            if hasattr(connector, "initialize"):
-                result = connector.initialize()
-                return self._result_success(result)
-
-            if hasattr(connector, "is_connected"):
-                return bool(connector.is_connected())
+        if not database_status:
 
             logger.error(
-                "MT5 connector has no supported connection method."
+                "DATABASE INITIALIZATION FAILED"
             )
+
             return False
 
-        except Exception as exc:
-            logger.exception(
-                "MT5 connection error: %s",
-                exc,
-            )
-            return False
-
-    # ------------------------------------------------------------------
-    # VALIDATION
-    # ------------------------------------------------------------------
-
-    def _validate_components(self) -> bool:
-        components = {
-            "MT5 connector": self.mt5_connector,
-            "Trading controller": self.trading_controller,
-            "Position monitor": self.position_monitor,
-            "Trading loop": self.trading_loop,
-        }
-
-        valid = True
-
-        for name, component in components.items():
-            if component is None:
-                logger.error("%s is missing.", name)
-                valid = False
-            else:
-                logger.info("%s: OK", name)
-
-        return valid
-
-    # ------------------------------------------------------------------
-    # SIGNALS
-    # ------------------------------------------------------------------
-
-    def _register_signal_handlers(self) -> None:
-        try:
-            signal.signal(
-                signal.SIGINT,
-                self._handle_shutdown_signal,
-            )
-        except (ValueError, OSError):
-            pass
-
-        try:
-            signal.signal(
-                signal.SIGTERM,
-                self._handle_shutdown_signal,
-            )
-        except (ValueError, OSError):
-            pass
-
-    def _handle_shutdown_signal(self, signum, frame) -> None:
         logger.info(
-            "Shutdown signal received: %s",
-            signum,
+            "DATABASE INITIALIZED"
         )
 
-        self._shutdown_requested = True
-        self.running = False
+    except Exception as exc:
 
-        try:
-            if self.trading_loop is not None:
-                self.trading_loop.stop()
-        except Exception as exc:
-            logger.exception(
-                "Trading loop shutdown error: %s",
-                exc,
+        logger.exception(
+            f"DATABASE INITIALIZATION ERROR: {exc}"
+        )
+
+        return False
+
+    # --------------------------------------------------------
+    # MT5
+    # --------------------------------------------------------
+
+    try:
+
+        mt5_status = initialize_mt5()
+
+        if not mt5_status:
+
+            logger.error(
+                "MT5 CONNECTION FAILED"
             )
 
-    # ------------------------------------------------------------------
-    # SHUTDOWN
-    # ------------------------------------------------------------------
-
-    def _shutdown(self) -> None:
-        if not self.running and self._shutdown_requested:
-            return
-
-        logger.info("Shutting down Pourya Trader AI...")
-
-        self.running = False
-        self._shutdown_requested = True
-
-        # Stop trading first.
-        try:
-            if self.trading_loop is not None:
-                self.trading_loop.stop()
-        except Exception as exc:
-            logger.exception(
-                "Trading loop stop failed: %s",
-                exc,
-            )
-
-        # Stop position monitor if it has a running lifecycle.
-        try:
-            if self.position_monitor is not None:
-                stop_method = getattr(
-                    self.position_monitor,
-                    "stop",
-                    None,
-                )
-
-                if callable(stop_method):
-                    stop_method()
-        except Exception as exc:
-            logger.exception(
-                "Position monitor stop failed: %s",
-                exc,
-            )
-
-        # Disconnect MT5 last.
-        try:
-            self._disconnect_mt5()
-        except Exception as exc:
-            logger.exception(
-                "MT5 shutdown failed: %s",
-                exc,
-            )
-
-        logger.info("=" * 60)
-        logger.info("Pourya Trader AI stopped.")
-        logger.info("=" * 60)
-
-    def _disconnect_mt5(self) -> None:
-        connector = self.mt5_connector
-
-        if connector is None:
-            return
-
-        if hasattr(connector, "disconnect"):
-            connector.disconnect()
-            return
-
-        if hasattr(connector, "shutdown"):
-            connector.shutdown()
-            return
-
-    # ------------------------------------------------------------------
-    # RESULT HELPERS
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _result_success(result) -> bool:
-        if isinstance(result, bool):
-            return result
-
-        if result is None:
             return False
 
-        if isinstance(result, dict):
-            if "success" in result:
-                return bool(result["success"])
+        if not is_connected():
 
-            if "retcode" in result:
-                return result["retcode"] in (0, 10009)
+            logger.error(
+                "MT5 INITIALIZATION RETURNED SUCCESS "
+                "BUT TERMINAL IS NOT CONNECTED"
+            )
 
-        success = getattr(result, "success", None)
+            shutdown_mt5()
 
-        if success is not None:
-            return bool(success)
+            return False
 
-        retcode = getattr(result, "retcode", None)
+        logger.info(
+            "MT5 CONNECTION READY"
+        )
 
-        if retcode is not None:
-            return retcode in (0, 10009)
+    except Exception as exc:
 
-        # Some connector methods return None on successful connection.
+        logger.exception(
+            f"MT5 INITIALIZATION ERROR: {exc}"
+        )
+
+        try:
+            shutdown_mt5()
+        except Exception:
+            pass
+
+        return False
+
+    # --------------------------------------------------------
+    # Account
+    # --------------------------------------------------------
+
+    try:
+
+        account = get_account_info()
+
+        if account:
+
+            logger.info(
+                "MT5 ACCOUNT READY | "
+                f"LOGIN={account.get('login')} | "
+                f"SERVER={account.get('server')} | "
+                f"BALANCE={account.get('balance')} | "
+                f"EQUITY={account.get('equity')}"
+            )
+
+    except Exception as exc:
+
+        logger.warning(
+            f"ACCOUNT INFORMATION CHECK FAILED: {exc}"
+        )
+
+    logger.info(
+        "SYSTEM INITIALIZATION COMPLETED"
+    )
+
+    return True
+
+
+# ============================================================
+# START SERVICES
+# ============================================================
+
+def start_services():
+
+    logger.info("=" * 60)
+    logger.info("STARTING SERVICES")
+    logger.info("=" * 60)
+
+    # --------------------------------------------------------
+    # Position Monitor
+    # --------------------------------------------------------
+
+    try:
+
+        position_status = start_position_monitor()
+
+        if not position_status:
+
+            logger.error(
+                "POSITION MONITOR FAILED"
+            )
+
+            return False
+
+        logger.info(
+            "POSITION MONITOR STARTED"
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            f"POSITION MONITOR START ERROR: {exc}"
+        )
+
+        return False
+
+    # --------------------------------------------------------
+    # Trading Loop
+    # --------------------------------------------------------
+
+    try:
+
+        trading_status = start_trading_loop()
+
+        if not trading_status:
+
+            logger.error(
+                "TRADING LOOP FAILED"
+            )
+
+            try:
+                stop_position_monitor()
+            except Exception:
+                pass
+
+            return False
+
+        logger.info(
+            "TRADING LOOP STARTED"
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            f"TRADING LOOP START ERROR: {exc}"
+        )
+
+        try:
+            stop_position_monitor()
+        except Exception:
+            pass
+
+        return False
+
+    logger.info("=" * 60)
+    logger.info("ALL SERVICES STARTED")
+    logger.info("=" * 60)
+
+    return True
+
+
+# ============================================================
+# STOP APPLICATION
+# ============================================================
+
+def stop_app():
+
+    global RUNNING
+
+    logger.info("=" * 60)
+    logger.info("APPLICATION SHUTDOWN STARTED")
+    logger.info("=" * 60)
+
+    RUNNING = False
+
+    # --------------------------------------------------------
+    # Stop Trading
+    # --------------------------------------------------------
+
+    try:
+
+        stop_trading_loop()
+
+    except Exception as exc:
+
+        logger.exception(
+            f"TRADING LOOP STOP ERROR: {exc}"
+        )
+
+    # --------------------------------------------------------
+    # Stop Position Monitor
+    # --------------------------------------------------------
+
+    try:
+
+        stop_position_monitor()
+
+    except Exception as exc:
+
+        logger.exception(
+            f"POSITION MONITOR STOP ERROR: {exc}"
+        )
+
+    # --------------------------------------------------------
+    # Shutdown MT5
+    # --------------------------------------------------------
+
+    try:
+
+        shutdown_mt5()
+
+    except Exception as exc:
+
+        logger.exception(
+            f"MT5 SHUTDOWN ERROR: {exc}"
+        )
+
+    logger.info(
+        "POURYA TRADER AI STOPPED"
+    )
+
+    return True
+
+
+# ============================================================
+# APPLICATION RUNNER
+# ============================================================
+
+def run():
+
+    global RUNNING
+
+    if RUNNING:
+
+        logger.warning(
+            "APPLICATION ALREADY RUNNING"
+        )
+
         return True
 
+    logger.info("=" * 60)
+    logger.info("POURYA TRADER AI")
+    logger.info("VERSION 2.1.0-MT5")
+    logger.info("APPLICATION STARTING")
+    logger.info("=" * 60)
 
-def create_app(
-    mt5_connector,
-    trading_controller,
-    position_monitor,
-    trading_loop,
-) -> App:
-    return App(
-        mt5_connector=mt5_connector,
-        trading_controller=trading_controller,
-        position_monitor=position_monitor,
-        trading_loop=trading_loop,
-    )
+    # --------------------------------------------------------
+    # Initialize
+    # --------------------------------------------------------
+
+    if not initialize_system():
+
+        logger.error(
+            "SYSTEM START FAILED"
+        )
+
+        try:
+            shutdown_mt5()
+        except Exception:
+            pass
+
+        return False
+
+    # --------------------------------------------------------
+    # Start Services
+    # --------------------------------------------------------
+
+    if not start_services():
+
+        logger.error(
+            "SERVICE START FAILED"
+        )
+
+        stop_app()
+
+        return False
+
+    RUNNING = True
+
+    # --------------------------------------------------------
+    # Telegram Startup Notification
+    # --------------------------------------------------------
+
+    try:
+
+        notify_system(
+            """
+🤖 Pourya Trader AI
+
+✅ MT5 Connected
+✅ Database Connected
+✅ Trading Engine Started
+✅ Position Monitor Active
+
+Broker: MT5
+Symbol: XAUUSD.st
+Timeframes: M15 / H1 / H4
+Version: 2.1.0-MT5
+"""
+        )
+
+    except Exception as exc:
+
+        logger.warning(
+            f"START TELEGRAM NOTIFICATION FAILED: {exc}"
+        )
+
+    logger.info("=" * 60)
+    logger.info("POURYA TRADER AI RUNNING")
+    logger.info("=" * 60)
+
+    # --------------------------------------------------------
+    # Main Application Watchdog
+    # --------------------------------------------------------
+
+    try:
+
+        while RUNNING:
+
+            try:
+
+                loop_status = trading_loop_status()
+
+                if not loop_status.get("running", False):
+
+                    logger.error(
+                        "TRADING LOOP STOPPED UNEXPECTEDLY"
+                    )
+
+                    break
+
+            except Exception as exc:
+
+                logger.warning(
+                    f"TRADING LOOP STATUS CHECK FAILED: {exc}"
+                )
+
+            try:
+
+                if not is_connected():
+
+                    logger.error(
+                        "MT5 CONNECTION LOST"
+                    )
+
+                    break
+
+            except Exception as exc:
+
+                logger.warning(
+                    f"MT5 CONNECTION CHECK FAILED: {exc}"
+                )
+
+            time.sleep(2)
+
+    except KeyboardInterrupt:
+
+        logger.info(
+            "KEYBOARD INTERRUPT RECEIVED"
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            f"APPLICATION LOOP ERROR: {exc}"
+        )
+
+    finally:
+
+        stop_app()
+
+    return True
 
 
-if __name__ == "__main__":
-    logger.error(
-        "core.app must be started through the project bootstrap "
-        "so that dependencies are injected correctly."
-    )
-    sys.exit(1)
+# ============================================================
+# FOREVER COMPATIBILITY WRAPPER
+# ============================================================
+
+def run_forever():
+
+    return run()
