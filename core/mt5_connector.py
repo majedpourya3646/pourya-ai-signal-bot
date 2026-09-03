@@ -2,6 +2,7 @@
 
 import os
 import platform
+import time
 
 try:
     import MetaTrader5 as mt5
@@ -9,6 +10,11 @@ except ImportError:
     mt5 = None
 
 from core.logger import logger
+
+
+# ============================================================
+# CONFIG IMPORT
+# ============================================================
 
 try:
     from config import (
@@ -23,7 +29,7 @@ except Exception:
 
 
 # ============================================================
-# Configuration
+# MT5 CONFIGURATION
 # ============================================================
 
 MT5_TERMINAL_PATH = os.getenv(
@@ -44,7 +50,7 @@ MT5_PORTABLE = os.getenv(
 MT5_TIMEOUT = int(
     os.getenv(
         "MT5_TIMEOUT",
-        "120000"
+        "15000"
     )
 )
 
@@ -66,51 +72,45 @@ DEFAULT_SYMBOL = "XAUUSD.st"
 
 
 # ============================================================
-# MT5 Availability
+# AVAILABILITY
 # ============================================================
 
 def is_mt5_available():
 
     if mt5 is None:
-
-        logger.warning(
+        logger.error(
             "MT5 PACKAGE NOT AVAILABLE"
         )
-
         return False
 
     if platform.system() != "Windows":
-
-        logger.warning(
-            "MT5 REQUIRES WINDOWS TERMINAL"
+        logger.error(
+            "MT5 REQUIRES WINDOWS"
         )
-
         return False
 
     return True
 
 
 # ============================================================
-# Initialize MT5
+# INITIALIZE
 # ============================================================
 
 def initialize_mt5():
 
+    if not is_mt5_available():
+        return False
+
     try:
 
-        if not is_mt5_available():
-
-            return False
-
-
         # ----------------------------------------------------
-        # Check existing connection first
+        # If Python is already attached to a healthy terminal,
+        # reuse the existing IPC connection.
         # ----------------------------------------------------
 
         try:
 
             terminal = mt5.terminal_info()
-
             account = mt5.account_info()
 
             if (
@@ -132,15 +132,14 @@ def initialize_mt5():
                 return True
 
         except Exception:
-
             pass
 
 
         # ----------------------------------------------------
-        # Validate Portable terminal
+        # Validate terminal
         # ----------------------------------------------------
 
-        if not os.path.exists(
+        if not os.path.isfile(
             MT5_TERMINAL_PATH
         ):
 
@@ -153,7 +152,7 @@ def initialize_mt5():
 
 
         # ----------------------------------------------------
-        # Validate credentials
+        # Validate login
         # ----------------------------------------------------
 
         if not MT5_LOGIN:
@@ -174,24 +173,22 @@ def initialize_mt5():
             return False
 
 
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # DO NOT call mt5.shutdown() before initialize().
-        #
-        # The Portable MT5 terminal is already running and
-        # available. Calling shutdown() unnecessarily can break
-        # the IPC connection and produce:
-        #
-        # -10001 IPC send failed
-        # -10005 IPC timeout
-        # ----------------------------------------------------
-
         logger.info(
-            "INITIALIZING PORTABLE MT5 "
+            "MT5 INITIALIZATION START "
             f"PATH={MT5_TERMINAL_PATH} "
-            f"PORTABLE={MT5_PORTABLE}"
+            f"PORTABLE={MT5_PORTABLE} "
+            f"SERVER={MT5_SERVER}"
         )
 
+
+        # ----------------------------------------------------
+        # IMPORTANT
+        #
+        # Do NOT call mt5.shutdown() here.
+        #
+        # The Portable terminal is already running and the
+        # direct Python test successfully attached to it.
+        # ----------------------------------------------------
 
         initialized = mt5.initialize(
 
@@ -218,20 +215,28 @@ def initialize_mt5():
 
         if not initialized:
 
+            error = mt5.last_error()
+
             logger.error(
                 "MT5 INITIALIZATION FAILED "
-                f"{mt5.last_error()}"
+                f"{error}"
             )
 
             return False
 
 
         # ----------------------------------------------------
-        # Terminal validation
+        # Small IPC stabilization delay
+        # ----------------------------------------------------
+
+        time.sleep(0.5)
+
+
+        # ----------------------------------------------------
+        # Validate terminal
         # ----------------------------------------------------
 
         terminal = mt5.terminal_info()
-
 
         if terminal is None:
 
@@ -244,11 +249,10 @@ def initialize_mt5():
 
 
         # ----------------------------------------------------
-        # Account validation
+        # Validate account
         # ----------------------------------------------------
 
         account = mt5.account_info()
-
 
         if account is None:
 
@@ -281,14 +285,14 @@ def initialize_mt5():
     except Exception as exc:
 
         logger.exception(
-            f"MT5 CONNECT ERROR {exc}"
+            f"MT5 INITIALIZATION EXCEPTION {exc}"
         )
 
         return False
 
 
 # ============================================================
-# Shutdown MT5
+# SHUTDOWN
 # ============================================================
 
 def shutdown_mt5():
@@ -296,17 +300,13 @@ def shutdown_mt5():
     try:
 
         if mt5 is None:
-
             return
 
-
         mt5.shutdown()
-
 
         logger.info(
             "MT5 SHUTDOWN"
         )
-
 
     except Exception as exc:
 
@@ -316,7 +316,7 @@ def shutdown_mt5():
 
 
 # ============================================================
-# Connection Status
+# CONNECTION STATUS
 # ============================================================
 
 def is_connected():
@@ -324,24 +324,12 @@ def is_connected():
     try:
 
         if mt5 is None:
-
             return False
-
 
         terminal = mt5.terminal_info()
 
-        account = mt5.account_info()
-
-
         if terminal is None:
-
             return False
-
-
-        if account is None:
-
-            return False
-
 
         return bool(
             getattr(
@@ -351,14 +339,13 @@ def is_connected():
             )
         )
 
-
     except Exception:
 
         return False
 
 
 # ============================================================
-# Account Info
+# ACCOUNT INFO
 # ============================================================
 
 def get_account_info():
@@ -366,12 +353,9 @@ def get_account_info():
     try:
 
         if mt5 is None:
-
             return None
 
-
         account = mt5.account_info()
-
 
         if account is None:
 
@@ -385,29 +369,21 @@ def get_account_info():
 
         return {
 
-            "login":
-                account.login,
+            "login": account.login,
 
-            "server":
-                account.server,
+            "server": account.server,
 
-            "balance":
-                account.balance,
+            "balance": account.balance,
 
-            "equity":
-                account.equity,
+            "equity": account.equity,
 
-            "margin":
-                account.margin,
+            "margin": account.margin,
 
-            "free_margin":
-                account.margin_free,
+            "free_margin": account.margin_free,
 
-            "profit":
-                account.profit,
+            "profit": account.profit,
 
-            "currency":
-                account.currency
+            "currency": account.currency,
 
         }
 
@@ -422,17 +398,16 @@ def get_account_info():
 
 
 # ============================================================
-# Symbol Info
+# SYMBOL INFO
 # ============================================================
 
 def get_symbol_info(
-    symbol
+    symbol=DEFAULT_SYMBOL
 ):
 
     try:
 
         if mt5 is None:
-
             return None
 
 
@@ -452,16 +427,23 @@ def get_symbol_info(
 
 
         # ----------------------------------------------------
-        # Make symbol visible/selectable
+        # Ensure Market Watch selection
         # ----------------------------------------------------
 
-        if not info.visible or not info.select:
+        if not getattr(
+            info,
+            "visible",
+            False
+        ) or not getattr(
+            info,
+            "select",
+            False
+        ):
 
             selected = mt5.symbol_select(
                 symbol,
                 True
             )
-
 
             if not selected:
 
@@ -492,17 +474,16 @@ def get_symbol_info(
 
 
 # ============================================================
-# Symbol Tick
+# TICK
 # ============================================================
 
 def get_symbol_tick(
-    symbol
+    symbol=DEFAULT_SYMBOL
 ):
 
     try:
 
         if mt5 is None:
-
             return None
 
 
@@ -510,9 +491,7 @@ def get_symbol_tick(
             symbol
         )
 
-
         if info is None:
-
             return None
 
 
@@ -531,23 +510,24 @@ def get_symbol_tick(
             return None
 
 
-        if (
-            float(
-                getattr(
-                    tick,
-                    "bid",
-                    0
-                )
-            ) <= 0
-            and
-            float(
-                getattr(
-                    tick,
-                    "ask",
-                    0
-                )
-            ) <= 0
-        ):
+        bid = float(
+            getattr(
+                tick,
+                "bid",
+                0
+            )
+        )
+
+        ask = float(
+            getattr(
+                tick,
+                "ask",
+                0
+            )
+        )
+
+
+        if bid <= 0 and ask <= 0:
 
             logger.warning(
                 f"ZERO TICK DATA {symbol}"
@@ -569,294 +549,11 @@ def get_symbol_tick(
 
 
 # ============================================================
-# Normalize Volume
-# ============================================================
-
-def normalize_volume(
-    symbol,
-    volume
-):
-
-    try:
-
-        info = get_symbol_info(
-            symbol
-        )
-
-
-        if info is None:
-
-            return None
-
-
-        volume = float(
-            volume
-        )
-
-
-        volume_min = float(
-            info.volume_min
-        )
-
-        volume_max = float(
-            info.volume_max
-        )
-
-        volume_step = float(
-            info.volume_step
-        )
-
-
-        if volume <= 0:
-
-            volume = volume_min
-
-
-        volume = max(
-            volume_min,
-            min(
-                volume,
-                volume_max
-            )
-        )
-
-
-        if volume_step > 0:
-
-            steps = round(
-                (
-                    volume - volume_min
-                ) / volume_step
-            )
-
-            volume = (
-                volume_min
-                +
-                steps * volume_step
-            )
-
-
-        if volume_step >= 1:
-
-            digits = 0
-
-        elif volume_step >= 0.1:
-
-            digits = 1
-
-        elif volume_step >= 0.01:
-
-            digits = 2
-
-        elif volume_step >= 0.001:
-
-            digits = 3
-
-        else:
-
-            digits = 4
-
-
-        volume = round(
-            volume,
-            digits
-        )
-
-
-        return max(
-            volume_min,
-            min(
-                volume,
-                volume_max
-            )
-        )
-
-
-    except Exception as exc:
-
-        logger.error(
-            f"VOLUME NORMALIZATION ERROR {exc}"
-        )
-
-        return None
-
-
-# ============================================================
-# Normalize Price
-# ============================================================
-
-def normalize_price(
-    symbol,
-    price
-):
-
-    try:
-
-        info = get_symbol_info(
-            symbol
-        )
-
-
-        if info is None:
-
-            return None
-
-
-        return round(
-            float(price),
-            int(info.digits)
-        )
-
-
-    except Exception as exc:
-
-        logger.error(
-            f"PRICE NORMALIZATION ERROR {exc}"
-        )
-
-        return None
-
-
-# ============================================================
-# Determine Filling Mode
-# ============================================================
-
-def get_filling_mode(
-    symbol
-):
-
-    try:
-
-        info = get_symbol_info(
-            symbol
-        )
-
-
-        if info is None:
-
-            return mt5.ORDER_FILLING_RETURN
-
-
-        filling = int(
-            getattr(
-                info,
-                "filling_mode",
-                0
-            )
-        )
-
-
-        if filling & mt5.SYMBOL_FILLING_FOK:
-
-            return mt5.ORDER_FILLING_FOK
-
-
-        if filling & mt5.SYMBOL_FILLING_IOC:
-
-            return mt5.ORDER_FILLING_IOC
-
-
-        return mt5.ORDER_FILLING_RETURN
-
-
-    except Exception as exc:
-
-        logger.error(
-            f"FILLING MODE ERROR {exc}"
-        )
-
-        return mt5.ORDER_FILLING_RETURN
-
-
-# ============================================================
-# Open Positions
-# ============================================================
-
-def get_open_positions(
-    symbol=None
-):
-
-    try:
-
-        if mt5 is None:
-
-            return []
-
-
-        if symbol:
-
-            positions = mt5.positions_get(
-                symbol=symbol
-            )
-
-        else:
-
-            positions = mt5.positions_get()
-
-
-        if positions is None:
-
-            return []
-
-
-        result = []
-
-
-        for position in positions:
-
-            result.append({
-
-                "ticket":
-                    position.ticket,
-
-                "symbol":
-                    position.symbol,
-
-                "type":
-                    position.type,
-
-                "volume":
-                    position.volume,
-
-                "price_open":
-                    position.price_open,
-
-                "price_current":
-                    position.price_current,
-
-                "sl":
-                    position.sl,
-
-                "tp":
-                    position.tp,
-
-                "profit":
-                    position.profit,
-
-                "magic":
-                    position.magic
-
-            })
-
-
-        return result
-
-
-    except Exception as exc:
-
-        logger.error(
-            f"GET POSITIONS ERROR {exc}"
-        )
-
-        return []
-
-
-# ============================================================
-# Market Rates
+# MARKET RATES
 # ============================================================
 
 def get_rates(
-    symbol,
+    symbol=DEFAULT_SYMBOL,
     timeframe="15",
     count=200
 ):
@@ -874,26 +571,19 @@ def get_rates(
 
         timeframe_map = {
 
-            "1":
-                mt5.TIMEFRAME_M1,
+            "1": mt5.TIMEFRAME_M1,
 
-            "5":
-                mt5.TIMEFRAME_M5,
+            "5": mt5.TIMEFRAME_M5,
 
-            "15":
-                mt5.TIMEFRAME_M15,
+            "15": mt5.TIMEFRAME_M15,
 
-            "30":
-                mt5.TIMEFRAME_M30,
+            "30": mt5.TIMEFRAME_M30,
 
-            "60":
-                mt5.TIMEFRAME_H1,
+            "60": mt5.TIMEFRAME_H1,
 
-            "240":
-                mt5.TIMEFRAME_H4,
+            "240": mt5.TIMEFRAME_H4,
 
-            "1440":
-                mt5.TIMEFRAME_D1
+            "1440": mt5.TIMEFRAME_D1,
 
         }
 
@@ -912,7 +602,12 @@ def get_rates(
             return None
 
 
-        if int(count) <= 0:
+        count = int(
+            count
+        )
+
+
+        if count <= 0:
 
             logger.error(
                 f"INVALID CANDLE COUNT {count}"
@@ -925,12 +620,7 @@ def get_rates(
             symbol
         )
 
-
         if info is None:
-
-            logger.error(
-                f"SYMBOL NOT AVAILABLE {symbol}"
-            )
 
             return None
 
@@ -943,7 +633,7 @@ def get_rates(
 
             0,
 
-            int(count)
+            count
 
         )
 
@@ -987,7 +677,276 @@ def get_rates(
 
 
 # ============================================================
-# Send Market Order
+# NORMALIZE VOLUME
+# ============================================================
+
+def normalize_volume(
+    symbol,
+    volume
+):
+
+    try:
+
+        info = get_symbol_info(
+            symbol
+        )
+
+        if info is None:
+            return None
+
+
+        volume = float(
+            volume
+        )
+
+
+        minimum = float(
+            info.volume_min
+        )
+
+        maximum = float(
+            info.volume_max
+        )
+
+        step = float(
+            info.volume_step
+        )
+
+
+        if volume <= 0:
+            volume = minimum
+
+
+        volume = max(
+            minimum,
+            min(
+                volume,
+                maximum
+            )
+        )
+
+
+        if step > 0:
+
+            steps = round(
+                (
+                    volume - minimum
+                ) / step
+            )
+
+            volume = (
+                minimum
+                +
+                steps * step
+            )
+
+
+        if step >= 1:
+            digits = 0
+
+        elif step >= 0.1:
+            digits = 1
+
+        elif step >= 0.01:
+            digits = 2
+
+        elif step >= 0.001:
+            digits = 3
+
+        else:
+            digits = 4
+
+
+        volume = round(
+            volume,
+            digits
+        )
+
+
+        return max(
+            minimum,
+            min(
+                volume,
+                maximum
+            )
+        )
+
+
+    except Exception as exc:
+
+        logger.error(
+            f"VOLUME NORMALIZATION ERROR {exc}"
+        )
+
+        return None
+
+
+# ============================================================
+# NORMALIZE PRICE
+# ============================================================
+
+def normalize_price(
+    symbol,
+    price
+):
+
+    try:
+
+        info = get_symbol_info(
+            symbol
+        )
+
+        if info is None:
+            return None
+
+
+        return round(
+            float(price),
+            int(info.digits)
+        )
+
+
+    except Exception as exc:
+
+        logger.error(
+            f"PRICE NORMALIZATION ERROR {exc}"
+        )
+
+        return None
+
+
+# ============================================================
+# FILLING MODE
+# ============================================================
+
+def get_filling_mode(
+    symbol
+):
+
+    try:
+
+        info = get_symbol_info(
+            symbol
+        )
+
+        if info is None:
+            return mt5.ORDER_FILLING_RETURN
+
+
+        filling = int(
+            getattr(
+                info,
+                "filling_mode",
+                0
+            )
+        )
+
+
+        if filling & mt5.SYMBOL_FILLING_FOK:
+
+            return mt5.ORDER_FILLING_FOK
+
+
+        if filling & mt5.SYMBOL_FILLING_IOC:
+
+            return mt5.ORDER_FILLING_IOC
+
+
+        return mt5.ORDER_FILLING_RETURN
+
+
+    except Exception as exc:
+
+        logger.error(
+            f"FILLING MODE ERROR {exc}"
+        )
+
+        return mt5.ORDER_FILLING_RETURN
+
+
+# ============================================================
+# OPEN POSITIONS
+# ============================================================
+
+def get_open_positions(
+    symbol=None
+):
+
+    try:
+
+        if mt5 is None:
+            return []
+
+
+        if symbol:
+
+            positions = mt5.positions_get(
+                symbol=symbol
+            )
+
+        else:
+
+            positions = mt5.positions_get()
+
+
+        if positions is None:
+            return []
+
+
+        result = []
+
+
+        for position in positions:
+
+            result.append({
+
+                "ticket":
+                    position.ticket,
+
+                "symbol":
+                    position.symbol,
+
+                "type":
+                    position.type,
+
+                "volume":
+                    position.volume,
+
+                "price_open":
+                    position.price_open,
+
+                "price_current":
+                    position.price_current,
+
+                "sl":
+                    position.sl,
+
+                "tp":
+                    position.tp,
+
+                "profit":
+                    position.profit,
+
+                "magic":
+                    position.magic,
+
+            })
+
+
+        return result
+
+
+    except Exception as exc:
+
+        logger.error(
+            f"GET POSITIONS ERROR {exc}"
+        )
+
+        return []
+
+
+# ============================================================
+# MARKET ORDER
 # ============================================================
 
 def send_market_order(
@@ -1022,9 +981,7 @@ def send_market_order(
             symbol
         )
 
-
         if info is None:
-
             return None
 
 
@@ -1033,9 +990,7 @@ def send_market_order(
             lot
         )
 
-
         if volume is None:
-
             return None
 
 
@@ -1043,9 +998,7 @@ def send_market_order(
             symbol
         )
 
-
         if tick is None:
-
             return None
 
 
@@ -1056,25 +1009,13 @@ def send_market_order(
 
         if side == "BUY":
 
-            order_type = (
-                mt5.ORDER_TYPE_BUY
-            )
-
-            price = float(
-                tick.ask
-            )
-
+            order_type = mt5.ORDER_TYPE_BUY
+            price = float(tick.ask)
 
         elif side == "SELL":
 
-            order_type = (
-                mt5.ORDER_TYPE_SELL
-            )
-
-            price = float(
-                tick.bid
-            )
-
+            order_type = mt5.ORDER_TYPE_SELL
+            price = float(tick.bid)
 
         else:
 
@@ -1090,9 +1031,7 @@ def send_market_order(
             price
         )
 
-
         if price is None:
-
             return None
 
 
@@ -1147,18 +1086,16 @@ def send_market_order(
                 mt5.ORDER_TIME_GTC,
 
             "type_filling":
-                filling_mode
+                filling_mode,
 
         }
 
 
         if sl is not None:
-
             request["sl"] = sl
 
 
         if tp is not None:
-
             request["tp"] = tp
 
 
@@ -1188,15 +1125,18 @@ def send_market_order(
             return None
 
 
-        if result.retcode not in (
+        success_codes = (
 
             mt5.TRADE_RETCODE_DONE,
 
             mt5.TRADE_RETCODE_PLACED,
 
-            mt5.TRADE_RETCODE_DONE_PARTIAL
+            mt5.TRADE_RETCODE_DONE_PARTIAL,
 
-        ):
+        )
+
+
+        if result.retcode not in success_codes:
 
             logger.error(
                 f"MT5 ORDER ERROR "
@@ -1242,7 +1182,7 @@ def send_market_order(
                 tp,
 
             "status":
-                "OPEN"
+                "OPEN",
 
         }
 
@@ -1257,7 +1197,7 @@ def send_market_order(
 
 
 # ============================================================
-# Compatibility MT5Connector Class
+# COMPATIBILITY CLASS
 # ============================================================
 
 class MT5Connector:
@@ -1302,6 +1242,20 @@ class MT5Connector:
         )
 
 
+    def get_rates(
+        self,
+        symbol=DEFAULT_SYMBOL,
+        timeframe="15",
+        count=200
+    ):
+
+        return get_rates(
+            symbol=symbol,
+            timeframe=timeframe,
+            count=count
+        )
+
+
     def get_open_positions(
         self,
         symbol=None
@@ -1309,6 +1263,30 @@ class MT5Connector:
 
         return get_open_positions(
             symbol
+        )
+
+
+    def normalize_volume(
+        self,
+        symbol,
+        volume
+    ):
+
+        return normalize_volume(
+            symbol,
+            volume
+        )
+
+
+    def normalize_price(
+        self,
+        symbol,
+        price
+    ):
+
+        return normalize_price(
+            symbol,
+            price
         )
 
 
@@ -1323,7 +1301,6 @@ class MT5Connector:
     ):
 
         if volume is None:
-
             volume = lot
 
 
@@ -1342,19 +1319,36 @@ class MT5Connector:
         )
 
 
-    def get_rates(
-        self,
-        symbol=DEFAULT_SYMBOL,
-        timeframe="15",
-        count=200
-    ):
+# ============================================================
+# MODULE EXPORTS
+# ============================================================
 
-        return get_rates(
+__all__ = [
 
-            symbol=symbol,
+    "MT5Connector",
 
-            timeframe=timeframe,
+    "initialize_mt5",
 
-            count=count
+    "shutdown_mt5",
 
-        )
+    "is_connected",
+
+    "get_account_info",
+
+    "get_symbol_info",
+
+    "get_symbol_tick",
+
+    "get_rates",
+
+    "get_open_positions",
+
+    "normalize_volume",
+
+    "normalize_price",
+
+    "get_filling_mode",
+
+    "send_market_order",
+
+]
