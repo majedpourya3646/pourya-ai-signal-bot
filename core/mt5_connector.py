@@ -1,22 +1,26 @@
+# core/mt5_connector.py
+# ============================================================
+# Pourya Trader AI
+# MT5 Connector - Stable Windows / XAUUSD.st
+# ============================================================
+
 import os
 import platform
+from typing import Optional, Any
 
 
 try:
     import MetaTrader5 as mt5
-
 except ImportError:
-
     mt5 = None
 
 
 from core.logger import logger
 
-
 from config import (
     MT5_LOGIN,
     MT5_PASSWORD,
-    MT5_SERVER
+    MT5_SERVER,
 )
 
 
@@ -24,17 +28,19 @@ from config import (
 # Constants
 # ============================================================
 
-MT5_PATH = r"C:\Program Files\MetaTrader 5\terminal64.exe"
+DEFAULT_MT5_PATH = r"C:\Program Files\MetaTrader 5\terminal64.exe"
 
 DEFAULT_MAGIC_NUMBER = 20260731
 DEFAULT_DEVIATION = 20
+
+DEFAULT_SYMBOL = "XAUUSD.st"
 
 
 # ============================================================
 # MT5 Availability
 # ============================================================
 
-def is_mt5_available():
+def is_mt5_available() -> bool:
 
     if mt5 is None:
 
@@ -51,12 +57,23 @@ def is_mt5_available():
 # Initialize MT5
 # ============================================================
 
-def initialize_mt5():
+def initialize_mt5() -> bool:
+
+    """
+    Initialize connection to the existing MetaTrader 5 terminal.
+
+    IMPORTANT:
+    This function intentionally DOES NOT call mt5.shutdown()
+    before initialize().
+
+    Calling shutdown() immediately before initialize() can break
+    the IPC connection with the running MT5 terminal.
+    """
 
     try:
 
         # ----------------------------------------------------
-        # MT5 package check
+        # Package check
         # ----------------------------------------------------
 
         if mt5 is None:
@@ -70,7 +87,7 @@ def initialize_mt5():
 
 
         # ----------------------------------------------------
-        # Operating system check
+        # OS check
         # ----------------------------------------------------
 
         if platform.system() != "Windows":
@@ -83,81 +100,90 @@ def initialize_mt5():
 
 
         # ----------------------------------------------------
-        # If already connected, reuse current connection
+        # If already connected, DO NOT reinitialize
         # ----------------------------------------------------
 
         try:
 
             terminal = mt5.terminal_info()
 
-            if terminal is not None and terminal.connected:
+            if (
+                terminal is not None
+                and getattr(terminal, "connected", False)
+            ):
 
-                account = mt5.account_info()
-
-                if account is not None:
-
-                    logger.info(
-                        "MT5 ALREADY CONNECTED "
-                        f"LOGIN={account.login} "
-                        f"SERVER={account.server} "
-                        f"BALANCE={account.balance}"
-                    )
-
-                else:
-
-                    logger.info(
-                        "MT5 TERMINAL ALREADY CONNECTED"
-                    )
+                logger.info(
+                    "MT5 ALREADY CONNECTED"
+                )
 
                 return True
 
-        except Exception as exc:
+        except Exception:
+
+            pass
+
+
+        # ----------------------------------------------------
+        # Terminal path
+        # ----------------------------------------------------
+
+        terminal_path = os.getenv(
+            "MT5_TERMINAL_PATH",
+            DEFAULT_MT5_PATH
+        )
+
+
+        if not os.path.exists(terminal_path):
 
             logger.warning(
-                f"MT5 EXISTING CONNECTION CHECK FAILED {exc}"
+                f"MT5 TERMINAL PATH NOT FOUND: "
+                f"{terminal_path}"
+            )
+
+            # Allow MetaTrader5 package to locate the terminal
+            terminal_path = None
+
+
+        # ----------------------------------------------------
+        # Initialize
+        # ----------------------------------------------------
+
+        if terminal_path:
+
+            initialized = mt5.initialize(
+                path=terminal_path,
+                login=int(MT5_LOGIN),
+                password=str(MT5_PASSWORD),
+                server=str(MT5_SERVER),
+                timeout=120000,
+            )
+
+        else:
+
+            initialized = mt5.initialize(
+                login=int(MT5_LOGIN),
+                password=str(MT5_PASSWORD),
+                server=str(MT5_SERVER),
+                timeout=120000,
             )
 
 
         # ----------------------------------------------------
-        # Initialize terminal
-        #
-        # IMPORTANT:
-        # Do NOT call mt5.shutdown() before initialize().
-        # The direct MT5 test is already working.
+        # Initialization result
         # ----------------------------------------------------
-
-        logger.info(
-            "INITIALIZING MT5..."
-        )
-
-        initialized = mt5.initialize(
-
-            path=MT5_PATH,
-
-            login=int(MT5_LOGIN),
-
-            password=str(MT5_PASSWORD),
-
-            server=str(MT5_SERVER),
-
-            timeout=120000
-
-        )
-
 
         if not initialized:
 
-            error = mt5.last_error()
-
             logger.error(
-                f"MT5 INITIALIZATION FAILED {error}"
+                "MT5 INITIALIZATION FAILED "
+                f"ERROR={mt5.last_error()}"
             )
 
             return False
 
 
         # ----------------------------------------------------
-        # Terminal information
+        # Verify terminal connection
         # ----------------------------------------------------
 
         terminal = mt5.terminal_info()
@@ -165,18 +191,17 @@ def initialize_mt5():
         if terminal is None:
 
             logger.error(
-                f"MT5 TERMINAL INFO FAILED "
-                f"{mt5.last_error()}"
+                "MT5 TERMINAL INFO FAILED "
+                f"ERROR={mt5.last_error()}"
             )
 
             return False
 
 
-        if not terminal.connected:
+        if not getattr(terminal, "connected", False):
 
             logger.error(
-                "MT5 TERMINAL INITIALIZED "
-                "BUT NOT CONNECTED"
+                "MT5 TERMINAL IS NOT CONNECTED"
             )
 
             return False
@@ -188,12 +213,11 @@ def initialize_mt5():
 
         account = mt5.account_info()
 
-
         if account is None:
 
             logger.error(
-                f"MT5 ACCOUNT INFO FAILED "
-                f"{mt5.last_error()}"
+                "MT5 ACCOUNT INFO FAILED "
+                f"ERROR={mt5.last_error()}"
             )
 
             return False
@@ -209,31 +233,19 @@ def initialize_mt5():
 
 
         # ----------------------------------------------------
-        # Validate expected account
+        # Trading permissions
         # ----------------------------------------------------
 
-        if int(account.login) != int(MT5_LOGIN):
-
-            logger.error(
-                "MT5 ACCOUNT LOGIN MISMATCH "
-                f"EXPECTED={MT5_LOGIN} "
-                f"ACTUAL={account.login}"
-            )
-
-            return False
-
-
-        if str(account.server) != str(MT5_SERVER):
-
-            logger.warning(
-                "MT5 SERVER MISMATCH "
-                f"EXPECTED={MT5_SERVER} "
-                f"ACTUAL={account.server}"
-            )
+        logger.info(
+            "MT5 TERMINAL STATUS "
+            f"CONNECTED={getattr(terminal, 'connected', False)} "
+            f"TRADE_ALLOWED={getattr(terminal, 'trade_allowed', False)} "
+            f"TRADE_EXPERT={getattr(terminal, 'trade_expert', False)}"
+        )
 
 
         logger.info(
-            "MT5 CONNECTED SUCCESSFULLY"
+            "MT5 CONNECTED"
         )
 
 
@@ -253,7 +265,13 @@ def initialize_mt5():
 # Shutdown MT5
 # ============================================================
 
-def shutdown_mt5():
+def shutdown_mt5() -> None:
+
+    """
+    Explicit shutdown only.
+
+    The trading loop should NOT call this during normal operation.
+    """
 
     try:
 
@@ -281,7 +299,7 @@ def shutdown_mt5():
 # Connection Status
 # ============================================================
 
-def is_connected():
+def is_connected() -> bool:
 
     try:
 
@@ -292,14 +310,17 @@ def is_connected():
 
         terminal = mt5.terminal_info()
 
-
         if terminal is None:
 
             return False
 
 
         return bool(
-            terminal.connected
+            getattr(
+                terminal,
+                "connected",
+                False
+            )
         )
 
 
@@ -312,7 +333,7 @@ def is_connected():
 # Account Info
 # ============================================================
 
-def get_account_info():
+def get_account_info() -> Optional[dict]:
 
     try:
 
@@ -323,12 +344,11 @@ def get_account_info():
 
         account = mt5.account_info()
 
-
         if account is None:
 
             logger.error(
-                f"ACCOUNT INFO FAILED "
-                f"{mt5.last_error()}"
+                "ACCOUNT INFO FAILED "
+                f"ERROR={mt5.last_error()}"
             )
 
             return None
@@ -358,7 +378,24 @@ def get_account_info():
                 account.profit,
 
             "currency":
-                account.currency
+                account.currency,
+
+            "leverage":
+                account.leverage,
+
+            "trade_allowed":
+                getattr(
+                    account,
+                    "trade_allowed",
+                    False
+                ),
+
+            "trade_expert":
+                getattr(
+                    account,
+                    "trade_expert",
+                    False
+                ),
 
         }
 
@@ -377,8 +414,8 @@ def get_account_info():
 # ============================================================
 
 def get_symbol_info(
-    symbol
-):
+    symbol: str
+) -> Optional[Any]:
 
     try:
 
@@ -402,17 +439,14 @@ def get_symbol_info(
 
 
         # ----------------------------------------------------
-        # Make symbol visible/selected
+        # Make symbol visible
         # ----------------------------------------------------
 
         if not info.visible:
 
             selected = mt5.symbol_select(
-
                 symbol,
-
                 True
-
             )
 
 
@@ -420,25 +454,18 @@ def get_symbol_info(
 
                 logger.error(
                     f"SYMBOL SELECT FAILED "
-                    f"{symbol}"
+                    f"{symbol} "
+                    f"ERROR={mt5.last_error()}"
                 )
 
                 return None
 
+
+            # Refresh information after selection
 
             info = mt5.symbol_info(
                 symbol
             )
-
-
-            if info is None:
-
-                logger.error(
-                    f"SYMBOL INFO UNAVAILABLE "
-                    f"AFTER SELECT {symbol}"
-                )
-
-                return None
 
 
         return info
@@ -447,7 +474,7 @@ def get_symbol_info(
     except Exception as exc:
 
         logger.error(
-            f"SYMBOL INFO ERROR {exc}"
+            f"SYMBOL INFO ERROR {symbol}: {exc}"
         )
 
         return None
@@ -458,12 +485,24 @@ def get_symbol_info(
 # ============================================================
 
 def get_symbol_tick(
-    symbol
-):
+    symbol: str
+) -> Optional[Any]:
 
     try:
 
         if mt5 is None:
+
+            return None
+
+
+        # Ensure symbol is available
+
+        info = get_symbol_info(
+            symbol
+        )
+
+
+        if info is None:
 
             return None
 
@@ -476,7 +515,8 @@ def get_symbol_tick(
         if tick is None:
 
             logger.error(
-                f"NO TICK DATA {symbol}"
+                f"NO TICK DATA {symbol} "
+                f"ERROR={mt5.last_error()}"
             )
 
             return None
@@ -488,7 +528,7 @@ def get_symbol_tick(
     except Exception as exc:
 
         logger.error(
-            f"TICK ERROR {exc}"
+            f"TICK ERROR {symbol}: {exc}"
         )
 
         return None
@@ -499,9 +539,9 @@ def get_symbol_tick(
 # ============================================================
 
 def normalize_volume(
-    symbol,
-    volume
-):
+    symbol: str,
+    volume: float
+) -> Optional[float]:
 
     try:
 
@@ -533,11 +573,9 @@ def normalize_volume(
             info.volume_min
         )
 
-
         volume_max = float(
             info.volume_max
         )
-
 
         volume_step = float(
             info.volume_step
@@ -564,7 +602,7 @@ def normalize_volume(
 
 
         # ----------------------------------------------------
-        # MT5 volume precision
+        # Determine precision
         # ----------------------------------------------------
 
         if volume_step >= 1:
@@ -597,7 +635,8 @@ def normalize_volume(
     except Exception as exc:
 
         logger.error(
-            f"VOLUME NORMALIZATION ERROR {exc}"
+            f"VOLUME NORMALIZATION ERROR "
+            f"{symbol}: {exc}"
         )
 
         return None
@@ -608,9 +647,9 @@ def normalize_volume(
 # ============================================================
 
 def normalize_price(
-    symbol,
-    price
-):
+    symbol: str,
+    price: float
+) -> Optional[float]:
 
     try:
 
@@ -638,7 +677,8 @@ def normalize_price(
     except Exception as exc:
 
         logger.error(
-            f"PRICE NORMALIZATION ERROR {exc}"
+            f"PRICE NORMALIZATION ERROR "
+            f"{symbol}: {exc}"
         )
 
         return None
@@ -649,7 +689,7 @@ def normalize_price(
 # ============================================================
 
 def get_filling_mode(
-    symbol
+    symbol: str
 ):
 
     try:
@@ -661,7 +701,7 @@ def get_filling_mode(
 
         if info is None:
 
-            return None
+            return mt5.ORDER_FILLING_RETURN
 
 
         filling = int(
@@ -697,7 +737,8 @@ def get_filling_mode(
     except Exception as exc:
 
         logger.error(
-            f"FILLING MODE ERROR {exc}"
+            f"FILLING MODE ERROR "
+            f"{symbol}: {exc}"
         )
 
         return mt5.ORDER_FILLING_RETURN
@@ -708,18 +749,24 @@ def get_filling_mode(
 # ============================================================
 
 def send_market_order(
-
-    symbol,
-
-    side,
-
-    lot,
-
-    sl=None,
-
-    tp=None
-
+    symbol: str,
+    side: str,
+    lot: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp: Optional[float] = None,
+    volume: Optional[float] = None,
 ):
+
+    """
+    Send market order.
+
+    IMPORTANT:
+    This function can send a real MT5 order if called by the
+    trading layer.
+
+    The current project must remain in PAPER_TRADING mode until
+    explicitly authorized.
+    """
 
     try:
 
@@ -732,14 +779,28 @@ def send_market_order(
             return None
 
 
-        # ----------------------------------------------------
-        # Connection
-        # ----------------------------------------------------
-
         if not is_connected():
 
             logger.error(
                 "MT5 NOT CONNECTED"
+            )
+
+            return None
+
+
+        # ----------------------------------------------------
+        # Volume compatibility
+        # ----------------------------------------------------
+
+        if lot is None:
+
+            lot = volume
+
+
+        if lot is None:
+
+            logger.error(
+                "ORDER VOLUME NOT PROVIDED"
             )
 
             return None
@@ -763,16 +824,13 @@ def send_market_order(
         # Volume
         # ----------------------------------------------------
 
-        volume = normalize_volume(
-
+        normalized_volume = normalize_volume(
             symbol,
-
             lot
-
         )
 
 
-        if volume is None:
+        if normalized_volume is None:
 
             return None
 
@@ -797,7 +855,7 @@ def send_market_order(
 
         side = str(
             side
-        ).upper()
+        ).upper().strip()
 
 
         if side == "BUY":
@@ -836,11 +894,8 @@ def send_market_order(
         # ----------------------------------------------------
 
         price = normalize_price(
-
             symbol,
-
             price
-
         )
 
 
@@ -856,11 +911,8 @@ def send_market_order(
         if sl is not None:
 
             sl = normalize_price(
-
                 symbol,
-
                 sl
-
             )
 
             if sl is None:
@@ -875,11 +927,8 @@ def send_market_order(
         if tp is not None:
 
             tp = normalize_price(
-
                 symbol,
-
                 tp
-
             )
 
             if tp is None:
@@ -888,21 +937,12 @@ def send_market_order(
 
 
         # ----------------------------------------------------
-        # Filling
+        # Filling mode
         # ----------------------------------------------------
 
         filling_mode = get_filling_mode(
             symbol
         )
-
-
-        if filling_mode is None:
-
-            logger.error(
-                f"NO FILLING MODE FOR {symbol}"
-            )
-
-            return None
 
 
         # ----------------------------------------------------
@@ -918,7 +958,7 @@ def send_market_order(
                 symbol,
 
             "volume":
-                volume,
+                normalized_volume,
 
             "type":
                 order_type,
@@ -939,7 +979,7 @@ def send_market_order(
                 mt5.ORDER_TIME_GTC,
 
             "type_filling":
-                filling_mode
+                filling_mode,
 
         }
 
@@ -963,10 +1003,10 @@ def send_market_order(
 
 
         logger.info(
-            f"MT5 ORDER "
+            f"MT5 ORDER REQUEST "
             f"{symbol} "
             f"{side} "
-            f"VOLUME={volume} "
+            f"VOLUME={normalized_volume} "
             f"PRICE={price} "
             f"SL={sl} "
             f"TP={tp}"
@@ -985,15 +1025,15 @@ def send_market_order(
         if result is None:
 
             logger.error(
-                f"MT5 ORDER SEND FAILED "
-                f"{mt5.last_error()}"
+                "MT5 ORDER SEND FAILED "
+                f"ERROR={mt5.last_error()}"
             )
 
             return None
 
 
         # ----------------------------------------------------
-        # Result validation
+        # Validate result
         # ----------------------------------------------------
 
         accepted_codes = (
@@ -1002,7 +1042,7 @@ def send_market_order(
 
             mt5.TRADE_RETCODE_PLACED,
 
-            mt5.TRADE_RETCODE_DONE_PARTIAL
+            mt5.TRADE_RETCODE_DONE_PARTIAL,
 
         )
 
@@ -1010,7 +1050,7 @@ def send_market_order(
         if result.retcode not in accepted_codes:
 
             logger.error(
-                f"MT5 ORDER ERROR "
+                "MT5 ORDER ERROR "
                 f"RETCODE={result.retcode} "
                 f"COMMENT={result.comment}"
             )
@@ -1019,11 +1059,10 @@ def send_market_order(
 
 
         logger.info(
-            f"MT5 ORDER OPENED "
+            "MT5 ORDER OPENED "
             f"{symbol} "
             f"{side} "
-            f"TICKET={result.order} "
-            f"DEAL={result.deal}"
+            f"TICKET={result.order}"
         )
 
 
@@ -1042,7 +1081,7 @@ def send_market_order(
                 side,
 
             "volume":
-                volume,
+                normalized_volume,
 
             "price":
                 price,
@@ -1054,7 +1093,7 @@ def send_market_order(
                 tp,
 
             "status":
-                "OPEN"
+                "OPEN",
 
         }
 
@@ -1073,12 +1112,22 @@ def send_market_order(
 # ============================================================
 
 def get_open_positions(
-    symbol=None
-):
+    symbol: Optional[str] = None
+) -> list:
 
     try:
 
         if mt5 is None:
+
+            return []
+
+
+        if not is_connected():
+
+            logger.warning(
+                "MT5 NOT CONNECTED - "
+                "GET POSITIONS SKIPPED"
+            )
 
             return []
 
@@ -1131,7 +1180,7 @@ def get_open_positions(
                     position.profit,
 
                 "magic":
-                    position.magic
+                    position.magic,
 
             }
 
@@ -1154,9 +1203,9 @@ def get_open_positions(
 # ============================================================
 
 def get_rates(
-    symbol,
-    timeframe="15",
-    count=200
+    symbol: str,
+    timeframe: str = "15",
+    count: int = 200
 ):
 
     try:
@@ -1165,6 +1214,15 @@ def get_rates(
 
             logger.error(
                 "MT5 PACKAGE NOT AVAILABLE"
+            )
+
+            return None
+
+
+        if not is_connected():
+
+            logger.error(
+                "MT5 NOT CONNECTED"
             )
 
             return None
@@ -1191,7 +1249,7 @@ def get_rates(
                 mt5.TIMEFRAME_H4,
 
             "1440":
-                mt5.TIMEFRAME_D1
+                mt5.TIMEFRAME_D1,
 
         }
 
@@ -1204,24 +1262,22 @@ def get_rates(
         if tf not in timeframe_map:
 
             logger.error(
-                f"UNSUPPORTED TIMEFRAME {timeframe}"
+                f"UNSUPPORTED TIMEFRAME "
+                f"{timeframe}"
             )
 
             return None
 
 
-        if count <= 0:
+        if int(count) <= 0:
 
             logger.error(
-                f"INVALID CANDLE COUNT {count}"
+                f"INVALID CANDLE COUNT "
+                f"{count}"
             )
 
             return None
 
-
-        # ----------------------------------------------------
-        # Symbol availability
-        # ----------------------------------------------------
 
         info = get_symbol_info(
             symbol
@@ -1231,15 +1287,12 @@ def get_rates(
         if info is None:
 
             logger.error(
-                f"SYMBOL NOT AVAILABLE {symbol}"
+                f"SYMBOL NOT AVAILABLE "
+                f"{symbol}"
             )
 
             return None
 
-
-        # ----------------------------------------------------
-        # Rates
-        # ----------------------------------------------------
 
         rates = mt5.copy_rates_from_pos(
 
@@ -1298,6 +1351,11 @@ def get_rates(
 
 class MT5Connector:
 
+    """
+    Compatibility wrapper for modules using the class-based
+    MT5 connector interface.
+    """
+
     def initialize(self):
 
         return initialize_mt5()
@@ -1348,55 +1406,70 @@ class MT5Connector:
         )
 
 
-    def send_market_order(
-
-        self,
-
-        symbol,
-
-        side,
-
-        volume,
-
-        sl=None,
-
-        tp=None
-
-    ):
-
-        return send_market_order(
-
-            symbol=symbol,
-
-            side=side,
-
-            lot=volume,
-
-            sl=sl,
-
-            tp=tp
-
-        )
-
-
     def get_rates(
-
         self,
-
         symbol,
-
         timeframe="15",
-
         count=200
-
     ):
 
         return get_rates(
-
-            symbol=symbol,
-
-            timeframe=timeframe,
-
-            count=count
-
+            symbol,
+            timeframe,
+            count
         )
+
+
+    def send_market_order(
+        self,
+        symbol,
+        side,
+        volume,
+        sl=None,
+        tp=None
+    ):
+
+        return send_market_order(
+            symbol=symbol,
+            side=side,
+            volume=volume,
+            sl=sl,
+            tp=tp
+        )
+
+
+# ============================================================
+# Module Export
+# ============================================================
+
+__all__ = [
+
+    "is_mt5_available",
+
+    "initialize_mt5",
+
+    "shutdown_mt5",
+
+    "is_connected",
+
+    "get_account_info",
+
+    "get_symbol_info",
+
+    "get_symbol_tick",
+
+    "normalize_volume",
+
+    "normalize_price",
+
+    "get_filling_mode",
+
+    "send_market_order",
+
+    "get_open_positions",
+
+    "get_rates",
+
+    "MT5Connector",
+
+]
