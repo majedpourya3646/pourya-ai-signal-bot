@@ -1,11 +1,11 @@
-```python
 # core/trading_loop.py
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 from config import TRADING_INTERVAL
 from core.logger import logger
@@ -20,328 +20,193 @@ class TradingLoop:
     """
     Main automated trading loop.
 
-    Flow:
-        TradingLoop
-            ↓
-        Trading Controller
-            ↓
-        Opportunity Engine
-            ↓
-        Auto Trader
-            ↓
-        MT5
-
-    This module is responsible for repeatedly executing
-    the trading controller.
+    Trading execution is delegated to trading_controller.run_trading_cycle().
+    No direct order execution is performed here.
     """
 
-    def __init__(self) -> None:
-        self.running = False
-        self.thread: threading.Thread | None = None
-        self.cycle_count = 0
-
-    # ------------------------------------------------------------------
-    # START
-    # ------------------------------------------------------------------
-
-    def start(self) -> bool:
-        """
-        Start the automated trading loop.
-        """
-
-        if self.running:
-            logger.warning("TRADING LOOP ALREADY RUNNING")
-            return True
-
-        logger.info("=" * 60)
-        logger.info("POURYA TRADER AI - TRADING LOOP START")
-        logger.info("=" * 60)
-
-        # --------------------------------------------------------------
-        # Initialize MT5 / Trading Engine
-        # --------------------------------------------------------------
-
-        try:
-            initialized = initialize_trading()
-
-            if not initialized:
-                logger.error(
-                    "TRADING LOOP START FAILED | MT5 INITIALIZATION FAILED"
-                )
-                return False
-
-        except Exception as exc:
-            logger.exception(
-                "TRADING LOOP INITIALIZATION ERROR: %s",
-                exc,
-            )
-            return False
-
-        # --------------------------------------------------------------
-        # Start loop
-        # --------------------------------------------------------------
-
-        self.running = True
-        self.cycle_count = 0
-
-        logger.info(
-            "TRADING LOOP ACTIVE | INTERVAL=%s seconds",
-            TRADING_INTERVAL,
+    def __init__(self, interval: Optional[int] = None) -> None:
+        self.interval = max(
+            1,
+            int(interval if interval is not None else TRADING_INTERVAL),
         )
 
-        # Run in current thread.
-        self._run_loop()
+        self.stop_event = threading.Event()
+        self.thread: Optional[threading.Thread] = None
 
-        return True
+        self.running = False
+        self.last_cycle_at: Optional[datetime] = None
+        self.last_result: Any = None
+        self.last_error: Optional[str] = None
 
-    # ------------------------------------------------------------------
-    # INTERNAL LOOP
-    # ------------------------------------------------------------------
+    def _cycle(self) -> Any:
+        self.last_cycle_at = datetime.now()
 
-    def _run_loop(self) -> None:
-        """
-        Continuous automated trading loop.
-        """
-
-        logger.info("AUTOMATED TRADING ENGINE IS RUNNING")
-
-        while self.running:
-
-            self.cycle_count += 1
-
-            cycle_started = time.time()
-
-            now = datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-
-            logger.info("")
+        try:
             logger.info("=" * 60)
-            logger.info(
-                "AUTO TRADING CYCLE #%s | %s",
-                self.cycle_count,
-                now,
-            )
+            logger.info("TRADING LOOP: NEW CYCLE")
             logger.info("=" * 60)
 
+            result = run_trading_cycle()
+
+            self.last_result = result
+            self.last_error = None
+
+            logger.info("TRADING LOOP: CYCLE COMPLETED")
+
+            return result
+
+        except Exception as exc:
+            self.last_error = str(exc)
+
+            logger.exception(
+                "TRADING LOOP: CYCLE ERROR: %s",
+                exc,
+            )
+
+            return None
+
+    def run_once(self) -> Any:
+        """Run exactly one trading cycle."""
+        return self._cycle()
+
+    def run(self) -> None:
+        """Run the continuous trading loop."""
+        if self.running:
+            logger.warning("TRADING LOOP: ALREADY RUNNING")
+            return
+
+        self.running = True
+        self.stop_event.clear()
+
+        logger.info(
+            "TRADING LOOP STARTED | interval=%ss",
+            self.interval,
+        )
+
+        try:
+            initialize_trading()
+
+            while not self.stop_event.is_set():
+                self._cycle()
+
+                if self.stop_event.wait(self.interval):
+                    break
+
+        except Exception as exc:
+            self.last_error = str(exc)
+
+            logger.exception(
+                "TRADING LOOP FATAL ERROR: %s",
+                exc,
+            )
+
+        finally:
             try:
-
-                # ------------------------------------------------------
-                # Execute one complete trading cycle
-                # ------------------------------------------------------
-
-                result = run_trading_cycle()
-
-                # ------------------------------------------------------
-                # Result logging
-                # ------------------------------------------------------
-
-                if result:
-
-                    logger.info(
-                        "CYCLE #%s RESULT: TRADE EXECUTED",
-                        self.cycle_count,
-                    )
-
-                    logger.info(
-                        "TRADE RESULT: %s",
-                        result,
-                    )
-
-                else:
-
-                    logger.info(
-                        "CYCLE #%s RESULT: NO TRADE",
-                        self.cycle_count,
-                    )
-
-            except KeyboardInterrupt:
-
-                logger.info(
-                    "TRADING LOOP INTERRUPTED BY USER"
-                )
-
-                self.running = False
-                break
-
+                shutdown_trading()
             except Exception as exc:
-
                 logger.exception(
-                    "TRADING CYCLE #%s ERROR: %s",
-                    self.cycle_count,
+                    "TRADING LOOP SHUTDOWN ERROR: %s",
                     exc,
                 )
 
-            # ----------------------------------------------------------
-            # Cycle duration
-            # ----------------------------------------------------------
+            self.running = False
 
-            elapsed = time.time() - cycle_started
+            logger.info("TRADING LOOP STOPPED")
 
-            logger.info(
-                "CYCLE #%s COMPLETED | %.2f sec",
-                self.cycle_count,
-                elapsed,
-            )
+    def start(self) -> bool:
+        """Start the trading loop in a background thread."""
+        if self.running:
+            logger.warning("TRADING LOOP: ALREADY RUNNING")
+            return False
 
-            # ----------------------------------------------------------
-            # Wait before next cycle
-            # ----------------------------------------------------------
+        if self.thread is not None and self.thread.is_alive():
+            logger.warning("TRADING LOOP: THREAD ALREADY ALIVE")
+            return False
 
-            if self.running:
+        self.stop_event.clear()
 
-                interval = max(
-                    1,
-                    int(TRADING_INTERVAL),
-                )
-
-                sleep_time = max(
-                    0,
-                    interval - elapsed,
-                )
-
-                logger.info(
-                    "NEXT AUTO TRADING CYCLE IN %.2f SEC",
-                    sleep_time,
-                )
-
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-
-        logger.info("TRADING LOOP STOPPED")
-
-    # ------------------------------------------------------------------
-    # STOP
-    # ------------------------------------------------------------------
-
-    def stop(self) -> bool:
-        """
-        Stop automated trading loop.
-        """
-
-        if not self.running:
-            logger.warning(
-                "TRADING LOOP IS NOT RUNNING"
-            )
-            return True
-
-        logger.info(
-            "TRADING LOOP STOP REQUESTED"
+        self.thread = threading.Thread(
+            target=self.run,
+            name="PouryaTradingLoop",
+            daemon=True,
         )
 
-        self.running = False
+        self.thread.start()
 
         return True
 
-    # ------------------------------------------------------------------
-    # STATUS
-    # ------------------------------------------------------------------
+    def stop(self) -> bool:
+        """Request graceful shutdown."""
+        if not self.running and not (
+            self.thread and self.thread.is_alive()
+        ):
+            return False
 
-    def status(self) -> dict:
-        """
-        Return current trading loop status.
-        """
+        logger.info("TRADING LOOP: STOP REQUESTED")
 
+        self.stop_event.set()
+
+        return True
+
+    def join(self, timeout: Optional[float] = None) -> None:
+        """Wait for the background loop to stop."""
+        if self.thread is not None:
+            self.thread.join(timeout=timeout)
+
+    def status(self) -> Dict[str, Any]:
+        """Return current loop status."""
         return {
             "running": self.running,
-            "cycle_count": self.cycle_count,
-            "interval": TRADING_INTERVAL,
+            "thread_alive": bool(
+                self.thread and self.thread.is_alive()
+            ),
+            "interval": self.interval,
+            "last_cycle_at": self.last_cycle_at,
+            "last_error": self.last_error,
+            "last_result": self.last_result,
         }
 
 
-# ==========================================================================
-# GLOBAL LOOP INSTANCE
-# ==========================================================================
+# ----------------------------------------------------------------------
+# GLOBAL LOOP
+# ----------------------------------------------------------------------
 
-trading_loop = TradingLoop()
+TRADING_LOOP = TradingLoop()
 
-
-# ==========================================================================
-# PUBLIC FUNCTIONS
-# ==========================================================================
 
 def start_trading_loop() -> bool:
-    """
-    Start global automated trading loop.
-    """
-
-    return trading_loop.start()
+    return TRADING_LOOP.start()
 
 
 def stop_trading_loop() -> bool:
-    """
-    Stop global automated trading loop.
-    """
-
-    return trading_loop.stop()
+    return TRADING_LOOP.stop()
 
 
-def trading_loop_status() -> dict:
-    """
-    Get global trading loop status.
-    """
-
-    return trading_loop.status()
+def run_trading_loop() -> None:
+    TRADING_LOOP.run()
 
 
-# ==========================================================================
-# COMPATIBILITY ALIASES
-# ==========================================================================
-
-def start() -> bool:
-    return start_trading_loop()
+def run_once() -> Any:
+    return TRADING_LOOP.run_once()
 
 
-def stop() -> bool:
-    return stop_trading_loop()
+def get_trading_loop_status() -> Dict[str, Any]:
+    return TRADING_LOOP.status()
 
 
-def status() -> dict:
-    return trading_loop_status()
+# Compatibility aliases
+start = start_trading_loop
+stop = stop_trading_loop
 
 
-# ==========================================================================
-# DIRECT EXECUTION
-# ==========================================================================
-
-if __name__ == "__main__":
-
-    try:
-
-        logger.info("=" * 60)
-        logger.info(
-            "POURYA TRADER AI - DIRECT TRADING LOOP EXECUTION"
-        )
-        logger.info("=" * 60)
-
-        start_trading_loop()
-
-    except KeyboardInterrupt:
-
-        logger.info(
-            "TRADING LOOP STOPPED BY USER"
-        )
-
-    except Exception as exc:
-
-        logger.exception(
-            "FATAL TRADING LOOP ERROR: %s",
-            exc,
-        )
-
-    finally:
-
-        try:
-            stop_trading_loop()
-        except Exception:
-            pass
-
-        try:
-            shutdown_trading()
-        except Exception:
-            pass
-
-        logger.info(
-            "POURYA TRADER AI - TRADING LOOP SHUTDOWN COMPLETE"
-        )
-```
+__all__ = [
+    "TradingLoop",
+    "TRADING_LOOP",
+    "start_trading_loop",
+    "stop_trading_loop",
+    "run_trading_loop",
+    "run_once",
+    "get_trading_loop_status",
+    "start",
+    "stop",
+]
