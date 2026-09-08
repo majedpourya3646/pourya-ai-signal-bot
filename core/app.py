@@ -1,452 +1,322 @@
 # core/app.py
 
-import time
+from __future__ import annotations
 
-from core.logger import logger
+import logging
+import threading
+from typing import Any, Dict, Optional
 
-from core.database_manager import (
-    initialize_database
+from config import (
+    AUTO_TRADE,
+    PAPER_TRADING,
 )
 
+from core.logger import logger
 from core.mt5_connector import (
     initialize_mt5,
     shutdown_mt5,
     is_connected,
-    get_account_info
 )
 
-from core.telegram_notifier import (
-    notify_system
+from core.trading_controller import (
+    initialize_trading,
+    shutdown_trading,
 )
 
-from core.position_monitor import (
-    start_position_monitor,
-    stop_position_monitor
-)
-
-from scheduler.trading_loop import (
+from core.trading_loop import (
     start_trading_loop,
     stop_trading_loop,
-    trading_loop_status
+    get_trading_loop_status,
 )
 
 
-RUNNING = False
+class App:
+    """
+    Main application coordinator for Pourya Trader AI.
 
+    Startup flow:
+        App
+          ↓
+        MT5 Connector
+          ↓
+        Trading Controller
+          ↓
+        Trading Loop
 
-# ============================================================
-# SYSTEM INITIALIZATION
-# ============================================================
+    No live order is enabled by this class.
+    PAPER_TRADING remains controlled by config.
+    """
 
-def initialize_system():
+    def __init__(self) -> None:
+        self.running = False
+        self.initialized = False
 
-    logger.info("=" * 60)
-    logger.info("SYSTEM INITIALIZATION STARTED")
-    logger.info("=" * 60)
+        self._lock = threading.RLock()
 
-    # --------------------------------------------------------
-    # Database
-    # --------------------------------------------------------
-
-    try:
-
-        database_status = initialize_database()
-
-        if not database_status:
-
-            logger.error(
-                "DATABASE INITIALIZATION FAILED"
-            )
-
-            return False
-
+        logger.info("APP: instance created")
         logger.info(
-            "DATABASE INITIALIZED"
+            "APP: AUTO_TRADE=%s | PAPER_TRADING=%s",
+            AUTO_TRADE,
+            PAPER_TRADING,
         )
 
-    except Exception as exc:
+    # ------------------------------------------------------------------
+    # INITIALIZATION
+    # ------------------------------------------------------------------
 
-        logger.exception(
-            f"DATABASE INITIALIZATION ERROR: {exc}"
-        )
+    def initialize(self) -> bool:
+        """
+        Initialize the application and MT5 connection.
+        """
+        with self._lock:
+            if self.initialized:
+                logger.info("APP: already initialized")
+                return True
 
-        return False
-
-    # --------------------------------------------------------
-    # MT5
-    # --------------------------------------------------------
-
-    try:
-
-        mt5_status = initialize_mt5()
-
-        if not mt5_status:
-
-            logger.error(
-                "MT5 CONNECTION FAILED"
-            )
-
-            return False
-
-        if not is_connected():
-
-            logger.error(
-                "MT5 INITIALIZATION RETURNED SUCCESS "
-                "BUT TERMINAL IS NOT CONNECTED"
-            )
-
-            shutdown_mt5()
-
-            return False
-
-        logger.info(
-            "MT5 CONNECTION READY"
-        )
-
-    except Exception as exc:
-
-        logger.exception(
-            f"MT5 INITIALIZATION ERROR: {exc}"
-        )
-
-        try:
-            shutdown_mt5()
-        except Exception:
-            pass
-
-        return False
-
-    # --------------------------------------------------------
-    # Account
-    # --------------------------------------------------------
-
-    try:
-
-        account = get_account_info()
-
-        if account:
-
-            logger.info(
-                "MT5 ACCOUNT READY | "
-                f"LOGIN={account.get('login')} | "
-                f"SERVER={account.get('server')} | "
-                f"BALANCE={account.get('balance')} | "
-                f"EQUITY={account.get('equity')}"
-            )
-
-    except Exception as exc:
-
-        logger.warning(
-            f"ACCOUNT INFORMATION CHECK FAILED: {exc}"
-        )
-
-    logger.info(
-        "SYSTEM INITIALIZATION COMPLETED"
-    )
-
-    return True
-
-
-# ============================================================
-# START SERVICES
-# ============================================================
-
-def start_services():
-
-    logger.info("=" * 60)
-    logger.info("STARTING SERVICES")
-    logger.info("=" * 60)
-
-    # --------------------------------------------------------
-    # Position Monitor
-    # --------------------------------------------------------
-
-    try:
-
-        position_status = start_position_monitor()
-
-        if not position_status:
-
-            logger.error(
-                "POSITION MONITOR FAILED"
-            )
-
-            return False
-
-        logger.info(
-            "POSITION MONITOR STARTED"
-        )
-
-    except Exception as exc:
-
-        logger.exception(
-            f"POSITION MONITOR START ERROR: {exc}"
-        )
-
-        return False
-
-    # --------------------------------------------------------
-    # Trading Loop
-    # --------------------------------------------------------
-
-    try:
-
-        trading_status = start_trading_loop()
-
-        if not trading_status:
-
-            logger.error(
-                "TRADING LOOP FAILED"
-            )
+            logger.info("=" * 70)
+            logger.info("POURYA TRADER AI - APPLICATION INITIALIZATION")
+            logger.info("=" * 70)
 
             try:
-                stop_position_monitor()
-            except Exception:
-                pass
-
-            return False
-
-        logger.info(
-            "TRADING LOOP STARTED"
-        )
-
-    except Exception as exc:
-
-        logger.exception(
-            f"TRADING LOOP START ERROR: {exc}"
-        )
-
-        try:
-            stop_position_monitor()
-        except Exception:
-            pass
-
-        return False
-
-    logger.info("=" * 60)
-    logger.info("ALL SERVICES STARTED")
-    logger.info("=" * 60)
-
-    return True
-
-
-# ============================================================
-# STOP APPLICATION
-# ============================================================
-
-def stop_app():
-
-    global RUNNING
-
-    logger.info("=" * 60)
-    logger.info("APPLICATION SHUTDOWN STARTED")
-    logger.info("=" * 60)
-
-    RUNNING = False
-
-    # --------------------------------------------------------
-    # Stop Trading
-    # --------------------------------------------------------
-
-    try:
-
-        stop_trading_loop()
-
-    except Exception as exc:
-
-        logger.exception(
-            f"TRADING LOOP STOP ERROR: {exc}"
-        )
-
-    # --------------------------------------------------------
-    # Stop Position Monitor
-    # --------------------------------------------------------
-
-    try:
-
-        stop_position_monitor()
-
-    except Exception as exc:
-
-        logger.exception(
-            f"POSITION MONITOR STOP ERROR: {exc}"
-        )
-
-    # --------------------------------------------------------
-    # Shutdown MT5
-    # --------------------------------------------------------
-
-    try:
-
-        shutdown_mt5()
-
-    except Exception as exc:
-
-        logger.exception(
-            f"MT5 SHUTDOWN ERROR: {exc}"
-        )
-
-    logger.info(
-        "POURYA TRADER AI STOPPED"
-    )
-
-    return True
-
-
-# ============================================================
-# APPLICATION RUNNER
-# ============================================================
-
-def run():
-
-    global RUNNING
-
-    if RUNNING:
-
-        logger.warning(
-            "APPLICATION ALREADY RUNNING"
-        )
-
-        return True
-
-    logger.info("=" * 60)
-    logger.info("POURYA TRADER AI")
-    logger.info("VERSION 2.1.0-MT5")
-    logger.info("APPLICATION STARTING")
-    logger.info("=" * 60)
-
-    # --------------------------------------------------------
-    # Initialize
-    # --------------------------------------------------------
-
-    if not initialize_system():
-
-        logger.error(
-            "SYSTEM START FAILED"
-        )
-
-        try:
-            shutdown_mt5()
-        except Exception:
-            pass
-
-        return False
-
-    # --------------------------------------------------------
-    # Start Services
-    # --------------------------------------------------------
-
-    if not start_services():
-
-        logger.error(
-            "SERVICE START FAILED"
-        )
-
-        stop_app()
-
-        return False
-
-    RUNNING = True
-
-    # --------------------------------------------------------
-    # Telegram Startup Notification
-    # --------------------------------------------------------
-
-    try:
-
-        notify_system(
-            """
-🤖 Pourya Trader AI
-
-✅ MT5 Connected
-✅ Database Connected
-✅ Trading Engine Started
-✅ Position Monitor Active
-
-Broker: MT5
-Symbol: XAUUSD.st
-Timeframes: M15 / H1 / H4
-Version: 2.1.0-MT5
-"""
-        )
-
-    except Exception as exc:
-
-        logger.warning(
-            f"START TELEGRAM NOTIFICATION FAILED: {exc}"
-        )
-
-    logger.info("=" * 60)
-    logger.info("POURYA TRADER AI RUNNING")
-    logger.info("=" * 60)
-
-    # --------------------------------------------------------
-    # Main Application Watchdog
-    # --------------------------------------------------------
-
-    try:
-
-        while RUNNING:
-
-            try:
-
-                loop_status = trading_loop_status()
-
-                if not loop_status.get("running", False):
-
+                if not initialize_mt5():
                     logger.error(
-                        "TRADING LOOP STOPPED UNEXPECTEDLY"
+                        "APP: MT5 initialization failed"
                     )
-
-                    break
-
-            except Exception as exc:
-
-                logger.warning(
-                    f"TRADING LOOP STATUS CHECK FAILED: {exc}"
-                )
-
-            try:
+                    return False
 
                 if not is_connected():
-
                     logger.error(
-                        "MT5 CONNECTION LOST"
+                        "APP: MT5 connection verification failed"
                     )
 
-                    break
+                    try:
+                        shutdown_mt5()
+                    except Exception:
+                        pass
 
-            except Exception as exc:
+                    return False
 
-                logger.warning(
-                    f"MT5 CONNECTION CHECK FAILED: {exc}"
+                logger.info(
+                    "APP: MT5 connection verified"
                 )
 
-            time.sleep(2)
+                initialize_trading()
 
-    except KeyboardInterrupt:
+                self.initialized = True
 
-        logger.info(
-            "KEYBOARD INTERRUPT RECEIVED"
-        )
+                logger.info(
+                    "APP: INITIALIZATION SUCCESS"
+                )
 
-    except Exception as exc:
+                return True
 
-        logger.exception(
-            f"APPLICATION LOOP ERROR: {exc}"
-        )
+            except Exception as exc:
+                logger.exception(
+                    "APP: INITIALIZATION ERROR: %s",
+                    exc,
+                )
 
-    finally:
+                self.initialized = False
 
-        stop_app()
+                try:
+                    shutdown_mt5()
+                except Exception:
+                    pass
 
-    return True
+                return False
+
+    # ------------------------------------------------------------------
+    # START
+    # ------------------------------------------------------------------
+
+    def start(self) -> bool:
+        """
+        Start the application and background trading loop.
+        """
+        with self._lock:
+            if self.running:
+                logger.warning(
+                    "APP: already running"
+                )
+                return True
+
+            if not self.initialized:
+                if not self.initialize():
+                    logger.error(
+                        "APP: cannot start; initialization failed"
+                    )
+                    return False
+
+            try:
+                started = start_trading_loop()
+
+                if not started:
+                    logger.error(
+                        "APP: trading loop failed to start"
+                    )
+                    return False
+
+                self.running = True
+
+                logger.info("=" * 70)
+                logger.info(
+                    "POURYA TRADER AI - APPLICATION STARTED"
+                )
+                logger.info(
+                    "PAPER TRADING: %s",
+                    PAPER_TRADING,
+                )
+                logger.info("=" * 70)
+
+                return True
+
+            except Exception as exc:
+                logger.exception(
+                    "APP: START ERROR: %s",
+                    exc,
+                )
+
+                self.running = False
+
+                return False
+
+    # ------------------------------------------------------------------
+    # STOP
+    # ------------------------------------------------------------------
+
+    def stop(self) -> bool:
+        """
+        Gracefully stop the trading loop and MT5 connection.
+        """
+        with self._lock:
+            if not self.running and not self.initialized:
+                logger.info(
+                    "APP: already stopped"
+                )
+                return True
+
+            logger.info(
+                "APP: shutdown requested"
+            )
+
+            try:
+                stop_trading_loop()
+            except Exception as exc:
+                logger.exception(
+                    "APP: trading loop stop error: %s",
+                    exc,
+                )
+
+            try:
+                shutdown_trading()
+            except Exception as exc:
+                logger.exception(
+                    "APP: trading controller shutdown error: %s",
+                    exc,
+                )
+
+            try:
+                shutdown_mt5()
+            except Exception as exc:
+                logger.exception(
+                    "APP: MT5 shutdown error: %s",
+                    exc,
+                )
+
+            self.running = False
+            self.initialized = False
+
+            logger.info(
+                "APP: APPLICATION STOPPED"
+            )
+
+            return True
+
+    # ------------------------------------------------------------------
+    # RUN
+    # ------------------------------------------------------------------
+
+    def run(self) -> bool:
+        """
+        Initialize and start the application.
+
+        This method returns after the background trading loop starts.
+        """
+        return self.start()
+
+    # ------------------------------------------------------------------
+    # STATUS
+    # ------------------------------------------------------------------
+
+    def status(self) -> Dict[str, Any]:
+        """
+        Return application status.
+        """
+        try:
+            mt5_connected = bool(is_connected())
+        except Exception:
+            mt5_connected = False
+
+        try:
+            loop_status = get_trading_loop_status()
+        except Exception as exc:
+            loop_status = {
+                "error": str(exc)
+            }
+
+        return {
+            "running": self.running,
+            "initialized": self.initialized,
+            "mt5_connected": mt5_connected,
+            "auto_trade": AUTO_TRADE,
+            "paper_trading": PAPER_TRADING,
+            "trading_loop": loop_status,
+        }
+
+    # ------------------------------------------------------------------
+    # CONTEXT MANAGER
+    # ------------------------------------------------------------------
+
+    def __enter__(self) -> "App":
+        if not self.start():
+            raise RuntimeError(
+                "Pourya Trader AI application failed to start"
+            )
+
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type],
+        exc_value: Optional[BaseException],
+        traceback: Optional[Any],
+    ) -> None:
+        self.stop()
 
 
-# ============================================================
-# FOREVER COMPATIBILITY WRAPPER
-# ============================================================
+# ----------------------------------------------------------------------
+# GLOBAL APP INSTANCE
+# ----------------------------------------------------------------------
 
-def run_forever():
+APP = App()
 
-    return run()
+
+def start_app() -> bool:
+    return APP.start()
+
+
+def stop_app() -> bool:
+    return APP.stop()
+
+
+def app_status() -> Dict[str, Any]:
+    return APP.status()
+
+
+__all__ = [
+    "App",
+    "APP",
+    "start_app",
+    "stop_app",
+    "app_status",
+]
