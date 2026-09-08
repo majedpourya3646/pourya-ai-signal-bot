@@ -24,7 +24,7 @@ def execute_engine_cycle() -> Dict[str, Any]:
     """
     Execute one complete trading engine cycle.
 
-    The Trading Controller is the single owner of the
+    Trading Controller is the single owner of the
     trading workflow.
 
     Flow:
@@ -71,13 +71,13 @@ def execute_engine_cycle() -> Dict[str, Any]:
         )
 
         # ----------------------------------------------------
-        # Run the complete trading cycle
+        # Run complete trading controller cycle
         # ----------------------------------------------------
 
         trade = run_trading_cycle()
 
         # ----------------------------------------------------
-        # Determine result
+        # Process result
         # ----------------------------------------------------
 
         if trade:
@@ -101,7 +101,7 @@ def execute_engine_cycle() -> Dict[str, Any]:
             opened = None
 
         # ----------------------------------------------------
-        # Final result
+        # Build engine result
         # ----------------------------------------------------
 
         result = {
@@ -126,7 +126,7 @@ def execute_engine_cycle() -> Dict[str, Any]:
         )
 
         logger.info(
-            f"OPENED={1 if opened else 0}"
+            f"NEW TRADES={1 if opened else 0}"
         )
 
         logger.info(
@@ -164,7 +164,7 @@ def execute_engine_cycle() -> Dict[str, Any]:
 
 def run_full_engine() -> Dict[str, Any]:
     """
-    Compatibility wrapper for the complete engine.
+    Compatibility wrapper for the complete trading engine.
     """
 
     try:
