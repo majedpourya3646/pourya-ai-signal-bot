@@ -16,12 +16,13 @@ from core.mt5_connector import (
 )
 
 from core.position_manager import (
-    close_position as mt5_close_position
+    close_position as mt5_close_position,
 )
 
 from config import (
     DEFAULT_LOT,
     PAPER_TRADING,
+    ALLOW_LIVE_TRADING,
 )
 
 
@@ -41,7 +42,7 @@ DEFAULT_DEVIATION = 20
 # ============================================================
 
 def _normalize_side(
-    side: str
+    side: str,
 ) -> Optional[str]:
 
     if side is None:
@@ -51,17 +52,54 @@ def _normalize_side(
 
     if side in (
         "BUY",
-        "STRONG BUY"
+        "STRONG BUY",
     ):
         return "BUY"
 
     if side in (
         "SELL",
-        "STRONG SELL"
+        "STRONG SELL",
     ):
         return "SELL"
 
     return None
+
+
+def _live_trading_allowed() -> bool:
+    """
+    Independent safety gate for real MT5 orders.
+
+    PAPER_TRADING must be False AND
+    ALLOW_LIVE_TRADING must be True.
+    """
+
+    try:
+
+        if PAPER_TRADING:
+
+            return False
+
+        if not ALLOW_LIVE_TRADING:
+
+            logger.critical(
+                "LIVE TRADING BLOCKED: "
+                "ALLOW_LIVE_TRADING=False"
+            )
+
+            return False
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            f"LIVE TRADING SAFETY CHECK ERROR {exc}"
+        )
+
+        # Fail-safe:
+        # never allow a real order when safety
+        # configuration cannot be verified.
+        return False
 
 
 # ============================================================
@@ -138,7 +176,8 @@ def get_position_count() -> int:
             f"POSITION COUNT ERROR {exc}"
         )
 
-        return 0
+        # Fail-safe for position-limit decisions.
+        return MAX_OPEN_POSITIONS
 
 
 # ============================================================
@@ -146,13 +185,13 @@ def get_position_count() -> int:
 # ============================================================
 
 def has_open_position(
-    symbol: str
+    symbol: str,
 ) -> bool:
 
     try:
 
         positions = get_open_positions(
-            symbol=symbol
+            symbol=symbol,
         )
 
         return len(positions) > 0
@@ -175,7 +214,7 @@ def has_open_position(
 # ============================================================
 
 def validate_symbol(
-    symbol: str
+    symbol: str,
 ) -> bool:
 
     try:
@@ -185,7 +224,7 @@ def validate_symbol(
             return False
 
         info = get_symbol_info(
-            symbol
+            symbol,
         )
 
         if info is None:
@@ -216,13 +255,13 @@ def validate_prices(
     symbol: str,
     side: str,
     sl: Optional[float],
-    tp: Optional[float]
+    tp: Optional[float],
 ) -> bool:
 
     try:
 
         tick = get_symbol_tick(
-            symbol
+            symbol,
         )
 
         if tick is None:
@@ -230,7 +269,7 @@ def validate_prices(
             return False
 
         side = _normalize_side(
-            side
+            side,
         )
 
         if side is None:
@@ -265,6 +304,10 @@ def validate_prices(
                 tick.ask
             )
 
+            if current_price <= 0:
+
+                return False
+
             if sl >= current_price:
 
                 logger.error(
@@ -292,6 +335,10 @@ def validate_prices(
             current_price = float(
                 tick.bid
             )
+
+            if current_price <= 0:
+
+                return False
 
             if sl <= current_price:
 
@@ -333,7 +380,7 @@ def validate_prices(
 
 def validate_volume(
     symbol: str,
-    lot: float
+    lot: float,
 ):
 
     try:
@@ -346,7 +393,7 @@ def validate_volume(
 
         normalized = normalize_volume(
             symbol,
-            lot
+            lot,
         )
 
         if normalized is None:
@@ -412,7 +459,7 @@ def validate_order(
     side: str,
     lot: float,
     sl: float,
-    tp: float
+    tp: float,
 ) -> bool:
 
     if not check_connection():
@@ -420,7 +467,7 @@ def validate_order(
         return False
 
     side = _normalize_side(
-        side
+        side,
     )
 
     if side is None:
@@ -432,7 +479,7 @@ def validate_order(
         return False
 
     if not validate_symbol(
-        symbol
+        symbol,
     ):
 
         return False
@@ -442,7 +489,7 @@ def validate_order(
         return False
 
     if has_open_position(
-        symbol
+        symbol,
     ):
 
         logger.warning(
@@ -454,7 +501,7 @@ def validate_order(
 
     if validate_volume(
         symbol,
-        lot
+        lot,
     ) is None:
 
         return False
@@ -463,7 +510,7 @@ def validate_order(
         symbol,
         side,
         sl,
-        tp
+        tp,
     ):
 
         return False
@@ -482,19 +529,21 @@ def open_market_position(
     sl: float,
     tp: float,
     confidence: Optional[float] = None,
-    comment: str = "Pourya Trader AI"
+    comment: str = "Pourya Trader AI",
 ) -> Optional[Dict[str, Any]]:
 
     try:
 
+        original_side = side
+
         side = _normalize_side(
-            side
+            side,
         )
 
         if side is None:
 
             logger.error(
-                f"INVALID SIDE {side}"
+                f"INVALID SIDE {original_side}"
             )
 
             return None
@@ -504,7 +553,7 @@ def open_market_position(
             side,
             lot,
             sl,
-            tp
+            tp,
         ):
 
             logger.warning(
@@ -514,19 +563,19 @@ def open_market_position(
 
             return None
 
-        volume = normalize_volume(
+        volume = validate_volume(
             symbol,
-            lot
+            lot,
         )
 
         sl = normalize_price(
             symbol,
-            sl
+            sl,
         )
 
         tp = normalize_price(
             symbol,
-            tp
+            tp,
         )
 
         if (
@@ -538,7 +587,7 @@ def open_market_position(
             return None
 
         tick = get_symbol_tick(
-            symbol
+            symbol,
         )
 
         if tick is None:
@@ -557,9 +606,18 @@ def open_market_position(
                 tick.bid
             )
 
+        if expected_price <= 0:
+
+            logger.error(
+                f"INVALID MARKET PRICE "
+                f"{symbol} {side}"
+            )
+
+            return None
+
         expected_price = normalize_price(
             symbol,
-            expected_price
+            expected_price,
         )
 
         logger.info(
@@ -589,11 +647,16 @@ def open_market_position(
         )
 
         logger.info(
+            f"ALLOW_LIVE_TRADING="
+            f"{ALLOW_LIVE_TRADING}"
+        )
+
+        logger.info(
             "================================"
         )
 
         # ====================================================
-        # PAPER TRADING SAFETY
+        # PAPER TRADING
         # ====================================================
 
         if PAPER_TRADING:
@@ -609,37 +672,43 @@ def open_market_position(
 
                 "paper_trading": True,
 
-                "symbol":
-                    symbol,
+                "symbol": symbol,
 
-                "side":
-                    side,
+                "side": side,
 
-                "volume":
-                    volume,
+                "volume": volume,
 
-                "price":
-                    expected_price,
+                "price": expected_price,
 
-                "sl":
-                    sl,
+                "sl": sl,
 
-                "tp":
-                    tp,
+                "tp": tp,
 
-                "ticket":
-                    None,
+                "ticket": None,
 
-                "deal":
-                    None,
+                "order": None,
 
-                "confidence":
-                    confidence,
+                "deal": None,
 
-                "status":
-                    "PAPER_OPEN"
+                "confidence": confidence,
+
+                "status": "PAPER_OPEN",
 
             }
+
+        # ====================================================
+        # LIVE TRADING SAFETY GATE
+        # ====================================================
+
+        if not _live_trading_allowed():
+
+            logger.critical(
+                "REAL MT5 ORDER BLOCKED "
+                f"{symbol} {side} "
+                "BY SAFETY GATE"
+            )
+
+            return None
 
         # ====================================================
         # REAL MT5 ORDER
@@ -651,11 +720,17 @@ def open_market_position(
 
             side=side,
 
-            lot=volume,
+            volume=volume,
 
             sl=sl,
 
-            tp=tp
+            tp=tp,
+
+            magic=MAGIC_NUMBER,
+
+            deviation=DEFAULT_DEVIATION,
+
+            comment=comment,
 
         )
 
@@ -668,19 +743,48 @@ def open_market_position(
 
             return None
 
-        ticket = result.get(
-            "ticket"
+        if not result.get(
+            "success",
+            False,
+        ):
+
+            logger.error(
+                "MT5 ORDER REJECTED "
+                f"{symbol} "
+                f"RETCODE={result.get('retcode')} "
+                f"ERROR={result.get('error')}"
+            )
+
+            return None
+
+        # Connector exposes:
+        # order = MT5 order ticket
+        # deal  = executed deal ticket
+        order = result.get(
+            "order"
         )
 
         deal = result.get(
             "deal"
         )
 
+        # Backward-compatible ticket.
+        #
+        # Prefer the MT5 order ticket when available.
+        # If it is unavailable, use deal as fallback.
+        ticket = order
+
+        if ticket is None:
+
+            ticket = deal
+
         if ticket is None:
 
             logger.error(
-                f"ORDER WITHOUT TICKET "
-                f"{symbol}"
+                f"ORDER WITHOUT MT5 TICKET "
+                f"{symbol} "
+                f"ORDER={order} "
+                f"DEAL={deal}"
             )
 
             return None
@@ -691,43 +795,37 @@ def open_market_position(
 
             "paper_trading": False,
 
-            "symbol":
-                symbol,
+            "symbol": symbol,
 
-            "side":
-                side,
+            "side": side,
 
-            "volume":
-                volume,
+            "volume": volume,
 
-            "price":
-                result.get(
-                    "price"
-                ),
+            "price": result.get(
+                "price",
+                expected_price,
+            ),
 
-            "sl":
-                sl,
+            "sl": sl,
 
-            "tp":
-                tp,
+            "tp": tp,
 
-            "ticket":
-                ticket,
+            "ticket": ticket,
 
-            "deal":
-                deal,
+            "order": order,
 
-            "confidence":
-                confidence,
+            "deal": deal,
 
-            "status":
-                "OPEN"
+            "confidence": confidence,
+
+            "status": "OPEN",
 
         }
 
         logger.info(
             f"MT5 POSITION OPENED "
             f"TICKET={ticket} "
+            f"ORDER={order} "
             f"DEAL={deal}"
         )
 
@@ -754,7 +852,7 @@ def create_order(
     tp: float,
     sl: float,
     lot: Optional[float] = None,
-    confidence: Optional[float] = None
+    confidence: Optional[float] = None,
 ):
 
     """
@@ -789,7 +887,7 @@ def create_order(
 
             tp=tp,
 
-            confidence=confidence
+            confidence=confidence,
 
         )
 
@@ -807,7 +905,7 @@ def create_order(
 # ============================================================
 
 def close_position(
-    ticket: int
+    ticket: int,
 ) -> bool:
 
     try:
@@ -816,18 +914,33 @@ def close_position(
 
             return False
 
-        # Paper trades do not have real tickets.
+        # Paper positions are managed by
+        # paper_position_manager.py.
+        #
+        # This compatibility function must not attempt
+        # a real MT5 close while PAPER_TRADING is active.
         if PAPER_TRADING:
 
             logger.info(
-                f"PAPER POSITION CLOSED "
+                f"PAPER POSITION CLOSE REQUEST "
                 f"TICKET={ticket}"
             )
 
             return True
 
+        # Independent live safety gate.
+        if not _live_trading_allowed():
+
+            logger.critical(
+                "REAL MT5 CLOSE BLOCKED "
+                f"TICKET={ticket} "
+                "BY SAFETY GATE"
+            )
+
+            return False
+
         result = mt5_close_position(
-            ticket
+            ticket,
         )
 
         if result:
@@ -861,13 +974,13 @@ def close_position(
 # ============================================================
 
 def get_positions(
-    symbol: Optional[str] = None
+    symbol: Optional[str] = None,
 ):
 
     try:
 
         return get_open_positions(
-            symbol=symbol
+            symbol=symbol,
         )
 
     except Exception as exc:
@@ -885,13 +998,13 @@ def get_positions(
 # ============================================================
 
 def get_position(
-    symbol: str
+    symbol: str,
 ):
 
     try:
 
         positions = get_open_positions(
-            symbol=symbol
+            symbol=symbol,
         )
 
         if not positions:
