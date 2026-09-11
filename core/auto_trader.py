@@ -1,3 +1,4 @@
+```python
 # core/auto_trader.py
 
 from typing import Optional, Dict, Any
@@ -24,14 +25,14 @@ from config import (
 
 
 # ============================================================
-# Configuration
+# XAUUSD CONFIG
 # ============================================================
 
 XAUUSD_SYMBOL = "XAUUSD.st"
 
 
 # ============================================================
-# Helpers
+# SYMBOL NORMALIZATION
 # ============================================================
 
 def _normalize_symbol(symbol: Any) -> str:
@@ -40,10 +41,7 @@ def _normalize_symbol(symbol: Any) -> str:
 
     Example:
         XAUUSD.st -> XAUUSD.ST
-        xauusd.st -> XAUUSD.ST
-
-    The canonical broker symbol XAUUSD.st is returned separately
-    where it is needed for MT5/order execution.
+        XAUUSD.ST -> XAUUSD.ST
     """
     if symbol is None:
         return ""
@@ -53,42 +51,37 @@ def _normalize_symbol(symbol: Any) -> str:
 
 def _is_xauusd_symbol(symbol: Any) -> bool:
     """
-    Check whether a symbol represents the configured XAUUSD symbol.
+    Case-insensitive XAUUSD.st validation.
     """
+
     return (
         _normalize_symbol(symbol)
         == _normalize_symbol(XAUUSD_SYMBOL)
     )
 
 
-def _normalize_signal(
-    signal: str
-) -> Optional[str]:
+# ============================================================
+# SIGNAL NORMALIZATION
+# ============================================================
+
+def _normalize_signal(signal: Any) -> Optional[str]:
 
     if signal is None:
         return None
 
-    signal = str(
-        signal
-    ).upper().strip()
+    signal = str(signal).upper().strip()
 
-    if signal in (
-        "BUY",
-        "STRONG BUY",
-    ):
+    if signal in ("BUY", "STRONG BUY"):
         return "BUY"
 
-    if signal in (
-        "SELL",
-        "STRONG SELL",
-    ):
+    if signal in ("SELL", "STRONG SELL"):
         return "SELL"
 
     return None
 
 
 # ============================================================
-# Validate Opportunity
+# OPPORTUNITY VALIDATION
 # ============================================================
 
 def _validate_opportunity(
@@ -96,15 +89,14 @@ def _validate_opportunity(
 ) -> bool:
 
     if not opportunity:
-        logger.info(
-            "NO OPPORTUNITY"
-        )
+        logger.info("NO OPPORTUNITY")
         return False
 
-    raw_symbol = opportunity.get(
-        "symbol",
-        ""
-    )
+    # --------------------------------------------------------
+    # SYMBOL
+    # --------------------------------------------------------
+
+    raw_symbol = opportunity.get("symbol", "")
 
     if not _is_xauusd_symbol(raw_symbol):
 
@@ -116,11 +108,12 @@ def _validate_opportunity(
 
         return False
 
+    # --------------------------------------------------------
+    # SIGNAL
+    # --------------------------------------------------------
+
     signal = _normalize_signal(
-        opportunity.get(
-            "signal",
-            ""
-        )
+        opportunity.get("signal", "")
     )
 
     if signal is None:
@@ -131,6 +124,10 @@ def _validate_opportunity(
 
         return False
 
+    # --------------------------------------------------------
+    # CONFIDENCE
+    # --------------------------------------------------------
+
     try:
 
         confidence = float(
@@ -140,10 +137,7 @@ def _validate_opportunity(
             )
         )
 
-    except (
-        TypeError,
-        ValueError
-    ):
+    except (TypeError, ValueError):
 
         logger.warning(
             "INVALID CONFIDENCE"
@@ -161,17 +155,13 @@ def _validate_opportunity(
 
         return False
 
-    entry = opportunity.get(
-        "entry"
-    )
+    # --------------------------------------------------------
+    # PRICE DATA
+    # --------------------------------------------------------
 
-    tp = opportunity.get(
-        "tp"
-    )
-
-    sl = opportunity.get(
-        "sl"
-    )
+    entry = opportunity.get("entry")
+    tp = opportunity.get("tp")
+    sl = opportunity.get("sl")
 
     if (
         entry is None
@@ -185,22 +175,27 @@ def _validate_opportunity(
 
         return False
 
+    # --------------------------------------------------------
+    # PRICE CONVERSION
+    # --------------------------------------------------------
+
     try:
 
         entry = float(entry)
         tp = float(tp)
         sl = float(sl)
 
-    except (
-        TypeError,
-        ValueError
-    ):
+    except (TypeError, ValueError):
 
         logger.error(
             "INVALID ENTRY / TP / SL"
         )
 
         return False
+
+    # --------------------------------------------------------
+    # PRICE VALIDATION
+    # --------------------------------------------------------
 
     if (
         entry <= 0
@@ -221,7 +216,7 @@ def _validate_opportunity(
 
 
 # ============================================================
-# Check Existing Trades
+# EXISTING DATABASE TRADE CHECK
 # ============================================================
 
 def _has_existing_trade() -> bool:
@@ -231,7 +226,6 @@ def _has_existing_trade() -> bool:
         open_trades = get_open_trades()
 
         if not open_trades:
-
             return False
 
         for trade in open_trades:
@@ -272,13 +266,14 @@ def _has_existing_trade() -> bool:
         )
 
         # Fail-safe:
-        # if database cannot be checked,
-        # do not open a new trade.
+        # if database status is uncertain,
+        # DO NOT open another trade.
+
         return True
 
 
 # ============================================================
-# Execute Trade
+# EXECUTE TRADE
 # ============================================================
 
 def execute_trade(
@@ -287,9 +282,9 @@ def execute_trade(
 
     try:
 
-        # ====================================================
-        # Basic validation
-        # ====================================================
+        # ----------------------------------------------------
+        # VALIDATE OPPORTUNITY
+        # ----------------------------------------------------
 
         if not _validate_opportunity(
             opportunity
@@ -297,18 +292,31 @@ def execute_trade(
 
             return None
 
-        # ====================================================
-        # Data
-        # ====================================================
+        # ----------------------------------------------------
+        # CANONICAL SYMBOL
+        # ----------------------------------------------------
+        #
+        # IMPORTANT:
+        # Never pass the uppercased comparison value
+        # XAUUSD.ST to MT5.
+        #
+        # Always use the exact broker symbol:
+        # XAUUSD.st
+        #
 
-        # Always use the broker's canonical symbol for execution.
         symbol = XAUUSD_SYMBOL
 
+        # ----------------------------------------------------
+        # SIGNAL
+        # ----------------------------------------------------
+
         signal = _normalize_signal(
-            opportunity.get(
-                "signal"
-            )
+            opportunity.get("signal")
         )
+
+        # ----------------------------------------------------
+        # NUMERIC VALUES
+        # ----------------------------------------------------
 
         confidence = float(
             opportunity.get(
@@ -318,26 +326,20 @@ def execute_trade(
         )
 
         entry = float(
-            opportunity.get(
-                "entry"
-            )
+            opportunity.get("entry")
         )
 
         tp = float(
-            opportunity.get(
-                "tp"
-            )
+            opportunity.get("tp")
         )
 
         sl = float(
-            opportunity.get(
-                "sl"
-            )
+            opportunity.get("sl")
         )
 
-        # ====================================================
-        # Open trade database check
-        # ====================================================
+        # ----------------------------------------------------
+        # DATABASE OPEN TRADE CHECK
+        # ----------------------------------------------------
 
         if _has_existing_trade():
 
@@ -348,15 +350,20 @@ def execute_trade(
 
             return None
 
-        # ====================================================
-        # MT5 position check
-        # ====================================================
+        # ----------------------------------------------------
+        # MT5 POSITION COUNT
+        # ----------------------------------------------------
 
         try:
 
-            current_positions = get_position_count()
+            current_positions = (
+                get_position_count()
+            )
 
-            if current_positions >= MAX_OPEN_TRADES:
+            if (
+                current_positions
+                >= MAX_OPEN_TRADES
+            ):
 
                 logger.info(
                     f"TRADE REJECTED - "
@@ -375,6 +382,10 @@ def execute_trade(
 
             return None
 
+        # ----------------------------------------------------
+        # MT5 EXISTING POSITION CHECK
+        # ----------------------------------------------------
+
         if has_open_position(
             symbol
         ):
@@ -387,15 +398,15 @@ def execute_trade(
 
             return None
 
-        # ====================================================
-        # Lot
-        # ====================================================
+        # ----------------------------------------------------
+        # LOT
+        # ----------------------------------------------------
 
         lot = DEFAULT_LOT
 
-        # ====================================================
-        # Log decision
-        # ====================================================
+        # ----------------------------------------------------
+        # DECISION LOG
+        # ----------------------------------------------------
 
         logger.info(
             "================================"
@@ -441,31 +452,23 @@ def execute_trade(
             "================================"
         )
 
-        # ====================================================
-        # Send order through Order Manager
-        # ====================================================
-
-        # IMPORTANT:
-        # Order Manager decides whether this is
-        # Paper Trading or Real Trading.
+        # ----------------------------------------------------
+        # OPEN MARKET POSITION
+        # ----------------------------------------------------
 
         order = open_market_position(
-
             symbol=symbol,
-
             side=signal,
-
             lot=lot,
-
             sl=sl,
-
             tp=tp,
-
             confidence=confidence,
-
-            comment="Pourya Trader AI"
-
+            comment="Pourya Trader AI",
         )
+
+        # ----------------------------------------------------
+        # ORDER FAILURE
+        # ----------------------------------------------------
 
         if not order:
 
@@ -476,9 +479,9 @@ def execute_trade(
 
             return None
 
-        # ====================================================
-        # Determine status
-        # ====================================================
+        # ----------------------------------------------------
+        # STATUS
+        # ----------------------------------------------------
 
         if order.get(
             "paper_trading",
@@ -491,63 +494,51 @@ def execute_trade(
 
             status = "OPEN"
 
-        # ====================================================
-        # Build trade
-        # ====================================================
+        # ----------------------------------------------------
+        # TRADE OBJECT
+        # ----------------------------------------------------
 
         trade = {
 
-            "ticket":
-                order.get(
-                    "ticket"
-                ),
+            "ticket": order.get(
+                "ticket"
+            ),
 
-            "deal":
-                order.get(
-                    "deal"
-                ),
+            "deal": order.get(
+                "deal"
+            ),
 
-            "symbol":
-                symbol,
+            "symbol": symbol,
 
-            "side":
-                signal,
+            "side": signal,
 
-            "entry":
-                order.get(
-                    "price",
-                    entry
-                ),
+            "entry": order.get(
+                "price",
+                entry
+            ),
 
-            "tp":
-                tp,
+            "tp": tp,
 
-            "sl":
-                sl,
+            "sl": sl,
 
-            "quantity":
-                order.get(
-                    "volume",
-                    lot
-                ),
+            "quantity": order.get(
+                "volume",
+                lot
+            ),
 
-            "confidence":
-                confidence,
+            "confidence": confidence,
 
-            "status":
-                status,
+            "status": status,
 
-            "paper_trading":
-                order.get(
-                    "paper_trading",
-                    PAPER_TRADING
-                ),
-
+            "paper_trading": order.get(
+                "paper_trading",
+                PAPER_TRADING
+            ),
         }
 
-        # ====================================================
-        # Save trade
-        # ====================================================
+        # ----------------------------------------------------
+        # DATABASE SAVE
+        # ----------------------------------------------------
 
         trade_id = save_trade(
             trade
@@ -559,17 +550,13 @@ def execute_trade(
                 "TRADE DATABASE SAVE FAILED"
             )
 
-            # IMPORTANT:
-            # If a real MT5 order was already opened
-            # but DB save failed, we do not automatically
-            # open another order.
             return None
 
         trade["id"] = trade_id
 
-        # ====================================================
-        # Final log
-        # ====================================================
+        # ----------------------------------------------------
+        # SUCCESS LOG
+        # ----------------------------------------------------
 
         logger.info(
             "================================"
@@ -620,3 +607,4 @@ def execute_trade(
         )
 
         return None
+```
