@@ -1,3 +1,4 @@
+```python
 # core/paper_position_manager.py
 
 from __future__ import annotations
@@ -219,7 +220,7 @@ def monitor_paper_trade(
             return None
 
         # ----------------------------------------------------
-        # Current market data
+        # Current Market Data
         # ----------------------------------------------------
 
         tick = _get_tick(symbol)
@@ -361,7 +362,7 @@ def monitor_paper_trade(
             }
 
         # ----------------------------------------------------
-        # Still OPEN
+        # Still Open
         # ----------------------------------------------------
 
         update_trade_status(
@@ -455,16 +456,20 @@ def monitor_paper_positions() -> list[dict[str, Any]]:
 
 
 # ============================================================
-# Alias
+# Cycle Alias
 # ============================================================
 
 def monitor_paper_positions_cycle():
-
     return monitor_paper_positions()
 
+
+# ============================================================
+# Public API
+# ============================================================
 
 __all__ = [
     "monitor_paper_trade",
     "monitor_paper_positions",
     "monitor_paper_positions_cycle",
 ]
+```
