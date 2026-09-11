@@ -1,99 +1,209 @@
 # core/telegram.py
-# Compatibility layer for the current MT5 project.
-# Keeps imports stable while Telegram notification logic remains minimal.
 
 from __future__ import annotations
 
-import logging
-import os
-from typing import Optional
+import json
+from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
-logger = logging.getLogger(__name__)
+from config import BOT_TOKEN, CHAT_ID
+from core.logger import logger
 
 
-class TelegramNotifier:
-    def __init__(
-        self,
-        token: Optional[str] = None,
-        chat_id: Optional[str] = None,
-        enabled: Optional[bool] = None,
-    ) -> None:
-        self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
-        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_API = "https://api.telegram.org"
 
-        if enabled is None:
-            enabled_env = os.getenv("TELEGRAM_ENABLED", "true").strip().lower()
-            self.enabled = enabled_env not in {"0", "false", "no", "off"}
-        else:
-            self.enabled = enabled
 
-    def send_message(self, message: str, chat_id: Optional[str] = None) -> bool:
-        """
-        Compatibility method.
-        Actual network delivery can be connected by the existing
-        telegram_notifier implementation.
-        """
-        if not self.enabled:
-            return False
+def is_configured() -> bool:
+    return bool(BOT_TOKEN and str(BOT_TOKEN).strip())
 
-        if not message:
-            return False
 
-        target_chat_id = chat_id or self.chat_id
+def _api_request(
+    method: str,
+    params: dict[str, Any] | None = None,
+    timeout: int = 15,
+) -> dict[str, Any] | None:
+    if not is_configured():
+        logger.warning("Telegram is not configured.")
+        return None
 
-        if not self.token or not target_chat_id:
-            logger.warning(
-                "Telegram is enabled but TELEGRAM_BOT_TOKEN or "
-                "TELEGRAM_CHAT_ID is not configured."
+    url = f"{TELEGRAM_API}/bot{BOT_TOKEN}/{method}"
+
+    try:
+        data = None
+
+        if params:
+            data = urlencode(
+                {
+                    key: value
+                    for key, value in params.items()
+                    if value is not None
+                }
+            ).encode("utf-8")
+
+        request = Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "Pourya-Trader-AI",
+            },
+            method="POST" if data else "GET",
+        )
+
+        with urlopen(request, timeout=timeout) as response:
+            raw = response.read().decode("utf-8")
+
+        result = json.loads(raw)
+
+        if not result.get("ok", False):
+            logger.error(
+                "Telegram API error | method=%s | description=%s",
+                method,
+                result.get("description"),
             )
-            return False
+            return None
 
-        try:
-            import requests
+        return result
 
-            url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+    except Exception as exc:
+        logger.exception(
+            "Telegram request failed | method=%s | error=%s",
+            method,
+            exc,
+        )
+        return None
 
-            response = requests.post(
-                url,
-                data={
-                    "chat_id": target_chat_id,
-                    "text": message,
-                },
-                timeout=15,
-            )
 
-            response.raise_for_status()
+def send_message(
+    text: str,
+    chat_id: str | int | None = None,
+    parse_mode: str | None = None,
+    disable_web_page_preview: bool = True,
+) -> bool:
+    """
+    Send a Telegram message.
 
-            data = response.json()
+    Returns True when Telegram confirms delivery.
+    """
 
-            if not data.get("ok", False):
-                logger.error("Telegram API error: %s", data)
-                return False
+    if not text:
+        return False
 
-            return True
+    target_chat_id = chat_id or CHAT_ID
 
-        except Exception:
-            logger.exception("Failed to send Telegram message.")
-            return False
+    if not target_chat_id:
+        logger.warning("Telegram CHAT_ID is not configured.")
+        return False
 
-    def notify(self, message: str) -> bool:
-        return self.send_message(message)
+    params: dict[str, Any] = {
+        "chat_id": target_chat_id,
+        "text": str(text),
+        "disable_web_page_preview": disable_web_page_preview,
+    }
 
-    def send(self, message: str) -> bool:
-        return self.send_message(message)
+    if parse_mode:
+        params["parse_mode"] = parse_mode
+
+    result = _api_request("sendMessage", params)
+
+    if result is None:
+        return False
+
+    logger.info("Telegram message sent successfully.")
+    return True
 
 
 def send_telegram_message(
-    message: str,
-    token: Optional[str] = None,
-    chat_id: Optional[str] = None,
+    text: str,
+    chat_id: str | int | None = None,
 ) -> bool:
-    notifier = TelegramNotifier(
-        token=token,
+    """Compatibility wrapper for existing project modules."""
+    return send_message(
+        text=text,
         chat_id=chat_id,
     )
-    return notifier.send_message(message)
 
 
-def get_telegram_notifier() -> TelegramNotifier:
-    return TelegramNotifier()
+def notify(
+    text: str,
+    chat_id: str | int | None = None,
+) -> bool:
+    """Short compatibility wrapper used by the trading engine."""
+    return send_message(
+        text=text,
+        chat_id=chat_id,
+    )
+
+
+def get_me() -> dict[str, Any] | None:
+    """Return Telegram bot information."""
+    result = _api_request("getMe")
+
+    if result is None:
+        return None
+
+    return result.get("result")
+
+
+def get_updates(
+    offset: int | None = None,
+    timeout: int = 10,
+) -> list[dict[str, Any]]:
+    """Retrieve pending Telegram updates."""
+    result = _api_request(
+        "getUpdates",
+        {
+            "offset": offset,
+            "timeout": timeout,
+        },
+        timeout=max(15, timeout + 5),
+    )
+
+    if result is None:
+        return []
+
+    updates = result.get("result", [])
+
+    if not isinstance(updates, list):
+        return []
+
+    return updates
+
+
+def telegram_status() -> dict[str, Any]:
+    """Return a safe Telegram configuration/status summary."""
+    configured = is_configured()
+
+    status: dict[str, Any] = {
+        "configured": configured,
+        "chat_id_configured": bool(CHAT_ID),
+        "connected": False,
+        "bot": None,
+    }
+
+    if not configured:
+        return status
+
+    bot = get_me()
+
+    if bot:
+        status["connected"] = True
+        status["bot"] = {
+            "id": bot.get("id"),
+            "username": bot.get("username"),
+            "first_name": bot.get("first_name"),
+        }
+
+    return status
+
+
+__all__ = [
+    "send_message",
+    "send_telegram_message",
+    "notify",
+    "get_me",
+    "get_updates",
+    "is_configured",
+    "telegram_status",
+]
