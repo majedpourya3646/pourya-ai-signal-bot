@@ -1,5 +1,4 @@
 # core/trading_loop.py
-
 from __future__ import annotations
 
 import threading
