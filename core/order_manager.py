@@ -1,4 +1,3 @@
-```python
 from typing import Optional, Dict, Any
 
 from core.logger import logger
@@ -1209,4 +1208,4 @@ def get_position(
         )
 
         return None
-```
+
