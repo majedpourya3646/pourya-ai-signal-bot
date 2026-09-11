@@ -28,6 +28,8 @@ from config import (
 XAUUSD_SYMBOL = "XAUUSD.st"
 XAUUSD_SYMBOL_NORMALIZED = XAUUSD_SYMBOL.upper()
 
+MIN_RR = 1.5
+
 
 # ============================================================
 # Helpers
@@ -35,395 +37,798 @@ XAUUSD_SYMBOL_NORMALIZED = XAUUSD_SYMBOL.upper()
 
 def _normalize_symbol(symbol):
     """
-    Normalize broker symbol names for safe comparison.
-
-    Example:
-        XAUUSD.st -> XAUUSD.ST
-        xauusd.ST -> XAUUSD.ST
+    Normalize broker symbol names for safe comparisons.
     """
-
-    return str(
-        symbol or ""
-    ).upper().strip()
+    return str(symbol or "").strip().upper()
 
 
 def _normalize_signal(signal):
     """
-    Normalize BUY / SELL signal.
+    Normalize BUY / SELL signal values.
     """
-
-    return str(
-        signal or ""
-    ).upper().strip()
+    return str(signal or "").strip().upper()
 
 
-def _calculate_risk_reward(
-    entry,
-    tp,
-    sl
-):
+def _safe_float(value, default=None):
     """
-    Calculate risk/reward ratio safely.
+    Safely convert a value to float.
     """
-
     try:
+        if value is None:
+            return default
 
-        entry = float(entry)
-        tp = float(tp)
-        sl = float(sl)
+        return float(value)
 
-        risk = abs(
-            entry - sl
-        )
+    except (TypeError, ValueError):
+        return default
 
-        reward = abs(
-            tp - entry
-        )
 
-        if risk <= 0:
+def _calculate_risk_reward(opportunity):
+    """
+    Calculate risk/reward ratio from entry, SL and TP.
 
-            return 0.0
+    BUY:
+        risk = entry - SL
+        reward = TP - entry
 
-        return reward / risk
+    SELL:
+        risk = SL - entry
+        reward = entry - TP
+    """
 
-    except (
-        TypeError,
-        ValueError
-    ):
+    if not isinstance(opportunity, dict):
+        return None
 
+    side = _normalize_signal(
+        opportunity.get("side")
+        or opportunity.get("signal")
+        or opportunity.get("direction")
+    )
+
+    entry = _safe_float(
+        opportunity.get("entry_price")
+        or opportunity.get("entry")
+        or opportunity.get("price")
+    )
+
+    stop_loss = _safe_float(
+        opportunity.get("stop_loss")
+        or opportunity.get("sl")
+    )
+
+    take_profit = _safe_float(
+        opportunity.get("take_profit")
+        or opportunity.get("tp")
+    )
+
+    if entry is None or stop_loss is None or take_profit is None:
+        return None
+
+    if side == "BUY":
+        risk = entry - stop_loss
+        reward = take_profit - entry
+
+    elif side == "SELL":
+        risk = stop_loss - entry
+        reward = entry - take_profit
+
+    else:
+        return None
+
+    if risk <= 0 or reward <= 0:
+        return None
+
+    return reward / risk
+
+
+# ============================================================
+# Opportunity Score
+# ============================================================
+
+def calculate_opportunity_score(opportunity):
+    """
+    Calculate opportunity quality score.
+
+    This function does NOT lower confidence requirements
+    and does NOT force a trade.
+    """
+
+    if not isinstance(opportunity, dict):
         return 0.0
 
+    score = 0.0
 
-# ============================================================
-# Calculate Opportunity Score
-# ============================================================
+    confidence = _safe_float(
+        opportunity.get("confidence"),
+        0.0
+    )
 
-def calculate_opportunity_score(item):
+    if confidence >= 80:
+        score += 40
 
-    try:
+    elif confidence >= 70:
+        score += 30
 
-        if not isinstance(
-            item,
-            dict
-        ):
-
-            return 0
-
-        score = 0
-
-        confidence = float(
-            item.get(
-                "confidence",
-                0
-            )
-        )
-
-        # ----------------------------------------------------
-        # Confidence
-        # ----------------------------------------------------
-
-        if confidence >= 80:
-
-            score += 40
-
-        elif confidence >= 70:
-
-            score += 30
-
-        elif confidence >= MIN_CONFIDENCE:
-
-            score += 20
-
-        else:
-
-            logger.info(
-                f"LOW CONFIDENCE | "
-                f"CONFIDENCE={confidence} | "
-                f"MIN={MIN_CONFIDENCE}"
-            )
-
-            return 0
-
-        # ----------------------------------------------------
-        # Signal
-        # ----------------------------------------------------
-
-        signal = _normalize_signal(
-            item.get(
-                "signal",
-                ""
-            )
-        )
-
-        if signal not in (
-            "BUY",
-            "SELL"
-        ):
-
-            logger.info(
-                f"INVALID SIGNAL | "
-                f"SIGNAL={signal}"
-            )
-
-            return 0
-
+    elif confidence >= MIN_CONFIDENCE:
         score += 20
 
-        # ----------------------------------------------------
-        # Multi Timeframe
-        # ----------------------------------------------------
+    # --------------------------------------------------------
+    # Valid signal
+    # --------------------------------------------------------
 
-        timeframes = item.get(
-            "timeframes",
-            {}
-        )
+    side = _normalize_signal(
+        opportunity.get("side")
+        or opportunity.get("signal")
+        or opportunity.get("direction")
+    )
 
-        if (
-            isinstance(
-                timeframes,
-                dict
-            )
-            and len(timeframes) >= 3
-        ):
+    if side in ("BUY", "SELL"):
+        score += 20
 
+    # --------------------------------------------------------
+    # Multi-timeframe confirmation
+    # --------------------------------------------------------
+
+    timeframes = opportunity.get("timeframes")
+
+    if isinstance(timeframes, (list, tuple, set)):
+        if len(timeframes) >= 3:
             score += 20
 
-        # ----------------------------------------------------
-        # Entry / TP / SL
-        # ----------------------------------------------------
+    elif isinstance(timeframes, dict):
+        if len(timeframes) >= 3:
+            score += 20
 
-        entry = item.get(
-            "entry"
+    # --------------------------------------------------------
+    # Risk / Reward
+    # --------------------------------------------------------
+
+    rr = _safe_float(
+        opportunity.get("risk_reward")
+        or opportunity.get("rr")
+    )
+
+    if rr is None:
+        rr = _calculate_risk_reward(opportunity)
+
+    if rr is not None:
+
+        if rr >= 2.0:
+            score += 20
+
+        elif rr >= MIN_RR:
+            score += 10
+
+    return round(score, 2)
+
+
+# ============================================================
+# Validation
+# ============================================================
+
+def validate_opportunity(opportunity):
+    """
+    Validate an opportunity before it can enter the
+    execution pipeline.
+
+    Fails closed.
+    """
+
+    if not isinstance(opportunity, dict):
+        return False
+
+    # --------------------------------------------------------
+    # Symbol
+    # --------------------------------------------------------
+
+    symbol = _normalize_symbol(
+        opportunity.get("symbol")
+    )
+
+    if symbol != XAUUSD_SYMBOL_NORMALIZED:
+        return False
+
+    # --------------------------------------------------------
+    # Direction
+    # --------------------------------------------------------
+
+    side = _normalize_signal(
+        opportunity.get("side")
+        or opportunity.get("signal")
+        or opportunity.get("direction")
+    )
+
+    if side not in ("BUY", "SELL"):
+        return False
+
+    # --------------------------------------------------------
+    # Confidence
+    # --------------------------------------------------------
+
+    confidence = _safe_float(
+        opportunity.get("confidence")
+    )
+
+    if confidence is None:
+        return False
+
+    if confidence < MIN_CONFIDENCE:
+        return False
+
+    # --------------------------------------------------------
+    # Price
+    # --------------------------------------------------------
+
+    entry = _safe_float(
+        opportunity.get("entry_price")
+        or opportunity.get("entry")
+        or opportunity.get("price")
+    )
+
+    if entry is None or entry <= 0:
+        return False
+
+    # --------------------------------------------------------
+    # SL / TP
+    # --------------------------------------------------------
+
+    stop_loss = _safe_float(
+        opportunity.get("stop_loss")
+        or opportunity.get("sl")
+    )
+
+    take_profit = _safe_float(
+        opportunity.get("take_profit")
+        or opportunity.get("tp")
+    )
+
+    if stop_loss is None or take_profit is None:
+        return False
+
+    if stop_loss <= 0 or take_profit <= 0:
+        return False
+
+    # --------------------------------------------------------
+    # Directional SL / TP validation
+    # --------------------------------------------------------
+
+    if side == "BUY":
+
+        if stop_loss >= entry:
+            return False
+
+        if take_profit <= entry:
+            return False
+
+    elif side == "SELL":
+
+        if stop_loss <= entry:
+            return False
+
+        if take_profit >= entry:
+            return False
+
+    # --------------------------------------------------------
+    # Risk / Reward
+    # --------------------------------------------------------
+
+    rr = _safe_float(
+        opportunity.get("risk_reward")
+        or opportunity.get("rr")
+    )
+
+    if rr is None:
+        rr = _calculate_risk_reward(opportunity)
+
+    if rr is None:
+        return False
+
+    if rr < MIN_RR:
+        return False
+
+    return True
+
+
+# ============================================================
+# Open Trade Detection
+# ============================================================
+
+def has_open_trade(symbol=XAUUSD_SYMBOL):
+    """
+    Check whether an open trade already exists for the symbol.
+    """
+
+    normalized_symbol = _normalize_symbol(symbol)
+
+    # --------------------------------------------------------
+    # MT5 position check
+    # --------------------------------------------------------
+
+    try:
+        position_exists = has_open_position(
+            XAUUSD_SYMBOL
         )
 
-        tp = item.get(
-            "tp"
+        if position_exists:
+            return True
+
+    except Exception as exc:
+        logger.warning(
+            f"OPEN POSITION CHECK FAILED | "
+            f"SYMBOL={normalized_symbol} | ERROR={exc}"
         )
 
-        sl = item.get(
-            "sl"
-        )
+    # --------------------------------------------------------
+    # Database trade check
+    # --------------------------------------------------------
 
-        if (
-            entry is not None
-            and tp is not None
-            and sl is not None
-        ):
+    try:
+        trades = get_open_trades()
 
-            rr = _calculate_risk_reward(
-                entry,
-                tp,
-                sl
+        if trades is None:
+            return False
+
+        if isinstance(trades, dict):
+            trades = [trades]
+
+        if not isinstance(trades, (list, tuple)):
+            return False
+
+        for trade in trades:
+
+            if not isinstance(trade, dict):
+                continue
+
+            trade_symbol = _normalize_symbol(
+                trade.get("symbol")
             )
 
-            if rr >= 2:
+            if trade_symbol == normalized_symbol:
+                return True
 
-                score += 20
+    except Exception as exc:
+        logger.warning(
+            f"DATABASE OPEN TRADE CHECK FAILED | "
+            f"SYMBOL={normalized_symbol} | ERROR={exc}"
+        )
 
-            elif rr >= 1.5:
+    return False
 
-                score += 10
 
-        return score
+# ============================================================
+# Opportunity Normalization
+# ============================================================
+
+def _normalize_opportunity(opportunity):
+    """
+    Normalize a raw market-analysis item into the format
+    expected by the opportunity engine.
+    """
+
+    if not isinstance(opportunity, dict):
+        return None
+
+    result = dict(opportunity)
+
+    # --------------------------------------------------------
+    # Symbol
+    # --------------------------------------------------------
+
+    raw_symbol = (
+        result.get("symbol")
+        or result.get("ticker")
+        or result.get("instrument")
+    )
+
+    if raw_symbol is not None:
+        result["symbol"] = str(raw_symbol).strip()
+
+    # --------------------------------------------------------
+    # Signal / Direction
+    # --------------------------------------------------------
+
+    raw_signal = (
+        result.get("side")
+        or result.get("signal")
+        or result.get("direction")
+    )
+
+    if raw_signal is not None:
+        result["side"] = _normalize_signal(raw_signal)
+
+    # --------------------------------------------------------
+    # Confidence
+    # --------------------------------------------------------
+
+    confidence = _safe_float(
+        result.get("confidence")
+    )
+
+    if confidence is not None:
+        result["confidence"] = confidence
+
+    # --------------------------------------------------------
+    # Entry
+    # --------------------------------------------------------
+
+    entry = _safe_float(
+        result.get("entry_price")
+        or result.get("entry")
+        or result.get("price")
+    )
+
+    if entry is not None:
+        result["entry_price"] = entry
+
+    # --------------------------------------------------------
+    # SL
+    # --------------------------------------------------------
+
+    stop_loss = _safe_float(
+        result.get("stop_loss")
+        or result.get("sl")
+    )
+
+    if stop_loss is not None:
+        result["stop_loss"] = stop_loss
+
+    # --------------------------------------------------------
+    # TP
+    # --------------------------------------------------------
+
+    take_profit = _safe_float(
+        result.get("take_profit")
+        or result.get("tp")
+    )
+
+    if take_profit is not None:
+        result["take_profit"] = take_profit
+
+    # --------------------------------------------------------
+    # RR
+    # --------------------------------------------------------
+
+    rr = _safe_float(
+        result.get("risk_reward")
+        or result.get("rr")
+    )
+
+    if rr is None:
+        rr = _calculate_risk_reward(result)
+
+    if rr is not None:
+        result["risk_reward"] = rr
+
+    # --------------------------------------------------------
+    # Timeframes
+    # --------------------------------------------------------
+
+    if "timeframes" not in result:
+
+        if "timeframe" in result:
+            result["timeframes"] = [
+                result.get("timeframe")
+            ]
+
+    return result
+
+
+# ============================================================
+# Scan Opportunities
+# ============================================================
+
+def scan_opportunities():
+    """
+    Scan the market and return validated opportunities.
+
+    Important:
+    - No trade is executed here.
+    - Low confidence is rejected.
+    - Bad RR is rejected.
+    - Existing positions block duplicate opportunities.
+    - Market-analysis failures fail closed.
+    """
+
+    logger.info("================================================")
+    logger.info("OPPORTUNITY SCAN START")
+    logger.info("================================================")
+
+    # --------------------------------------------------------
+    # Maximum position count
+    # --------------------------------------------------------
+
+    try:
+        position_count = get_position_count()
 
     except Exception as exc:
 
-        logger.exception(
-            f"OPPORTUNITY SCORE ERROR {exc}"
+        logger.error(
+            f"POSITION COUNT FAILED | ERROR={exc}"
         )
 
-        return 0
+        return []
 
+    if position_count is None:
 
-# ============================================================
-# Validate Opportunity
-# ============================================================
+        logger.error(
+            "POSITION COUNT RETURNED NONE | "
+            "FAIL CLOSED"
+        )
 
-def validate_opportunity(item):
+        return []
 
     try:
+        position_count = int(position_count)
 
-        if not isinstance(
-            item,
-            dict
-        ):
+    except (TypeError, ValueError):
 
-            return False
+        logger.error(
+            f"INVALID POSITION COUNT | "
+            f"VALUE={position_count}"
+        )
+
+        return []
+
+    if position_count < 0:
+
+        logger.error(
+            f"INVALID NEGATIVE POSITION COUNT | "
+            f"VALUE={position_count}"
+        )
+
+        return []
+
+    if position_count >= MAX_OPEN_TRADES:
+
+        logger.info(
+            f"MAX OPEN TRADES REACHED | "
+            f"COUNT={position_count} | "
+            f"MAX={MAX_OPEN_TRADES}"
+        )
+
+        return []
+
+    # --------------------------------------------------------
+    # Existing XAUUSD trade
+    # --------------------------------------------------------
+
+    if has_open_trade(XAUUSD_SYMBOL):
+
+        logger.info(
+            f"OPEN TRADE ALREADY EXISTS | "
+            f"SYMBOL={XAUUSD_SYMBOL}"
+        )
+
+        return []
+
+    # --------------------------------------------------------
+    # Market analysis
+    # --------------------------------------------------------
+
+    try:
+        markets = analyze_market_symbols()
+
+    except Exception as exc:
+
+        logger.error(
+            f"MARKET ANALYSIS FAILED | ERROR={exc}"
+        )
+
+        return []
+
+    if markets is None:
+
+        logger.warning(
+            "MARKET ANALYSIS RETURNED NONE"
+        )
+
+        return []
+
+    if not isinstance(markets, (list, tuple)):
+
+        logger.warning(
+            f"MARKET ANALYSIS INVALID TYPE | "
+            f"TYPE={type(markets).__name__}"
+        )
+
+        return []
+
+    if not markets:
+
+        logger.warning(
+            "MARKET ANALYSIS RETURNED NO SYMBOLS"
+        )
+
+        return []
+
+    logger.info(
+        f"MARKET ANALYSIS RECEIVED | "
+        f"ITEMS={len(markets)}"
+    )
+
+    # --------------------------------------------------------
+    # Process opportunities
+    # --------------------------------------------------------
+
+    valid_opportunities = []
+
+    for raw_opportunity in markets:
+
+        opportunity = _normalize_opportunity(
+            raw_opportunity
+        )
+
+        if opportunity is None:
+            continue
 
         symbol = _normalize_symbol(
-            item.get(
-                "symbol",
-                ""
-            )
-        )
-
-        signal = _normalize_signal(
-            item.get(
-                "signal",
-                ""
-            )
-        )
-
-        try:
-
-            confidence = float(
-                item.get(
-                    "confidence",
-                    0
-                )
-            )
-
-        except (
-            TypeError,
-            ValueError
-        ):
-
-            logger.info(
-                f"REJECTED {symbol} | "
-                "INVALID CONFIDENCE"
-            )
-
-            return False
-
-        entry = item.get(
-            "entry"
-        )
-
-        tp = item.get(
-            "tp"
-        )
-
-        sl = item.get(
-            "sl"
+            opportunity.get("symbol")
         )
 
         # ----------------------------------------------------
-        # Symbol
+        # XAUUSD only
         # ----------------------------------------------------
 
         if symbol != XAUUSD_SYMBOL_NORMALIZED:
+            continue
+
+        # ----------------------------------------------------
+        # Validation
+        # ----------------------------------------------------
+
+        if not validate_opportunity(opportunity):
 
             logger.info(
-                f"REJECTED {symbol} | "
-                f"ONLY {XAUUSD_SYMBOL_NORMALIZED}"
+                f"INVALID OPPORTUNITY | "
+                f"SYMBOL={opportunity.get('symbol')} | "
+                f"SIDE={opportunity.get('side')} | "
+                f"CONFIDENCE={opportunity.get('confidence')} | "
+                f"RR={opportunity.get('risk_reward')}"
             )
 
-            return False
+            continue
 
         # ----------------------------------------------------
-        # Signal
+        # Score
         # ----------------------------------------------------
 
-        if signal not in (
-            "BUY",
-            "SELL"
-        ):
+        score = calculate_opportunity_score(
+            opportunity
+        )
+
+        opportunity["score"] = score
+
+        # ----------------------------------------------------
+        # RR
+        # ----------------------------------------------------
+
+        rr = _safe_float(
+            opportunity.get("risk_reward")
+        )
+
+        if rr is None:
+            rr = _calculate_risk_reward(
+                opportunity
+            )
+
+        if rr is None:
+            continue
+
+        opportunity["risk_reward"] = rr
+
+        # ----------------------------------------------------
+        # Minimum RR
+        # ----------------------------------------------------
+
+        if rr < MIN_RR:
 
             logger.info(
-                f"REJECTED {symbol} | "
-                f"INVALID SIGNAL={signal}"
+                f"LOW RISK REWARD | "
+                f"SYMBOL={symbol} | "
+                f"RR={rr}"
             )
 
-            return False
+            continue
 
         # ----------------------------------------------------
-        # Confidence
+        # Add
         # ----------------------------------------------------
 
-        if confidence < MIN_CONFIDENCE:
+        valid_opportunities.append(
+            opportunity
+        )
 
-            logger.info(
-                f"REJECTED {symbol} | "
-                f"CONFIDENCE={confidence} "
-                f"< {MIN_CONFIDENCE}"
+        logger.info(
+            f"VALID OPPORTUNITY | "
+            f"SYMBOL={symbol} | "
+            f"SIDE={opportunity.get('side')} | "
+            f"CONFIDENCE={opportunity.get('confidence')} | "
+            f"RR={rr} | "
+            f"SCORE={score}"
+        )
+
+    # --------------------------------------------------------
+    # No valid opportunities
+    # --------------------------------------------------------
+
+    if not valid_opportunities:
+
+        logger.info(
+            "NO VALID OPPORTUNITIES AFTER VALIDATION"
+        )
+
+        return []
+
+    # --------------------------------------------------------
+    # Sort by score
+    # --------------------------------------------------------
+
+    valid_opportunities.sort(
+        key=lambda item: (
+            _safe_float(
+                item.get("score"),
+                0.0
+            ),
+            _safe_float(
+                item.get("confidence"),
+                0.0
+            ),
+            _safe_float(
+                item.get("risk_reward"),
+                0.0
             )
+        ),
+        reverse=True
+    )
 
-            return False
+    logger.info(
+        f"VALID OPPORTUNITIES | "
+        f"COUNT={len(valid_opportunities)}"
+    )
 
-        # ----------------------------------------------------
-        # Prices
-        # ----------------------------------------------------
+    return valid_opportunities
 
-        if (
-            entry is None
-            or tp is None
-            or sl is None
-        ):
 
-            logger.info(
-                f"REJECTED {symbol} | "
-                "MISSING ENTRY/TP/SL"
-            )
+# ============================================================
+# Best Opportunity
+# ============================================================
 
-            return False
+def get_best_opportunity():
+    """
+    Return the highest-scoring valid opportunity.
+    """
 
-        try:
+    opportunities = scan_opportunities()
 
-            entry = float(entry)
-            tp = float(tp)
-            sl = float(sl)
+    if not opportunities:
 
-        except (
-            TypeError,
-            ValueError
-        ):
+        logger.info(
+            "BEST OPPORTUNITY = NONE"
+        )
 
-            logger.info(
-                f"REJECTED {symbol} | "
-                "INVALID PRICE DATA"
-            )
+        return None
 
-            return False
+    best = opportunities[0]
 
-        # ----------------------------------------------------
-        # Positive prices
-        # ----------------------------------------------------
+    logger.info(
+        f"BEST OPPORTUNITY | "
+        f"SYMBOL={best.get('symbol')} | "
+        f"SIDE={best.get('side')} | "
+        f"CONFIDENCE={best.get('confidence')} | "
+        f"RR={best.get('risk_reward')} | "
+        f"SCORE={best.get('score')}"
+    )
 
-        if (
-            entry <= 0
-            or tp <= 0
-            or sl <= 0
-        ):
+    return best
 
-            logger.info(
-                f"REJECTED {symbol} | "
-                "NON-POSITIVE PRICE"
-            )
 
-            return False
+# ============================================================
+# Compatibility Wrapper
+# ============================================================
 
-        # ----------------------------------------------------
-        # BUY
-        # ----------------------------------------------------
+def find_best_opportunity():
+    """
+    Backward-compatible wrapper.
+    """
 
-        if signal == "BUY":
-
-            if tp <= entry:
-
-                logger.info(
-                    f"REJECTED {symbol} | "
-                    "INVALID BUY TP"
-                )
-
-                return False
-
-            if sl >= entry:
-
-                logger.info(
-                    f"REJECTED {symbol} | "
-                    "INVALID BUY SL"
-                )
-
-                return False
-
-        # ----------------------------------------------------
-        # SELL
-        # ----------------------------------------------------
-
-        if signal == "SELL":
-
-            if tp >= entry:
-
-                logger.info(
-                    f"REJECTED {symbol} | "
-                    "INVALID SELL
+    return get_best_opportunity()
