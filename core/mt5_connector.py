@@ -20,6 +20,8 @@ DEFAULT_SYMBOL = "XAUUSD.st"
 DEFAULT_MAGIC = 20260731
 DEFAULT_DEVIATION = 20
 
+DEFAULT_TERMINAL_PATH = r"C:\MT5-Pourya\terminal64.exe"
+
 
 # ============================================================
 # CONFIG IMPORT
@@ -53,48 +55,173 @@ except Exception:
 
 
 # ============================================================
+# TERMINAL PATH
+# ============================================================
+
+def get_terminal_path() -> str:
+    """
+    Return the MT5 terminal path.
+
+    The current verified working environment uses:
+
+        C:\\MT5-Pourya\\terminal64.exe
+
+    An environment variable can override this path.
+    """
+
+    path = os.getenv(
+        "MT5_TERMINAL_PATH",
+        DEFAULT_TERMINAL_PATH,
+    )
+
+    return str(path).strip()
+
+
+# ============================================================
 # MT5 INITIALIZATION
 # ============================================================
 
-def initialize_mt5(password: Optional[str] = None) -> bool:
+def initialize_mt5(
+    password: Optional[str] = None,
+) -> bool:
     """
-    Initialize MetaTrader 5.
+    Initialize MetaTrader 5 using the verified portable terminal.
 
-    Uses the currently installed MT5 terminal instead of
-    forcing the old portable C:\\MT5-Pourya terminal.
+    Important:
+    The current MT5 environment is already logged into the
+    ePlanet-MT5 account inside the portable terminal.
 
-    This matches the working environment verified previously:
-        C:\\Program Files\\MetaTrader 5
+    Therefore we initialize through the terminal executable
+    instead of forcing login/password authentication from Python.
     """
 
     if platform.system().lower() != "windows":
 
         return False
 
-    if password is None:
-
-        password = MT5_PASSWORD
+    terminal_path = get_terminal_path()
 
     try:
 
-        # Clean previous Python/MT5 connection.
+        # ----------------------------------------------------
+        # Clean previous Python/MT5 connection
+        # ----------------------------------------------------
+
+        try:
+
+            mt5.shutdown()
+
+        except Exception:
+
+            pass
+
+        # ----------------------------------------------------
+        # Initialize using the verified portable terminal
+        # ----------------------------------------------------
+
+        result = mt5.initialize(
+            path=terminal_path,
+            portable=True,
+            timeout=MT5_TIMEOUT,
+        )
+
+        if not result:
+
+            return False
+
+        # ----------------------------------------------------
+        # Verify the connection
+        # ----------------------------------------------------
+
+        terminal_info = mt5.terminal_info()
+
+        if terminal_info is None:
+
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
+
+            return False
+
+        connected = bool(
+            getattr(
+                terminal_info,
+                "connected",
+                False,
+            )
+        )
+
+        if not connected:
+
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
+
+            return False
+
+        # ----------------------------------------------------
+        # Verify account access
+        # ----------------------------------------------------
+
+        account = mt5.account_info()
+
+        if account is None:
+
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
+
+            return False
+
+        return True
+
+    except Exception:
+
         try:
             mt5.shutdown()
         except Exception:
             pass
 
-        result = mt5.initialize(
-            login=int(MT5_LOGIN),
-            password=password,
-            server=MT5_SERVER,
-            timeout=MT5_TIMEOUT,
-        )
+        return False
 
-        return bool(result)
+
+# ============================================================
+# ENSURE CONNECTION
+# ============================================================
+
+def ensure_connection() -> bool:
+    """
+    Ensure that MT5 is initialized and connected.
+
+    If the current connection is unavailable, initialize_mt5()
+    is called automatically.
+    """
+
+    try:
+
+        terminal_info = mt5.terminal_info()
+
+        if (
+            terminal_info is not None
+            and bool(
+                getattr(
+                    terminal_info,
+                    "connected",
+                    False,
+                )
+            )
+        ):
+
+            return True
 
     except Exception:
 
-        return False
+        pass
+
+    return initialize_mt5()
 
 
 # ============================================================
@@ -146,7 +273,22 @@ def get_account_info():
 
     try:
 
-        return mt5.account_info()
+        if not ensure_connection():
+
+            return None
+
+        account = mt5.account_info()
+
+        if account is not None:
+
+            return account
+
+        # One reconnect attempt
+        if initialize_mt5():
+
+            return mt5.account_info()
+
+        return None
 
     except Exception:
 
@@ -163,6 +305,10 @@ def get_symbol_info(
 
     try:
 
+        if not ensure_connection():
+
+            return None
+
         if not mt5.symbol_select(
             symbol,
             True,
@@ -177,13 +323,46 @@ def get_symbol_info(
         return None
 
 
+# ============================================================
+# SYMBOL TICK
+# ============================================================
+
 def get_symbol_tick(
     symbol: str = DEFAULT_SYMBOL,
 ):
 
     try:
 
-        return mt5.symbol_info_tick(symbol)
+        if not ensure_connection():
+
+            return None
+
+        if not mt5.symbol_select(
+            symbol,
+            True,
+        ):
+
+            return None
+
+        tick = mt5.symbol_info_tick(symbol)
+
+        if tick is not None:
+
+            return tick
+
+        # One reconnect attempt
+        if initialize_mt5():
+
+            if not mt5.symbol_select(
+                symbol,
+                True,
+            ):
+
+                return None
+
+            return mt5.symbol_info_tick(symbol)
+
+        return None
 
     except Exception:
 
@@ -293,11 +472,9 @@ def get_rates(
 
     try:
 
-        if not is_connected():
+        if not ensure_connection():
 
-            if not initialize_mt5():
-
-                return []
+            return []
 
         if not mt5.symbol_select(
             symbol,
@@ -441,6 +618,10 @@ def get_open_positions(
 
     try:
 
+        if not ensure_connection():
+
+            return []
+
         if symbol:
 
             positions = mt5.positions_get(
@@ -479,13 +660,14 @@ def update_trade_status(
     trade-status bridge.
 
     Database persistence is intentionally not forced here.
-    The function safely attempts to update the project's
-    database layer when available.
     """
 
     try:
 
-        # Try the current database manager first.
+        # ----------------------------------------------------
+        # Current database manager
+        # ----------------------------------------------------
+
         try:
 
             from core.database_manager import (
@@ -504,11 +686,18 @@ def update_trade_status(
                 else True
             )
 
-        except (ImportError, AttributeError, TypeError):
+        except (
+            ImportError,
+            AttributeError,
+            TypeError,
+        ):
 
             pass
 
-        # Try legacy database module.
+        # ----------------------------------------------------
+        # Legacy database module
+        # ----------------------------------------------------
+
         try:
 
             from database import (
@@ -527,11 +716,14 @@ def update_trade_status(
                 else True
             )
 
-        except (ImportError, AttributeError, TypeError):
+        except (
+            ImportError,
+            AttributeError,
+            TypeError,
+        ):
 
             pass
 
-        # Nothing available.
         return True
 
     except Exception:
@@ -556,13 +748,21 @@ def send_market_order(
 
     try:
 
-        if not is_connected():
+        # ----------------------------------------------------
+        # Ensure connection
+        # ----------------------------------------------------
+
+        if not ensure_connection():
 
             return {
                 "success": False,
                 "error": "MT5_NOT_CONNECTED",
                 "retcode": None,
             }
+
+        # ----------------------------------------------------
+        # Symbol
+        # ----------------------------------------------------
 
         if not mt5.symbol_select(
             symbol,
@@ -575,6 +775,10 @@ def send_market_order(
                 "retcode": None,
             }
 
+        # ----------------------------------------------------
+        # Tick
+        # ----------------------------------------------------
+
         tick = get_symbol_tick(symbol)
 
         if tick is None:
@@ -585,6 +789,10 @@ def send_market_order(
                 "retcode": None,
             }
 
+        # ----------------------------------------------------
+        # Side
+        # ----------------------------------------------------
+
         side = str(
             side
         ).upper().strip()
@@ -592,12 +800,18 @@ def send_market_order(
         if side == "BUY":
 
             order_type = mt5.ORDER_TYPE_BUY
-            price = float(tick.ask)
+
+            price = float(
+                tick.ask
+            )
 
         elif side == "SELL":
 
             order_type = mt5.ORDER_TYPE_SELL
-            price = float(tick.bid)
+
+            price = float(
+                tick.bid
+            )
 
         else:
 
@@ -606,6 +820,10 @@ def send_market_order(
                 "error": f"INVALID_SIDE:{side}",
                 "retcode": None,
             }
+
+        # ----------------------------------------------------
+        # Normalize
+        # ----------------------------------------------------
 
         volume = normalize_volume(
             symbol,
@@ -631,9 +849,17 @@ def send_market_order(
                 tp,
             )
 
+        # ----------------------------------------------------
+        # Filling mode
+        # ----------------------------------------------------
+
         filling_mode = get_filling_mode(
             symbol
         )
+
+        # ----------------------------------------------------
+        # Request
+        # ----------------------------------------------------
 
         request = {
 
@@ -677,6 +903,10 @@ def send_market_order(
 
             request["tp"] = tp
 
+        # ----------------------------------------------------
+        # Send
+        # ----------------------------------------------------
+
         result = mt5.order_send(
             request
         )
@@ -700,6 +930,10 @@ def send_market_order(
                     None,
 
             }
+
+        # ----------------------------------------------------
+        # Result
+        # ----------------------------------------------------
 
         retcode = int(
             getattr(
@@ -919,7 +1153,11 @@ __all__ = [
 
     "MT5Connector",
 
+    "get_terminal_path",
+
     "initialize_mt5",
+
+    "ensure_connection",
 
     "shutdown_mt5",
 
