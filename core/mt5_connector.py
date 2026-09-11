@@ -1,5 +1,4 @@
 # core/mt5_connector.py
-
 from __future__ import annotations
 
 import math
