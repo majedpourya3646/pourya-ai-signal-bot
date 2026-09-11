@@ -1,3 +1,7 @@
+# core/trade_manager.py
+
+from __future__ import annotations
+
 from datetime import datetime
 
 from core.logger import logger
@@ -40,29 +44,37 @@ def open_trade(
             """
             INSERT INTO trades
             (
+                ticket,
                 symbol,
                 side,
                 entry,
+                exit_price,
                 tp,
                 sl,
                 quantity,
                 confidence,
+                pnl,
                 status,
-                opened_at
+                opened_at,
+                closed_at
             )
             VALUES
-            (?,?,?,?,?,?,?,?,?)
+            (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
+                ticket,
                 symbol,
                 side,
                 float(entry),
+                None,
                 float(tp),
                 float(sl),
                 float(quantity),
                 float(confidence),
+                0.0,
                 "OPEN",
-                datetime.utcnow().isoformat()
+                datetime.utcnow().isoformat(),
+                None
             )
         )
 
@@ -75,16 +87,17 @@ def open_trade(
         logger.info(
             f"TRADE OPENED "
             f"ID={trade_id} "
+            f"TICKET={ticket} "
             f"{symbol} "
             f"{side}"
         )
 
         return trade_id
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"OPEN TRADE ERROR {e}"
+            f"OPEN TRADE ERROR {exc}"
         )
 
         return None
@@ -94,14 +107,11 @@ def open_trade(
 # Save Trade
 # ===========================
 
-def save_trade(
-    trade
-):
+def save_trade(trade):
 
     try:
 
         if not trade:
-
             return None
 
         symbol = trade.get(
@@ -144,7 +154,7 @@ def save_trade(
             "ticket"
         )
 
-        trade_id = open_trade(
+        return open_trade(
             symbol=symbol,
             side=side,
             entry=entry,
@@ -155,22 +165,10 @@ def save_trade(
             ticket=ticket
         )
 
-        if trade_id is None:
-
-            return None
-
-        logger.info(
-            f"TRADE SAVED "
-            f"ID={trade_id} "
-            f"{symbol}"
-        )
-
-        return trade_id
-
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"SAVE TRADE ERROR {e}"
+            f"SAVE TRADE ERROR {exc}"
         )
 
         return None
@@ -192,44 +190,30 @@ def update_trade_status(
         conn = get_connection()
 
         if conn is None:
-
             return False
 
         cursor = conn.cursor()
 
-        if pnl is not None:
-
-            cursor.execute(
-                """
-                UPDATE trades
-                SET
-                    status=?,
-                    pnl=?,
-                    closed_at=?
-                WHERE id=?
-                """,
-                (
-                    status,
-                    float(pnl),
-                    datetime.utcnow().isoformat(),
-                    trade_id
-                )
+        cursor.execute(
+            """
+            UPDATE trades
+            SET
+                status=?,
+                pnl=COALESCE(?, pnl),
+                exit_price=COALESCE(?, exit_price),
+                closed_at=?
+            WHERE id=?
+            """,
+            (
+                status,
+                float(pnl) if pnl is not None else None,
+                float(exit_price) if exit_price is not None else None,
+                datetime.utcnow().isoformat()
+                if status.upper() in ("CLOSED", "CLOSE", "TP", "SL")
+                else None,
+                trade_id
             )
-
-        else:
-
-            cursor.execute(
-                """
-                UPDATE trades
-                SET
-                    status=?
-                WHERE id=?
-                """,
-                (
-                    status,
-                    trade_id
-                )
-            )
+        )
 
         conn.commit()
 
@@ -253,10 +237,10 @@ def update_trade_status(
 
         return True
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"UPDATE TRADE STATUS ERROR {e}"
+            f"UPDATE TRADE STATUS ERROR {exc}"
         )
 
         return False
@@ -277,7 +261,6 @@ def close_trade(
         conn = get_connection()
 
         if conn is None:
-
             return False
 
         cursor = conn.cursor()
@@ -287,12 +270,14 @@ def close_trade(
             UPDATE trades
             SET
                 status=?,
+                exit_price=?,
                 pnl=?,
                 closed_at=?
             WHERE id=?
             """,
             (
                 "CLOSED",
+                float(exit_price),
                 float(pnl),
                 datetime.utcnow().isoformat(),
                 trade_id
@@ -316,15 +301,16 @@ def close_trade(
         logger.info(
             f"TRADE CLOSED "
             f"ID={trade_id} "
+            f"EXIT={exit_price} "
             f"PNL={pnl}"
         )
 
         return True
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"CLOSE TRADE ERROR {e}"
+            f"CLOSE TRADE ERROR {exc}"
         )
 
         return False
@@ -341,7 +327,6 @@ def get_open_trades():
         conn = get_connection()
 
         if conn is None:
-
             return []
 
         cursor = conn.cursor()
@@ -364,10 +349,10 @@ def get_open_trades():
             for row in rows
         ]
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"GET OPEN TRADES ERROR {e}"
+            f"GET OPEN TRADES ERROR {exc}"
         )
 
         return []
@@ -386,7 +371,6 @@ def get_trade_history(
         conn = get_connection()
 
         if conn is None:
-
             return []
 
         cursor = conn.cursor()
@@ -412,10 +396,10 @@ def get_trade_history(
             for row in rows
         ]
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"GET TRADE HISTORY ERROR {e}"
+            f"GET TRADE HISTORY ERROR {exc}"
         )
 
         return []
@@ -434,7 +418,6 @@ def get_trade_by_id(
         conn = get_connection()
 
         if conn is None:
-
             return None
 
         cursor = conn.cursor()
@@ -455,15 +438,14 @@ def get_trade_by_id(
         conn.close()
 
         if row:
-
             return dict(row)
 
         return None
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"GET TRADE ERROR {e}"
+            f"GET TRADE ERROR {exc}"
         )
 
         return None
@@ -480,7 +462,6 @@ def count_open_trades():
         conn = get_connection()
 
         if conn is None:
-
             return 0
 
         cursor = conn.cursor()
@@ -498,17 +479,26 @@ def count_open_trades():
         conn.close()
 
         if result:
-
-            return int(
-                result[0]
-            )
+            return int(result[0])
 
         return 0
 
-    except Exception as e:
+    except Exception as exc:
 
         logger.exception(
-            f"COUNT OPEN TRADES ERROR {e}"
+            f"COUNT OPEN TRADES ERROR {exc}"
         )
 
         return 0
+
+
+__all__ = [
+    "open_trade",
+    "save_trade",
+    "update_trade_status",
+    "close_trade",
+    "get_open_trades",
+    "get_trade_history",
+    "get_trade_by_id",
+    "count_open_trades",
+]
