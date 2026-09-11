@@ -1,5 +1,4 @@
-# core/opportunity_engine.py
-
+```python
 from core.logger import logger
 
 from core.market_signal_bridge import (
@@ -25,7 +24,9 @@ from config import (
 # Configuration
 # ============================================================
 
-XAUUSD_SYMBOL = "XAUUSD.st"
+# Pilot trading symbol.
+# This MUST match the currently selected MT5 test account symbol.
+XAUUSD_SYMBOL = "XAUUSD.su"
 XAUUSD_SYMBOL_NORMALIZED = XAUUSD_SYMBOL.upper()
 
 MIN_RR = 1.5
@@ -335,7 +336,18 @@ def validate_opportunity(opportunity):
 
 def has_open_trade(symbol=XAUUSD_SYMBOL):
     """
-    Check whether an open trade already exists for the symbol.
+    Check whether at least one open trade exists for the
+    requested symbol.
+
+    IMPORTANT:
+    This helper intentionally answers the question:
+        "Does ANY trade exist?"
+
+    It must NOT be used as the global position-limit check.
+
+    Multiple positions are allowed during the controlled
+    pilot test, subject to MAX_OPEN_TRADES and downstream
+    safety gates.
     """
 
     normalized_symbol = _normalize_symbol(symbol)
@@ -346,7 +358,7 @@ def has_open_trade(symbol=XAUUSD_SYMBOL):
 
     try:
         position_exists = has_open_position(
-            XAUUSD_SYMBOL
+            normalized_symbol
         )
 
         if position_exists:
@@ -525,7 +537,10 @@ def scan_opportunities():
     - No trade is executed here.
     - Low confidence is rejected.
     - Bad RR is rejected.
-    - Existing positions block duplicate opportunities.
+    - Existing positions do NOT automatically block
+      additional opportunities.
+    - MAX_OPEN_TRADES remains the hard opportunity-level
+      position-count limit.
     - Market-analysis failures fail closed.
     """
 
@@ -588,18 +603,24 @@ def scan_opportunities():
 
         return []
 
+    logger.info(
+        f"POSITION CAP AVAILABLE | "
+        f"CURRENT={position_count} | "
+        f"MAX={MAX_OPEN_TRADES} | "
+        f"AVAILABLE={MAX_OPEN_TRADES - position_count}"
+    )
+
     # --------------------------------------------------------
-    # Existing XAUUSD trade
+    # IMPORTANT:
+    # Do NOT call has_open_trade() here.
+    #
+    # The old implementation rejected all new opportunities
+    # whenever a single XAUUSD trade existed.
+    #
+    # Multiple positions are intentionally permitted during
+    # the controlled pilot, subject to MAX_OPEN_TRADES and
+    # downstream risk/safety validation.
     # --------------------------------------------------------
-
-    if has_open_trade(XAUUSD_SYMBOL):
-
-        logger.info(
-            f"OPEN TRADE ALREADY EXISTS | "
-            f"SYMBOL={XAUUSD_SYMBOL}"
-        )
-
-        return []
 
     # --------------------------------------------------------
     # Market analysis
@@ -666,7 +687,7 @@ def scan_opportunities():
         )
 
         # ----------------------------------------------------
-        # XAUUSD only
+        # XAUUSD.su only
         # ----------------------------------------------------
 
         if symbol != XAUUSD_SYMBOL_NORMALIZED:
@@ -744,7 +765,8 @@ def scan_opportunities():
             f"SIDE={opportunity.get('side')} | "
             f"CONFIDENCE={opportunity.get('confidence')} | "
             f"RR={rr} | "
-            f"SCORE={score}"
+            f"SCORE={score} | "
+            f"OPEN_POSITIONS={position_count}"
         )
 
     # --------------------------------------------------------
@@ -832,3 +854,4 @@ def find_best_opportunity():
     """
 
     return get_best_opportunity()
+```
