@@ -26,6 +26,8 @@ MACD_SLOW = 26
 MACD_SIGNAL = 9
 ADX_PERIOD = 14
 
+VOLUME_MA_PERIOD = 20
+
 # Score weights
 EMA_TREND_SCORE = 20
 EMA200_SCORE = 15
@@ -49,6 +51,7 @@ MAX_SIGNAL_SCORE = (
 # ============================================================
 
 def prepare_dataframe(candles):
+
     try:
 
         df = pd.DataFrame(candles)
@@ -109,6 +112,10 @@ def calculate_indicators(df):
 
         df = df.copy()
 
+        # ----------------------------------------------------
+        # EMA
+        # ----------------------------------------------------
+
         df["ema20"] = EMAIndicator(
             close=df["close"],
             window=EMA_FAST_PERIOD
@@ -124,12 +131,20 @@ def calculate_indicators(df):
             window=EMA_TREND_PERIOD
         ).ema_indicator()
 
+        # ----------------------------------------------------
+        # RSI
+        # ----------------------------------------------------
+
         rsi = RSIIndicator(
             close=df["close"],
             window=RSI_PERIOD
         )
 
         df["rsi"] = rsi.rsi()
+
+        # ----------------------------------------------------
+        # MACD
+        # ----------------------------------------------------
 
         macd = MACD(
             close=df["close"],
@@ -144,6 +159,10 @@ def calculate_indicators(df):
 
         df["macd_histogram"] = macd.macd_diff()
 
+        # ----------------------------------------------------
+        # ADX
+        # ----------------------------------------------------
+
         adx = ADXIndicator(
             high=df["high"],
             low=df["low"],
@@ -153,11 +172,28 @@ def calculate_indicators(df):
 
         df["adx"] = adx.adx()
 
-        # Volume moving average
+        # ----------------------------------------------------
+        # Volume
+        # ----------------------------------------------------
+
         df["volume_ma20"] = (
             df["volume"]
-            .rolling(window=20)
+            .rolling(
+                window=VOLUME_MA_PERIOD
+            )
             .mean()
+        )
+
+        # ----------------------------------------------------
+        # Price change
+        #
+        # Used to determine whether strong volume is actually
+        # associated with bullish or bearish price movement.
+        # ----------------------------------------------------
+
+        df["price_change"] = (
+            df["close"]
+            .diff()
         )
 
         df = df.dropna()
@@ -226,8 +262,13 @@ def calculate_signal_score(last):
         # EMA 20 / 50 TREND
         # ----------------------------------------------------
 
-        ema20 = float(last["ema20"])
-        ema50 = float(last["ema50"])
+        ema20 = float(
+            last["ema20"]
+        )
+
+        ema50 = float(
+            last["ema50"]
+        )
 
         if ema20 > ema50:
 
@@ -246,11 +287,16 @@ def calculate_signal_score(last):
             )
 
         # ----------------------------------------------------
-        # EMA 200 TREND FILTER
+        # EMA 200 FILTER
         # ----------------------------------------------------
 
-        close = float(last["close"])
-        ema200 = float(last["ema200"])
+        close = float(
+            last["close"]
+        )
+
+        ema200 = float(
+            last["ema200"]
+        )
 
         if close > ema200:
 
@@ -271,17 +317,33 @@ def calculate_signal_score(last):
         # ----------------------------------------------------
         # RSI
         #
-        # Trend-aware logic:
+        # 45-55 = neutral zone
         #
-        # RSI < 30 is NOT automatically BUY.
-        # RSI > 70 is NOT automatically SELL.
-        #
-        # Extreme RSI is treated as exhaustion information.
+        # We intentionally evaluate the neutral zone FIRST.
+        # This prevents values such as 46, 50 or 53 from being
+        # incorrectly treated as strong directional momentum.
         # ----------------------------------------------------
 
-        rsi = float(last["rsi"])
+        rsi = float(
+            last["rsi"]
+        )
 
-        if 50 < rsi < 70:
+        if 45 <= rsi <= 55:
+
+            half_rsi_score = RSI_SCORE // 2
+
+            buy_score += half_rsi_score
+            sell_score += half_rsi_score
+
+            reasons_buy.append(
+                "RSI_NEUTRAL_CONFIRMATION"
+            )
+
+            reasons_sell.append(
+                "RSI_NEUTRAL_CONFIRMATION"
+            )
+
+        elif 55 < rsi < 70:
 
             buy_score += RSI_SCORE
 
@@ -289,7 +351,7 @@ def calculate_signal_score(last):
                 "RSI_BULLISH_ZONE"
             )
 
-        elif 30 < rsi < 50:
+        elif 30 < rsi < 45:
 
             sell_score += RSI_SCORE
 
@@ -297,24 +359,15 @@ def calculate_signal_score(last):
                 "RSI_BEARISH_ZONE"
             )
 
-        elif 45 <= rsi <= 55:
-
-            buy_score += RSI_SCORE // 2
-            sell_score += RSI_SCORE // 2
-
         elif rsi <= 30:
 
-            # Oversold does not automatically create BUY.
-            # It is neutral unless other trend factors confirm.
-            reasons_sell.append(
+            reasons_buy.append(
                 "RSI_OVERSOLD_CAUTION"
             )
 
         elif rsi >= 70:
 
-            # Overbought does not automatically create SELL.
-            # It is neutral unless other trend factors confirm.
-            reasons_buy.append(
+            reasons_sell.append(
                 "RSI_OVERBOUGHT_CAUTION"
             )
 
@@ -334,7 +387,10 @@ def calculate_signal_score(last):
             last["macd_histogram"]
         )
 
-        if macd > macd_signal and macd_histogram > 0:
+        if (
+            macd > macd_signal
+            and macd_histogram > 0
+        ):
 
             buy_score += MACD_SCORE
 
@@ -342,7 +398,10 @@ def calculate_signal_score(last):
                 "MACD_BULLISH"
             )
 
-        elif macd < macd_signal and macd_histogram < 0:
+        elif (
+            macd < macd_signal
+            and macd_histogram < 0
+        ):
 
             sell_score += MACD_SCORE
 
@@ -353,8 +412,8 @@ def calculate_signal_score(last):
         # ----------------------------------------------------
         # ADX TREND STRENGTH
         #
-        # ADX itself has no direction.
-        # Direction comes from EMA20/EMA50.
+        # ADX has no direction by itself.
+        # EMA20 / EMA50 provides the direction.
         # ----------------------------------------------------
 
         adx = float(
@@ -381,8 +440,9 @@ def calculate_signal_score(last):
 
         elif adx >= 20:
 
-            # Moderate trend gets partial confirmation.
-            partial_adx_score = ADX_SCORE // 2
+            partial_adx_score = (
+                ADX_SCORE // 2
+            )
 
             if ema20 > ema50:
 
@@ -403,50 +463,70 @@ def calculate_signal_score(last):
         # ----------------------------------------------------
         # VOLUME
         #
-        # Volume confirms market participation.
-        # It does not determine direction by itself.
+        # Volume is NOT directional by itself.
+        #
+        # Strong volume is only useful as confirmation when
+        # the current price movement has a clear direction.
         # ----------------------------------------------------
 
-        volume_condition = calculate_volume_condition(
-            last
+        volume_condition = (
+            calculate_volume_condition(
+                last
+            )
+        )
+
+        price_change = float(
+            last["price_change"]
         )
 
         if volume_condition == "STRONG":
 
-            if ema20 > ema50:
+            if price_change > 0:
 
                 buy_score += VOLUME_SCORE
 
                 reasons_buy.append(
-                    "STRONG_VOLUME_BULLISH"
+                    "STRONG_VOLUME_WITH_UP_MOVE"
                 )
 
-            elif ema20 < ema50:
+            elif price_change < 0:
 
                 sell_score += VOLUME_SCORE
 
                 reasons_sell.append(
-                    "STRONG_VOLUME_BEARISH"
+                    "STRONG_VOLUME_WITH_DOWN_MOVE"
+                )
+
+            else:
+
+                reasons_buy.append(
+                    "STRONG_VOLUME_NEUTRAL_PRICE"
+                )
+
+                reasons_sell.append(
+                    "STRONG_VOLUME_NEUTRAL_PRICE"
                 )
 
         elif volume_condition == "NORMAL":
 
-            partial_volume_score = VOLUME_SCORE // 2
+            partial_volume_score = (
+                VOLUME_SCORE // 2
+            )
 
-            if ema20 > ema50:
+            if price_change > 0:
 
                 buy_score += partial_volume_score
 
                 reasons_buy.append(
-                    "NORMAL_VOLUME_BULLISH"
+                    "NORMAL_VOLUME_WITH_UP_MOVE"
                 )
 
-            elif ema20 < ema50:
+            elif price_change < 0:
 
                 sell_score += partial_volume_score
 
                 reasons_sell.append(
-                    "NORMAL_VOLUME_BEARISH"
+                    "NORMAL_VOLUME_WITH_DOWN_MOVE"
                 )
 
         # ----------------------------------------------------
@@ -454,6 +534,7 @@ def calculate_signal_score(last):
         # ----------------------------------------------------
 
         return {
+
             "buy_score": min(
                 buy_score,
                 MAX_SIGNAL_SCORE
@@ -469,6 +550,7 @@ def calculate_signal_score(last):
             "reasons_sell": reasons_sell,
 
             "volume_condition": volume_condition
+
         }
 
     except Exception as e:
@@ -476,11 +558,17 @@ def calculate_signal_score(last):
         logger.exception(e)
 
         return {
+
             "buy_score": 0,
+
             "sell_score": 0,
+
             "reasons_buy": [],
+
             "reasons_sell": [],
+
             "volume_condition": "NEUTRAL"
+
         }
 
 
@@ -538,7 +626,7 @@ def analyze_signal(candles):
             signal = "SELL"
 
         # ----------------------------------------------------
-        # Detailed logging
+        # Logging
         # ----------------------------------------------------
 
         logger.info(
@@ -554,17 +642,22 @@ def analyze_signal(candles):
             f"MACD={round(float(last['macd']), 6)} "
             f"MACD_SIGNAL={round(float(last['macd_signal']), 6)} "
             f"MACD_HIST={round(float(last['macd_histogram']), 6)} "
+            f"PRICE_CHANGE={round(float(last['price_change']), 4)} "
             f"VOLUME={scores.get('volume_condition')}"
         )
 
-        if scores.get("reasons_buy"):
+        if scores.get(
+            "reasons_buy"
+        ):
 
             logger.info(
                 f"BUY REASONS "
                 f"{scores.get('reasons_buy')}"
             )
 
-        if scores.get("reasons_sell"):
+        if scores.get(
+            "reasons_sell"
+        ):
 
             logger.info(
                 f"SELL REASONS "
