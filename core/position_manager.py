@@ -8,12 +8,12 @@ import MetaTrader5 as mt5
 
 from core.logger import logger
 from core.mt5_connector import (
+    ensure_connection,
     get_open_positions,
     get_symbol_info,
     get_symbol_tick,
     get_rates,
     normalize_price,
-    update_trade_status,
 )
 
 
@@ -49,13 +49,6 @@ TRAILING_DISTANCE_PERCENT = 0.75
 # ============================================================
 
 def _get_value(obj: Any, key: str, default: Any = None) -> Any:
-    """
-    Read a field from either:
-      - MT5 TradePosition namedtuple/object
-      - dict
-      - regular Python object
-    """
-
     if obj is None:
         return default
 
@@ -157,13 +150,35 @@ def _is_sell_position(position: Any) -> bool:
     return _position_type(position) == mt5.POSITION_TYPE_SELL
 
 
-# Public compatibility helpers
 def is_buy_position(position: Any) -> bool:
     return _is_buy_position(position)
 
 
 def is_sell_position(position: Any) -> bool:
     return _is_sell_position(position)
+
+
+# ============================================================
+# CONNECTION
+# ============================================================
+
+def _ensure_mt5() -> bool:
+    """
+    Always use the centralized MT5 connector.
+
+    This is critical because the project uses the portable
+    terminal:
+        C:\\MT5-Pourya\\terminal64.exe
+    """
+
+    try:
+        return bool(ensure_connection())
+    except Exception as exc:
+        logger.exception(
+            "POSITION MANAGER MT5 CONNECTION ERROR %s",
+            exc,
+        )
+        return False
 
 
 # ============================================================
@@ -175,16 +190,19 @@ def calculate_atr(
     timeframe: int = ATR_TIMEFRAME,
     period: int = ATR_PERIOD,
 ) -> Optional[float]:
-    """
-    Calculate simple ATR from MT5 OHLC data.
-    """
 
     try:
-        if not mt5.terminal_info():
-            logger.warning("ATR: MT5 TERMINAL NOT CONNECTED")
+
+        if not _ensure_mt5():
+            logger.warning(
+                "ATR: MT5 NOT CONNECTED"
+            )
             return None
 
-        bars_needed = max(period + 5, 30)
+        bars_needed = max(
+            period + 5,
+            30
+        )
 
         rates = get_rates(
             symbol=symbol,
@@ -212,6 +230,7 @@ def calculate_atr(
         true_ranges: List[float] = []
 
         for i in range(1, len(rates)):
+
             current = rates[i]
             previous = rates[i - 1]
 
@@ -240,7 +259,12 @@ def calculate_atr(
         return float(atr)
 
     except Exception as exc:
-        logger.exception("ATR CALCULATION ERROR %s", exc)
+
+        logger.exception(
+            "ATR CALCULATION ERROR %s",
+            exc,
+        )
+
         return None
 
 
@@ -248,28 +272,48 @@ def calculate_atr(
 # BROKER STOP DISTANCE
 # ============================================================
 
-def get_min_stop_distance(symbol: str) -> float:
-    """
-    Return broker minimum stop distance in price units.
-    """
+def get_min_stop_distance(
+    symbol: str
+) -> float:
 
     try:
+
+        if not _ensure_mt5():
+            return 0.0
+
         info = get_symbol_info(symbol)
 
         if info is None:
             return 0.0
 
-        point = float(getattr(info, "point", 0.0) or 0.0)
+        point = float(
+            getattr(
+                info,
+                "point",
+                0.0
+            ) or 0.0
+        )
 
         stops_level = int(
-            getattr(info, "trade_stops_level", 0) or 0
+            getattr(
+                info,
+                "trade_stops_level",
+                0
+            ) or 0
         )
 
         freeze_level = int(
-            getattr(info, "trade_freeze_level", 0) or 0
+            getattr(
+                info,
+                "trade_freeze_level",
+                0
+            ) or 0
         )
 
-        level = max(stops_level, freeze_level)
+        level = max(
+            stops_level,
+            freeze_level
+        )
 
         if point <= 0 or level <= 0:
             return 0.0
@@ -277,11 +321,13 @@ def get_min_stop_distance(symbol: str) -> float:
         return level * point
 
     except Exception as exc:
+
         logger.exception(
             "STOP DISTANCE ERROR SYMBOL=%s ERROR=%s",
             symbol,
             exc,
         )
+
         return 0.0
 
 
@@ -295,25 +341,42 @@ def validate_sl_tp(
     sl: float,
     tp: float,
 ) -> bool:
-    """
-    Validate SL/TP against current market price and broker limits.
-    """
 
     try:
+
+        if not _ensure_mt5():
+            return False
+
         tick = get_symbol_tick(symbol)
 
         if tick is None:
             return False
 
-        bid = float(getattr(tick, "bid", 0.0) or 0.0)
-        ask = float(getattr(tick, "ask", 0.0) or 0.0)
+        bid = float(
+            getattr(
+                tick,
+                "bid",
+                0.0
+            ) or 0.0
+        )
+
+        ask = float(
+            getattr(
+                tick,
+                "ask",
+                0.0
+            ) or 0.0
+        )
 
         if bid <= 0 or ask <= 0:
             return False
 
-        min_distance = get_min_stop_distance(symbol)
+        min_distance = get_min_stop_distance(
+            symbol
+        )
 
         if position_type == mt5.POSITION_TYPE_BUY:
+
             reference_price = bid
 
             if sl >= reference_price:
@@ -323,15 +386,21 @@ def validate_sl_tp(
                 return False
 
             if min_distance > 0:
-                if (reference_price - sl) < min_distance:
+
+                if (
+                    reference_price - sl
+                ) < min_distance:
                     return False
 
-                if (tp - reference_price) < min_distance:
+                if (
+                    tp - reference_price
+                ) < min_distance:
                     return False
 
             return True
 
         if position_type == mt5.POSITION_TYPE_SELL:
+
             reference_price = ask
 
             if sl <= reference_price:
@@ -341,10 +410,15 @@ def validate_sl_tp(
                 return False
 
             if min_distance > 0:
-                if (sl - reference_price) < min_distance:
+
+                if (
+                    sl - reference_price
+                ) < min_distance:
                     return False
 
-                if (reference_price - tp) < min_distance:
+                if (
+                    reference_price - tp
+                ) < min_distance:
                     return False
 
             return True
@@ -352,11 +426,13 @@ def validate_sl_tp(
         return False
 
     except Exception as exc:
+
         logger.exception(
             "SL TP VALIDATION ERROR SYMBOL=%s ERROR=%s",
             symbol,
             exc,
         )
+
         return False
 
 
@@ -370,11 +446,12 @@ def calculate_atr_sl_tp(
     entry_price: float,
     atr: Optional[float] = None,
 ) -> Optional[Dict[str, float]]:
-    """
-    Calculate ATR based SL/TP.
-    """
 
     try:
+
+        if not _ensure_mt5():
+            return None
+
         if entry_price <= 0:
             return None
 
@@ -384,22 +461,36 @@ def calculate_atr_sl_tp(
         if atr is None or atr <= 0:
             return None
 
-        sl_distance = atr * ATR_SL_MULTIPLIER
-        tp_distance = atr * ATR_TP_MULTIPLIER
+        sl_distance = (
+            atr * ATR_SL_MULTIPLIER
+        )
+
+        tp_distance = (
+            atr * ATR_TP_MULTIPLIER
+        )
 
         if position_type == mt5.POSITION_TYPE_BUY:
+
             sl = entry_price - sl_distance
             tp = entry_price + tp_distance
 
         elif position_type == mt5.POSITION_TYPE_SELL:
+
             sl = entry_price + sl_distance
             tp = entry_price - tp_distance
 
         else:
             return None
 
-        sl = normalize_price(symbol, sl)
-        tp = normalize_price(symbol, tp)
+        sl = normalize_price(
+            symbol,
+            sl
+        )
+
+        tp = normalize_price(
+            symbol,
+            tp
+        )
 
         if not validate_sl_tp(
             symbol=symbol,
@@ -407,6 +498,7 @@ def calculate_atr_sl_tp(
             sl=sl,
             tp=tp,
         ):
+
             logger.warning(
                 "ATR SL/TP INVALID SYMBOL=%s TYPE=%s SL=%.5f TP=%.5f",
                 symbol,
@@ -414,6 +506,7 @@ def calculate_atr_sl_tp(
                 sl,
                 tp,
             )
+
             return None
 
         return {
@@ -425,11 +518,13 @@ def calculate_atr_sl_tp(
         }
 
     except Exception as exc:
+
         logger.exception(
             "ATR SL TP CALCULATION ERROR SYMBOL=%s ERROR=%s",
             symbol,
             exc,
         )
+
         return None
 
 
@@ -443,34 +538,46 @@ def modify_position_sl_tp(
     sl: Optional[float] = None,
     tp: Optional[float] = None,
 ) -> bool:
-    """
-    Modify an existing position's SL/TP using TRADE_ACTION_SLTP.
-    """
 
     try:
-        if not mt5.terminal_info():
+
+        if not _ensure_mt5():
+
             logger.warning(
                 "MODIFY SLTP: MT5 NOT CONNECTED"
             )
+
             return False
 
-        positions = mt5.positions_get(ticket=int(ticket))
+        positions = mt5.positions_get(
+            ticket=int(ticket)
+        )
 
         if not positions:
+
             logger.warning(
                 "MODIFY SLTP: POSITION NOT FOUND TICKET=%s",
                 ticket,
             )
+
             return False
 
         position = positions[0]
 
         current_sl = float(
-            getattr(position, "sl", 0.0) or 0.0
+            getattr(
+                position,
+                "sl",
+                0.0
+            ) or 0.0
         )
 
         current_tp = float(
-            getattr(position, "tp", 0.0) or 0.0
+            getattr(
+                position,
+                "tp",
+                0.0
+            ) or 0.0
         )
 
         if sl is None:
@@ -492,31 +599,47 @@ def modify_position_sl_tp(
             "comment": "Pourya AI SLTP",
         }
 
-        result = mt5.order_send(request)
+        result = mt5.order_send(
+            request
+        )
 
         if result is None:
+
             logger.error(
                 "MODIFY SLTP FAILED TICKET=%s ERROR=%s",
                 ticket,
                 mt5.last_error(),
             )
+
             return False
 
         retcode = int(
-            getattr(result, "retcode", 0) or 0
+            getattr(
+                result,
+                "retcode",
+                0
+            ) or 0
         )
 
         if retcode != mt5.TRADE_RETCODE_DONE:
+
             logger.error(
-                "MODIFY SLTP REJECTED TICKET=%s RETCODE=%s COMMENT=%s",
+                "MODIFY SLTP REJECTED "
+                "TICKET=%s RETCODE=%s COMMENT=%s",
                 ticket,
                 retcode,
-                getattr(result, "comment", ""),
+                getattr(
+                    result,
+                    "comment",
+                    ""
+                ),
             )
+
             return False
 
         logger.info(
-            "SL/TP UPDATED TICKET=%s SYMBOL=%s SL=%.5f TP=%.5f RETCODE=%s",
+            "SL/TP UPDATED "
+            "TICKET=%s SYMBOL=%s SL=%.5f TP=%.5f RETCODE=%s",
             ticket,
             symbol,
             sl,
@@ -527,11 +650,13 @@ def modify_position_sl_tp(
         return True
 
     except Exception as exc:
+
         logger.exception(
             "MODIFY SLTP ERROR TICKET=%s ERROR=%s",
             ticket,
             exc,
         )
+
         return False
 
 
@@ -539,17 +664,26 @@ def modify_position_sl_tp(
 # AUTO SL / TP
 # ============================================================
 
-def manage_auto_sl_tp(position: Any) -> bool:
-    """
-    Add ATR based SL/TP only when they are missing.
-
-    Existing SL/TP are never overwritten.
-    """
+def manage_auto_sl_tp(
+    position: Any
+) -> bool:
 
     try:
-        ticket = _position_ticket(position)
-        symbol = _position_symbol(position)
-        position_type = _position_type(position)
+
+        if not _ensure_mt5():
+            return False
+
+        ticket = _position_ticket(
+            position
+        )
+
+        symbol = _position_symbol(
+            position
+        )
+
+        position_type = _position_type(
+            position
+        )
 
         if ticket is None or not symbol:
             return False
@@ -560,29 +694,43 @@ def manage_auto_sl_tp(position: Any) -> bool:
         ):
             return False
 
-        current_sl = _position_sl(position)
-        current_tp = _position_tp(position)
-        entry_price = _position_price_open(position)
+        current_sl = _position_sl(
+            position
+        )
+
+        current_tp = _position_tp(
+            position
+        )
+
+        entry_price = _position_price_open(
+            position
+        )
 
         if entry_price <= 0:
+
             logger.warning(
                 "AUTO SLTP: INVALID ENTRY TICKET=%s",
                 ticket,
             )
+
             return False
 
-        # Nothing missing.
         if current_sl > 0 and current_tp > 0:
             return False
 
-        atr = calculate_atr(symbol)
+        atr = calculate_atr(
+            symbol
+        )
 
         if atr is None:
+
             logger.warning(
-                "AUTO SLTP: ATR UNAVAILABLE TICKET=%s SYMBOL=%s",
+                "AUTO SLTP: ATR UNAVAILABLE "
+                "TICKET=%s SYMBOL=%s",
                 ticket,
                 symbol,
             )
+
             return False
 
         calculated = calculate_atr_sl_tp(
@@ -607,13 +755,13 @@ def manage_auto_sl_tp(position: Any) -> bool:
             else calculated["tp"]
         )
 
-        # Validate complete pair.
         if not validate_sl_tp(
             symbol=symbol,
             position_type=position_type,
             sl=new_sl,
             tp=new_tp,
         ):
+
             logger.warning(
                 "AUTO SLTP: FINAL VALUES INVALID "
                 "TICKET=%s SL=%.5f TP=%.5f",
@@ -621,10 +769,13 @@ def manage_auto_sl_tp(position: Any) -> bool:
                 new_sl,
                 new_tp,
             )
+
             return False
 
         logger.info(
-            "AUTO SLTP: TICKET=%s SYMBOL=%s ATR=%.5f SL=%.5f TP=%.5f",
+            "AUTO SLTP: "
+            "TICKET=%s SYMBOL=%s ATR=%.5f "
+            "SL=%.5f TP=%.5f",
             ticket,
             symbol,
             atr,
@@ -640,6 +791,7 @@ def manage_auto_sl_tp(position: Any) -> bool:
         )
 
         if success:
+
             logger.info(
                 "AUTO SLTP SUCCESS TICKET=%s",
                 ticket,
@@ -648,10 +800,12 @@ def manage_auto_sl_tp(position: Any) -> bool:
         return success
 
     except Exception as exc:
+
         logger.exception(
             "AUTO SLTP ERROR %s",
             exc,
         )
+
         return False
 
 
@@ -663,24 +817,31 @@ def check_position_result(
     ticket: int,
     symbol: str,
 ) -> bool:
-    """
-    Check whether a position still exists.
-    """
 
     try:
-        positions = mt5.positions_get(ticket=int(ticket))
+
+        if not _ensure_mt5():
+            return False
+
+        positions = mt5.positions_get(
+            ticket=int(ticket)
+        )
 
         if not positions:
+
             logger.info(
-                "POSITION NO LONGER OPEN TICKET=%s SYMBOL=%s",
+                "POSITION NO LONGER OPEN "
+                "TICKET=%s SYMBOL=%s",
                 ticket,
                 symbol,
             )
+
             return False
 
         return True
 
     except Exception:
+
         return False
 
 
@@ -688,44 +849,76 @@ def check_position_result(
 # PROFIT %
 # ============================================================
 
-def calculate_profit_percent(position: Any) -> float:
-    """
-    Calculate price movement percentage relative to entry.
-    """
+def calculate_profit_percent(
+    position: Any
+) -> float:
 
     try:
-        symbol = _position_symbol(position)
-        position_type = _position_type(position)
-        entry = _position_price_open(position)
+
+        if not _ensure_mt5():
+            return 0.0
+
+        symbol = _position_symbol(
+            position
+        )
+
+        position_type = _position_type(
+            position
+        )
+
+        entry = _position_price_open(
+            position
+        )
 
         if not symbol or entry <= 0:
             return 0.0
 
-        tick = get_symbol_tick(symbol)
+        tick = get_symbol_tick(
+            symbol
+        )
 
         if tick is None:
             return 0.0
 
-        bid = float(getattr(tick, "bid", 0.0) or 0.0)
-        ask = float(getattr(tick, "ask", 0.0) or 0.0)
+        bid = float(
+            getattr(
+                tick,
+                "bid",
+                0.0
+            ) or 0.0
+        )
+
+        ask = float(
+            getattr(
+                tick,
+                "ask",
+                0.0
+            ) or 0.0
+        )
 
         if bid <= 0 or ask <= 0:
             return 0.0
 
         if position_type == mt5.POSITION_TYPE_BUY:
+
             current = bid
             movement = current - entry
 
         elif position_type == mt5.POSITION_TYPE_SELL:
+
             current = ask
             movement = entry - current
 
         else:
+
             return 0.0
 
-        return (movement / entry) * 100.0
+        return (
+            movement / entry
+        ) * 100.0
 
     except Exception:
+
         return 0.0
 
 
@@ -733,56 +926,92 @@ def calculate_profit_percent(position: Any) -> float:
 # BREAK EVEN
 # ============================================================
 
-def manage_break_even(position: Any) -> bool:
-    """
-    Move SL toward/above entry after profit threshold.
-    """
+def manage_break_even(
+    position: Any
+) -> bool:
 
     try:
-        ticket = _position_ticket(position)
-        symbol = _position_symbol(position)
-        position_type = _position_type(position)
+
+        if not _ensure_mt5():
+            return False
+
+        ticket = _position_ticket(
+            position
+        )
+
+        symbol = _position_symbol(
+            position
+        )
+
+        position_type = _position_type(
+            position
+        )
 
         if ticket is None or not symbol:
             return False
 
-        current_sl = _position_sl(position)
-        entry = _position_price_open(position)
+        current_sl = _position_sl(
+            position
+        )
+
+        entry = _position_price_open(
+            position
+        )
 
         if entry <= 0:
             return False
 
-        profit_percent = calculate_profit_percent(position)
+        profit_percent = calculate_profit_percent(
+            position
+        )
 
-        if profit_percent < BREAK_EVEN_TRIGGER_PERCENT:
+        if (
+            profit_percent
+            < BREAK_EVEN_TRIGGER_PERCENT
+        ):
             return False
 
         offset = entry * (
-            BREAK_EVEN_OFFSET_PERCENT / 100.0
+            BREAK_EVEN_OFFSET_PERCENT
+            / 100.0
         )
 
         if position_type == mt5.POSITION_TYPE_BUY:
 
             new_sl = entry + offset
 
-            if current_sl >= new_sl and current_sl > 0:
+            if (
+                current_sl >= new_sl
+                and current_sl > 0
+            ):
                 return False
 
-            tp = _position_tp(position)
+            tp = _position_tp(
+                position
+            )
 
         elif position_type == mt5.POSITION_TYPE_SELL:
 
             new_sl = entry - offset
 
-            if current_sl <= new_sl and current_sl > 0:
+            if (
+                current_sl <= new_sl
+                and current_sl > 0
+            ):
                 return False
 
-            tp = _position_tp(position)
+            tp = _position_tp(
+                position
+            )
 
         else:
+
             return False
 
-        new_sl = normalize_price(symbol, new_sl)
+        new_sl = normalize_price(
+            symbol,
+            new_sl
+        )
 
         if not validate_sl_tp(
             symbol=symbol,
@@ -793,7 +1022,8 @@ def manage_break_even(position: Any) -> bool:
             return False
 
         logger.info(
-            "BREAK EVEN TICKET=%s SYMBOL=%s SL=%.5f PROFIT=%.2f%%",
+            "BREAK EVEN "
+            "TICKET=%s SYMBOL=%s SL=%.5f PROFIT=%.2f%%",
             ticket,
             symbol,
             new_sl,
@@ -808,10 +1038,12 @@ def manage_break_even(position: Any) -> bool:
         )
 
     except Exception as exc:
+
         logger.exception(
             "BREAK EVEN ERROR %s",
             exc,
         )
+
         return False
 
 
@@ -819,51 +1051,94 @@ def manage_break_even(position: Any) -> bool:
 # TRAILING STOP
 # ============================================================
 
-def manage_trailing_stop(position: Any) -> bool:
-    """
-    Apply trailing stop after the configured profit threshold.
-    """
+def manage_trailing_stop(
+    position: Any
+) -> bool:
 
     try:
-        ticket = _position_ticket(position)
-        symbol = _position_symbol(position)
-        position_type = _position_type(position)
+
+        if not _ensure_mt5():
+            return False
+
+        ticket = _position_ticket(
+            position
+        )
+
+        symbol = _position_symbol(
+            position
+        )
+
+        position_type = _position_type(
+            position
+        )
 
         if ticket is None or not symbol:
             return False
 
-        profit_percent = calculate_profit_percent(position)
+        profit_percent = calculate_profit_percent(
+            position
+        )
 
-        if profit_percent < TRAILING_START_PERCENT:
+        if (
+            profit_percent
+            < TRAILING_START_PERCENT
+        ):
             return False
 
-        tick = get_symbol_tick(symbol)
+        tick = get_symbol_tick(
+            symbol
+        )
 
         if tick is None:
             return False
 
-        bid = float(getattr(tick, "bid", 0.0) or 0.0)
-        ask = float(getattr(tick, "ask", 0.0) or 0.0)
+        bid = float(
+            getattr(
+                tick,
+                "bid",
+                0.0
+            ) or 0.0
+        )
+
+        ask = float(
+            getattr(
+                tick,
+                "ask",
+                0.0
+            ) or 0.0
+        )
 
         if bid <= 0 or ask <= 0:
             return False
 
-        entry = _position_price_open(position)
-        current_sl = _position_sl(position)
-        tp = _position_tp(position)
+        entry = _position_price_open(
+            position
+        )
+
+        current_sl = _position_sl(
+            position
+        )
+
+        tp = _position_tp(
+            position
+        )
 
         if entry <= 0:
             return False
 
         distance = entry * (
-            TRAILING_DISTANCE_PERCENT / 100.0
+            TRAILING_DISTANCE_PERCENT
+            / 100.0
         )
 
         if position_type == mt5.POSITION_TYPE_BUY:
 
             new_sl = bid - distance
 
-            if current_sl > 0 and new_sl <= current_sl:
+            if (
+                current_sl > 0
+                and new_sl <= current_sl
+            ):
                 return False
 
             if new_sl <= entry:
@@ -873,16 +1148,23 @@ def manage_trailing_stop(position: Any) -> bool:
 
             new_sl = ask + distance
 
-            if current_sl > 0 and new_sl >= current_sl:
+            if (
+                current_sl > 0
+                and new_sl >= current_sl
+            ):
                 return False
 
             if new_sl >= entry:
                 return False
 
         else:
+
             return False
 
-        new_sl = normalize_price(symbol, new_sl)
+        new_sl = normalize_price(
+            symbol,
+            new_sl
+        )
 
         if not validate_sl_tp(
             symbol=symbol,
@@ -893,7 +1175,8 @@ def manage_trailing_stop(position: Any) -> bool:
             return False
 
         logger.info(
-            "TRAILING STOP TICKET=%s SYMBOL=%s SL=%.5f PROFIT=%.2f%%",
+            "TRAILING STOP "
+            "TICKET=%s SYMBOL=%s SL=%.5f PROFIT=%.2f%%",
             ticket,
             symbol,
             new_sl,
@@ -908,10 +1191,12 @@ def manage_trailing_stop(position: Any) -> bool:
         )
 
     except Exception as exc:
+
         logger.exception(
             "TRAILING STOP ERROR %s",
             exc,
         )
+
         return False
 
 
@@ -924,21 +1209,21 @@ def monitor_positions() -> List[Dict[str, Any]]:
     Monitor ONLY positions belonging to Pourya Trader AI.
 
     Manual / foreign positions are ignored.
-
-    This function supports both:
-      - MT5 TradePosition objects
-      - dictionaries
     """
 
     results: List[Dict[str, Any]] = []
 
     try:
-        terminal = mt5.terminal_info()
 
-        if terminal is None:
+        # IMPORTANT:
+        # Never call mt5.terminal_info() directly as the
+        # connection gate. Use the centralized connector.
+        if not _ensure_mt5():
+
             logger.warning(
                 "POSITION MANAGER: MT5 NOT CONNECTED"
             )
+
             return results
 
         positions = get_open_positions()
@@ -947,9 +1232,11 @@ def monitor_positions() -> List[Dict[str, Any]]:
             positions = []
 
         if not positions:
+
             logger.info(
                 "POSITION MANAGER: NO OPEN POSITIONS"
             )
+
             return results
 
         logger.info(
@@ -960,23 +1247,33 @@ def monitor_positions() -> List[Dict[str, Any]]:
         for position in positions:
 
             try:
-                ticket = _position_ticket(position)
-                symbol = _position_symbol(position)
-                magic = _position_magic(position)
+
+                ticket = _position_ticket(
+                    position
+                )
+
+                symbol = _position_symbol(
+                    position
+                )
+
+                magic = _position_magic(
+                    position
+                )
 
                 if ticket is None:
+
                     logger.warning(
                         "POSITION PROCESS: INVALID TICKET"
                     )
+
                     continue
 
                 # ------------------------------------------------
                 # CRITICAL SAFETY FILTER
                 # ------------------------------------------------
-                # Manual / foreign trades must NEVER be modified.
-                # ------------------------------------------------
 
                 if magic is None:
+
                     logger.info(
                         "POSITION MANAGER: "
                         "SKIP FOREIGN POSITION "
@@ -984,9 +1281,11 @@ def monitor_positions() -> List[Dict[str, Any]]:
                         ticket,
                         symbol,
                     )
+
                     continue
 
                 if magic != MAGIC_NUMBER:
+
                     logger.info(
                         "POSITION MANAGER: "
                         "SKIP FOREIGN POSITION "
@@ -996,31 +1295,44 @@ def monitor_positions() -> List[Dict[str, Any]]:
                         MAGIC_NUMBER,
                         symbol,
                     )
+
                     continue
 
                 if not symbol:
+
                     logger.warning(
-                        "POSITION PROCESS: SYMBOL MISSING TICKET=%s",
+                        "POSITION PROCESS: SYMBOL MISSING "
+                        "TICKET=%s",
                         ticket,
                     )
+
                     continue
 
-                position_type = _position_type(position)
+                position_type = _position_type(
+                    position
+                )
 
                 if position_type not in (
                     mt5.POSITION_TYPE_BUY,
                     mt5.POSITION_TYPE_SELL,
                 ):
+
                     logger.warning(
                         "POSITION PROCESS: "
                         "UNKNOWN TYPE TICKET=%s TYPE=%s",
                         ticket,
                         position_type,
                     )
+
                     continue
 
-                current_sl = _position_sl(position)
-                current_tp = _position_tp(position)
+                current_sl = _position_sl(
+                    position
+                )
+
+                current_tp = _position_tp(
+                    position
+                )
 
                 logger.info(
                     "POSITION MANAGER: "
@@ -1049,8 +1361,11 @@ def monitor_positions() -> List[Dict[str, Any]]:
                 # ------------------------------------------------
 
                 if ENABLE_AUTO_SL_TP:
-                    action_result["auto_sl_tp"] = (
-                        manage_auto_sl_tp(position)
+
+                    action_result[
+                        "auto_sl_tp"
+                    ] = manage_auto_sl_tp(
+                        position
                     )
 
                 # ------------------------------------------------
@@ -1058,8 +1373,11 @@ def monitor_positions() -> List[Dict[str, Any]]:
                 # ------------------------------------------------
 
                 if ENABLE_BREAK_EVEN:
-                    action_result["break_even"] = (
-                        manage_break_even(position)
+
+                    action_result[
+                        "break_even"
+                    ] = manage_break_even(
+                        position
                     )
 
                 # ------------------------------------------------
@@ -1067,13 +1385,19 @@ def monitor_positions() -> List[Dict[str, Any]]:
                 # ------------------------------------------------
 
                 if ENABLE_TRAILING_STOP:
-                    action_result["trailing"] = (
-                        manage_trailing_stop(position)
+
+                    action_result[
+                        "trailing"
+                    ] = manage_trailing_stop(
+                        position
                     )
 
-                results.append(action_result)
+                results.append(
+                    action_result
+                )
 
             except Exception as exc:
+
                 logger.exception(
                     "POSITION PROCESS ERROR %s",
                     exc,
@@ -1082,10 +1406,12 @@ def monitor_positions() -> List[Dict[str, Any]]:
         return results
 
     except Exception as exc:
+
         logger.exception(
             "POSITION MANAGER ERROR %s",
             exc,
         )
+
         return results
 
 
@@ -1098,13 +1424,15 @@ def modify_position_sl(
     symbol: str,
     sl: float,
 ) -> bool:
-    """
-    Backward-compatible helper.
-    Keeps existing TP unchanged.
-    """
 
     try:
-        positions = mt5.positions_get(ticket=int(ticket))
+
+        if not _ensure_mt5():
+            return False
+
+        positions = mt5.positions_get(
+            ticket=int(ticket)
+        )
 
         if not positions:
             return False
@@ -1112,7 +1440,11 @@ def modify_position_sl(
         position = positions[0]
 
         tp = float(
-            getattr(position, "tp", 0.0) or 0.0
+            getattr(
+                position,
+                "tp",
+                0.0
+            ) or 0.0
         )
 
         return modify_position_sl_tp(
@@ -1123,10 +1455,12 @@ def modify_position_sl(
         )
 
     except Exception as exc:
+
         logger.exception(
             "MODIFY POSITION SL ERROR %s",
             exc,
         )
+
         return False
 
 
@@ -1146,6 +1480,7 @@ __all__ = [
     "modify_position_sl",
     "validate_sl_tp",
     "get_min_stop_distance",
+    "check_position_result",
     "is_buy_position",
     "is_sell_position",
 ]
