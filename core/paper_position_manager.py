@@ -9,30 +9,21 @@ import MetaTrader5 as mt5
 from core.logger import logger
 from core.trade_manager import (
     get_open_trades,
-    update_trade_status,
     close_trade,
+    update_trade_status,
 )
 from core.mt5_connector import initialize_mt5
 
 
 # ============================================================
-# Configuration
-# ============================================================
-
-PAPER_STATUS = "OPEN"
-
-# ============================================================
 # Helpers
 # ============================================================
-
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         if value is None:
             return default
-
         return float(value)
-
     except (TypeError, ValueError):
         return default
 
@@ -42,84 +33,52 @@ def _normalize_side(side: Any) -> str:
 
 
 def _get_tick(symbol: str):
-    """
-    Get current MT5 tick.
-
-    This function only reads market data.
-    It does NOT send any order.
-    """
-
     try:
-
         if not initialize_mt5():
-
             logger.warning(
                 "PAPER POSITION MANAGER: MT5 INITIALIZATION FAILED"
             )
-
             return None
 
         if not mt5.symbol_select(symbol, True):
-
             logger.warning(
                 f"PAPER POSITION MANAGER: SYMBOL SELECT FAILED {symbol}"
             )
-
             return None
 
         tick = mt5.symbol_info_tick(symbol)
 
         if tick is None:
-
             logger.warning(
                 f"PAPER POSITION MANAGER: NO TICK {symbol}"
             )
-
             return None
 
         return tick
 
     except Exception as exc:
-
         logger.exception(
-            f"PAPER TICK ERROR {exc}"
+            f"PAPER TICK ERROR | {exc}"
         )
-
         return None
 
 
 def _get_contract_size(symbol: str) -> float:
-    """
-    Read contract size directly from the broker symbol specification.
-
-    No hard-coded contract size is used.
-    """
-
     try:
-
         info = mt5.symbol_info(symbol)
 
         if info is None:
-
             return 0.0
 
-        contract_size = getattr(
-            info,
-            "trade_contract_size",
-            None
-        )
-
         return _safe_float(
-            contract_size,
-            0.0
+            getattr(info, "trade_contract_size", None),
+            0.0,
         )
 
     except Exception as exc:
-
         logger.exception(
             f"CONTRACT SIZE ERROR {symbol} | {exc}"
         )
-
         return 0.0
 
 
@@ -130,42 +89,26 @@ def _calculate_pnl(
     quantity: float,
     contract_size: float,
 ) -> float:
-    """
-    Calculate mark-to-market P/L.
-
-    BUY:
-        current - entry
-
-    SELL:
-        entry - current
-    """
 
     if contract_size <= 0:
-
         return 0.0
 
     if quantity <= 0:
-
         return 0.0
 
-    if side == "BUY":
+    side = _normalize_side(side)
 
-        price_difference = (
-            current_price - entry
-        )
+    if side == "BUY":
+        difference = current_price - entry
 
     elif side == "SELL":
-
-        price_difference = (
-            entry - current_price
-        )
+        difference = entry - current_price
 
     else:
-
         return 0.0
 
     return (
-        price_difference
+        difference
         * quantity
         * contract_size
     )
@@ -177,44 +120,31 @@ def _check_exit(
     tp: float,
     sl: float,
 ) -> str | None:
-    """
-    Determine whether TP or SL has been reached.
-
-    Returns:
-        "TP"
-        "SL"
-        None
-    """
 
     side = _normalize_side(side)
 
     if side == "BUY":
 
         if tp > 0 and current_price >= tp:
-
             return "TP"
 
         if sl > 0 and current_price <= sl:
-
             return "SL"
 
     elif side == "SELL":
 
         if tp > 0 and current_price <= tp:
-
             return "TP"
 
         if sl > 0 and current_price >= sl:
-
             return "SL"
 
     return None
 
 
 # ============================================================
-# Monitor One Paper Trade
+# Monitor Single Paper Trade
 # ============================================================
-
 
 def monitor_paper_trade(
     trade: dict[str, Any],
@@ -223,7 +153,6 @@ def monitor_paper_trade(
     try:
 
         if not trade:
-
             return None
 
         trade_id = trade.get("id")
@@ -252,53 +181,50 @@ def monitor_paper_trade(
             trade.get("quantity")
         )
 
-        if not trade_id:
+        # ----------------------------------------------------
+        # Validation
+        # ----------------------------------------------------
 
+        if not trade_id:
             logger.warning(
                 "PAPER TRADE INVALID - MISSING ID"
             )
-
             return None
 
         if not symbol:
-
             logger.warning(
                 f"PAPER TRADE INVALID ID={trade_id} - MISSING SYMBOL"
             )
-
             return None
 
         if side not in ("BUY", "SELL"):
-
             logger.warning(
                 f"PAPER TRADE INVALID SIDE "
                 f"ID={trade_id} SIDE={side}"
             )
-
             return None
 
         if entry <= 0:
-
             logger.warning(
                 f"PAPER TRADE INVALID ENTRY "
                 f"ID={trade_id} ENTRY={entry}"
             )
-
             return None
 
         if quantity <= 0:
-
             logger.warning(
                 f"PAPER TRADE INVALID QUANTITY "
                 f"ID={trade_id} QUANTITY={quantity}"
             )
-
             return None
+
+        # ----------------------------------------------------
+        # Current market data
+        # ----------------------------------------------------
 
         tick = _get_tick(symbol)
 
         if tick is None:
-
             return None
 
         bid = _safe_float(
@@ -310,28 +236,23 @@ def monitor_paper_trade(
         )
 
         if bid <= 0 or ask <= 0:
-
             logger.warning(
                 f"PAPER TRADE INVALID TICK "
                 f"{symbol} BID={bid} ASK={ask}"
             )
-
             return None
 
-        # ----------------------------------------------------
-        # Correct exit price:
-        #
-        # BUY  -> Bid
-        # SELL -> Ask
-        # ----------------------------------------------------
+        # BUY closes against Bid.
+        # SELL closes against Ask.
 
         if side == "BUY":
-
             current_price = bid
-
         else:
-
             current_price = ask
+
+        # ----------------------------------------------------
+        # P/L
+        # ----------------------------------------------------
 
         contract_size = _get_contract_size(
             symbol
@@ -345,6 +266,10 @@ def monitor_paper_trade(
             contract_size=contract_size,
         )
 
+        # ----------------------------------------------------
+        # TP / SL
+        # ----------------------------------------------------
+
         exit_reason = _check_exit(
             side=side,
             current_price=current_price,
@@ -353,7 +278,7 @@ def monitor_paper_trade(
         )
 
         # ----------------------------------------------------
-        # TP / SL reached
+        # CLOSE
         # ----------------------------------------------------
 
         if exit_reason:
@@ -436,7 +361,7 @@ def monitor_paper_trade(
             }
 
         # ----------------------------------------------------
-        # Still open
+        # Still OPEN
         # ----------------------------------------------------
 
         update_trade_status(
@@ -471,9 +396,8 @@ def monitor_paper_trade(
 
 
 # ============================================================
-# Monitor All Paper Trades
+# Monitor All Paper Positions
 # ============================================================
-
 
 def monitor_paper_positions() -> list[dict[str, Any]]:
 
@@ -533,7 +457,6 @@ def monitor_paper_positions() -> list[dict[str, Any]]:
 # ============================================================
 # Alias
 # ============================================================
-
 
 def monitor_paper_positions_cycle():
 
