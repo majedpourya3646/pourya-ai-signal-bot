@@ -23,6 +23,7 @@ def _api_request(
     params: dict[str, Any] | None = None,
     timeout: int = 15,
 ) -> dict[str, Any] | None:
+
     if not is_configured():
         logger.warning("Telegram is not configured.")
         return None
@@ -81,11 +82,6 @@ def send_message(
     parse_mode: str | None = None,
     disable_web_page_preview: bool = True,
 ) -> bool:
-    """
-    Send a Telegram message.
-
-    Returns True when Telegram confirms delivery.
-    """
 
     if not text:
         return False
@@ -105,7 +101,10 @@ def send_message(
     if parse_mode:
         params["parse_mode"] = parse_mode
 
-    result = _api_request("sendMessage", params)
+    result = _api_request(
+        "sendMessage",
+        params,
+    )
 
     if result is None:
         return False
@@ -118,7 +117,6 @@ def send_telegram_message(
     text: str,
     chat_id: str | int | None = None,
 ) -> bool:
-    """Compatibility wrapper for existing project modules."""
     return send_message(
         text=text,
         chat_id=chat_id,
@@ -129,7 +127,6 @@ def notify(
     text: str,
     chat_id: str | int | None = None,
 ) -> bool:
-    """Short compatibility wrapper used by the trading engine."""
     return send_message(
         text=text,
         chat_id=chat_id,
@@ -137,7 +134,6 @@ def notify(
 
 
 def get_me() -> dict[str, Any] | None:
-    """Return Telegram bot information."""
     result = _api_request("getMe")
 
     if result is None:
@@ -150,7 +146,7 @@ def get_updates(
     offset: int | None = None,
     timeout: int = 10,
 ) -> list[dict[str, Any]]:
-    """Retrieve pending Telegram updates."""
+
     result = _api_request(
         "getUpdates",
         {
@@ -172,7 +168,6 @@ def get_updates(
 
 
 def telegram_status() -> dict[str, Any]:
-    """Return a safe Telegram configuration/status summary."""
     configured = is_configured()
 
     status: dict[str, Any] = {
