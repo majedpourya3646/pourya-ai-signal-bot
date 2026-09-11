@@ -1,3 +1,4 @@
+```python
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
@@ -28,26 +29,46 @@ from config import (
 
 XAUUSD_SYMBOL = "XAUUSD.su"
 
-# Hard project-level lot ceiling.
-MAX_PROJECT_LOT = 0.03
-
-# Minimum allowed project lot for the current broker/test.
 MIN_PROJECT_LOT = 0.01
+MAX_PROJECT_LOT = 0.03
+MAX_PROJECT_POSITIONS = 5
+
+
+# ============================================================
+# SAFE PROJECT LIMITS
+# ============================================================
+
+try:
+    PROJECT_MAX_POSITIONS = min(
+        MAX_PROJECT_POSITIONS,
+        max(
+            1,
+            int(MAX_OPEN_TRADES),
+        ),
+    )
+except Exception:
+    PROJECT_MAX_POSITIONS = MAX_PROJECT_POSITIONS
 
 
 # ============================================================
 # SYMBOL
 # ============================================================
 
-def _normalize_symbol(symbol: Any) -> str:
+def _normalize_symbol(
+    symbol: Any,
+) -> str:
 
     if symbol is None:
         return ""
 
-    return str(symbol).strip().upper()
+    return str(
+        symbol
+    ).strip().upper()
 
 
-def _is_xauusd_symbol(symbol: Any) -> bool:
+def _is_xauusd_symbol(
+    symbol: Any,
+) -> bool:
 
     return (
         _normalize_symbol(symbol)
@@ -66,17 +87,17 @@ def _normalize_signal(
     if signal is None:
         return None
 
-    signal = str(
+    value = str(
         signal
     ).upper().strip()
 
-    if signal in (
+    if value in (
         "BUY",
         "STRONG BUY",
     ):
         return "BUY"
 
-    if signal in (
+    if value in (
         "SELL",
         "STRONG SELL",
     ):
@@ -110,7 +131,9 @@ def _validate_opportunity(
         "",
     )
 
-    if not _is_xauusd_symbol(raw_symbol):
+    if not _is_xauusd_symbol(
+        raw_symbol
+    ):
 
         logger.warning(
             "TRADE REJECTED - "
@@ -163,7 +186,9 @@ def _validate_opportunity(
 
         return False
 
-    if confidence < MIN_CONFIDENCE:
+    if confidence < float(
+        MIN_CONFIDENCE
+    ):
 
         logger.info(
             "TRADE REJECTED - "
@@ -274,15 +299,15 @@ def _get_active_trade_count() -> Optional[int]:
     """
     Determine active project trades.
 
-    Live mode:
-        MT5 position count is the primary source of truth.
+    PAPER:
+        SQLite project records are used.
 
-    Paper mode:
-        SQLite OPEN/PAPER_OPEN/ACTIVE records are used because
-        paper trades do not exist as MT5 positions.
+    LIVE:
+        MT5 / Order Manager is the source of truth.
 
     Fail-closed:
-        Return None if the required source cannot be checked.
+        None is returned if the required source cannot be
+        reliably checked.
     """
 
     try:
@@ -307,6 +332,12 @@ def _get_active_trade_count() -> Optional[int]:
             count = 0
 
             for trade in open_trades:
+
+                if not isinstance(
+                    trade,
+                    dict,
+                ):
+                    continue
 
                 symbol = trade.get(
                     "symbol",
@@ -340,6 +371,12 @@ def _get_active_trade_count() -> Optional[int]:
         current_positions = get_position_count()
 
         if current_positions is None:
+
+            logger.error(
+                "LIVE POSITION COUNT "
+                "UNAVAILABLE"
+            )
+
             return None
 
         return int(
@@ -364,19 +401,22 @@ def _resolve_lot(
     opportunity: Dict[str, Any],
 ) -> Optional[float]:
     """
-    Resolve requested lot.
+    Resolve the requested lot.
 
     Priority:
         opportunity["lot"]
         opportunity["volume"]
         DEFAULT_LOT
 
-    The result is always constrained to:
+    HARD SAFETY RULE:
 
         0.01 <= lot <= 0.03
 
-    The lower/upper broker validation is ultimately performed
-    again by Order Manager / MT5 Connector.
+    A request above 0.03 is REJECTED.
+
+    It is intentionally NOT capped down to 0.03 because
+    silently modifying a risk request can hide an upstream
+    risk-calculation error.
     """
 
     try:
@@ -399,56 +439,67 @@ def _resolve_lot(
             requested
         )
 
-        if lot <= 0:
+        # ----------------------------------------------------
+        # Finite check
+        # ----------------------------------------------------
+
+        if not (
+            lot == lot
+            and abs(lot) != float("inf")
+        ):
 
             logger.warning(
-                f"INVALID LOT={lot}"
+                f"INVALID NON-FINITE LOT={lot}"
             )
 
             return None
 
         # ----------------------------------------------------
-        # Hard project ceiling
-        # ----------------------------------------------------
-
-        if lot > MAX_PROJECT_LOT:
-
-            logger.warning(
-                "LOT CAPPED BY PROJECT LIMIT "
-                f"{lot} -> {MAX_PROJECT_LOT}"
-            )
-
-            lot = MAX_PROJECT_LOT
-
-        # ----------------------------------------------------
-        # Minimum project lot
+        # Project minimum
         # ----------------------------------------------------
 
         if lot < MIN_PROJECT_LOT:
 
             logger.warning(
-                "LOT BELOW PROJECT MINIMUM "
-                f"{lot} -> {MIN_PROJECT_LOT}"
+                "TRADE REJECTED - "
+                f"LOT BELOW PROJECT MINIMUM: "
+                f"{lot} < {MIN_PROJECT_LOT}"
             )
 
-            lot = MIN_PROJECT_LOT
+            return None
 
         # ----------------------------------------------------
-        # Normalize to 0.01 broker/project step
+        # HARD PROJECT CEILING
         # ----------------------------------------------------
 
-        lot = round(
+        if lot > MAX_PROJECT_LOT:
+
+            logger.error(
+                "TRADE REJECTED - "
+                f"LOT ABOVE PROJECT MAXIMUM: "
+                f"{lot} > {MAX_PROJECT_LOT}"
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Normalize expected project step
+        # ----------------------------------------------------
+
+        normalized = round(
             lot,
             2,
         )
 
-        if lot < MIN_PROJECT_LOT:
+        if normalized < MIN_PROJECT_LOT:
+
             return None
 
-        if lot > MAX_PROJECT_LOT:
+        if normalized > MAX_PROJECT_LOT:
+
             return None
 
-        return lot
+        return normalized
 
     except (
         TypeError,
@@ -468,13 +519,11 @@ def _resolve_lot(
 
 def _has_existing_trade() -> bool:
     """
-    Compatibility helper retained for older callers.
+    Compatibility helper.
 
     IMPORTANT:
-    This function no longer means "block all new trades".
-
-    It only reports whether at least one active XAUUSD trade
-    exists. The actual decision is made using MAX_OPEN_TRADES.
+    Existing XAUUSD positions do NOT automatically block a new
+    trade. The actual limit is PROJECT_MAX_POSITIONS.
     """
 
     try:
@@ -485,6 +534,12 @@ def _has_existing_trade() -> bool:
             return False
 
         for trade in open_trades:
+
+            if not isinstance(
+                trade,
+                dict,
+            ):
+                continue
 
             symbol = trade.get(
                 "symbol",
@@ -517,7 +572,7 @@ def _has_existing_trade() -> bool:
             f"TRADE CHECK ERROR {exc}"
         )
 
-        # Fail closed for safety.
+        # Fail closed for compatibility callers.
         return True
 
 
@@ -542,7 +597,7 @@ def execute_trade(
             return None
 
         # ----------------------------------------------------
-        # Canonical symbol
+        # Canonical pilot symbol
         # ----------------------------------------------------
 
         symbol = XAUUSD_SYMBOL
@@ -594,16 +649,12 @@ def execute_trade(
         )
 
         # ----------------------------------------------------
-        # ACTIVE POSITION LIMIT
-        #
-        # IMPORTANT:
-        # We intentionally DO NOT reject merely because an
-        # XAUUSD position already exists.
-        #
-        # The pilot allows up to MAX_OPEN_TRADES positions.
+        # Active position limit
         # ----------------------------------------------------
 
-        active_count = _get_active_trade_count()
+        active_count = (
+            _get_active_trade_count()
+        )
 
         if active_count is None:
 
@@ -615,13 +666,13 @@ def execute_trade(
 
             return None
 
-        if active_count >= MAX_OPEN_TRADES:
+        if active_count >= PROJECT_MAX_POSITIONS:
 
             logger.info(
                 "TRADE REJECTED - "
                 f"MAX POSITIONS "
                 f"{active_count}/"
-                f"{MAX_OPEN_TRADES}"
+                f"{PROJECT_MAX_POSITIONS}"
             )
 
             return None
@@ -638,7 +689,7 @@ def execute_trade(
 
             logger.error(
                 "TRADE REJECTED - "
-                "INVALID LOT"
+                "INVALID PROJECT LOT"
             )
 
             return None
@@ -684,14 +735,13 @@ def execute_trade(
         )
 
         logger.info(
-            f"ACTIVE_POSITIONS="
+            "ACTIVE_POSITIONS="
             f"{active_count}/"
-            f"{MAX_OPEN_TRADES}"
+            f"{PROJECT_MAX_POSITIONS}"
         )
 
         logger.info(
-            f"PAPER_TRADING="
-            f"{PAPER_TRADING}"
+            f"PAPER_TRADING={PAPER_TRADING}"
         )
 
         logger.info(
@@ -699,7 +749,7 @@ def execute_trade(
         )
 
         # ----------------------------------------------------
-        # Order Manager
+        # Central Order Manager
         # ----------------------------------------------------
 
         order = open_market_position(
@@ -722,7 +772,7 @@ def execute_trade(
             return None
 
         # ----------------------------------------------------
-        # Determine status
+        # Status
         # ----------------------------------------------------
 
         if order.get(
@@ -741,52 +791,40 @@ def execute_trade(
         # ----------------------------------------------------
 
         trade = {
+            "ticket": order.get(
+                "ticket"
+            ),
 
-            "ticket":
-                order.get(
-                    "ticket"
-                ),
+            "deal": order.get(
+                "deal"
+            ),
 
-            "deal":
-                order.get(
-                    "deal"
-                ),
+            "symbol": symbol,
 
-            "symbol":
-                symbol,
+            "side": signal,
 
-            "side":
-                signal,
+            "entry": order.get(
+                "price",
+                entry,
+            ),
 
-            "entry":
-                order.get(
-                    "price",
-                    entry,
-                ),
+            "tp": tp,
 
-            "tp":
-                tp,
+            "sl": sl,
 
-            "sl":
-                sl,
+            "quantity": order.get(
+                "volume",
+                lot,
+            ),
 
-            "quantity":
-                order.get(
-                    "volume",
-                    lot,
-                ),
+            "confidence": confidence,
 
-            "confidence":
-                confidence,
+            "status": status,
 
-            "status":
-                status,
-
-            "paper_trading":
-                order.get(
-                    "paper_trading",
-                    PAPER_TRADING,
-                ),
+            "paper_trading": order.get(
+                "paper_trading",
+                PAPER_TRADING,
+            ),
         }
 
         trade_id = save_trade(
@@ -794,11 +832,7 @@ def execute_trade(
         )
 
         # ----------------------------------------------------
-        # Database failure handling
-        #
-        # IMPORTANT:
-        # If an order was already accepted by MT5 but the DB
-        # save fails, DO NOT retry the order.
+        # Database failure
         # ----------------------------------------------------
 
         if trade_id is None:
@@ -815,7 +849,7 @@ def execute_trade(
         trade["id"] = trade_id
 
         # ----------------------------------------------------
-        # Success log
+        # Success
         # ----------------------------------------------------
 
         logger.info(
@@ -828,6 +862,14 @@ def execute_trade(
 
         logger.info(
             f"ID={trade_id}"
+        )
+
+        logger.info(
+            f"TICKET={trade.get('ticket')}"
+        )
+
+        logger.info(
+            f"DEAL={trade.get('deal')}"
         )
 
         logger.info(
@@ -883,4 +925,6 @@ __all__ = [
     "_is_xauusd_symbol",
     "_normalize_signal",
 ]
+```
 
+**نکته مهم:** این فایل فقط آماده‌ی جایگزینی است؛ من روی سیستم ویندوزی تو آن را ننوشتم. بعد از این، فایل بعدی باید **`core/order_manager.py`** باشد تا `open_market_position()` دقیقاً با همین قرارداد و با `mt5_connector.py` هماهنگ شود.
