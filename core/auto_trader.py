@@ -34,6 +34,33 @@ XAUUSD_SYMBOL = "XAUUSD.st"
 # Helpers
 # ============================================================
 
+def _normalize_symbol(symbol: Any) -> str:
+    """
+    Normalize symbol only for comparison.
+
+    Example:
+        XAUUSD.st -> XAUUSD.ST
+        xauusd.st -> XAUUSD.ST
+
+    The canonical broker symbol XAUUSD.st is returned separately
+    where it is needed for MT5/order execution.
+    """
+    if symbol is None:
+        return ""
+
+    return str(symbol).strip().upper()
+
+
+def _is_xauusd_symbol(symbol: Any) -> bool:
+    """
+    Check whether a symbol represents the configured XAUUSD symbol.
+    """
+    return (
+        _normalize_symbol(symbol)
+        == _normalize_symbol(XAUUSD_SYMBOL)
+    )
+
+
 def _normalize_signal(
     signal: str
 ) -> Optional[str]:
@@ -74,19 +101,17 @@ def _validate_opportunity(
         )
         return False
 
-    symbol = str(
-        opportunity.get(
-            "symbol",
-            ""
-        )
-    ).upper().strip()
+    raw_symbol = opportunity.get(
+        "symbol",
+        ""
+    )
 
-    if symbol != XAUUSD_SYMBOL:
+    if not _is_xauusd_symbol(raw_symbol):
 
         logger.warning(
             f"TRADE REJECTED - "
             f"ONLY {XAUUSD_SYMBOL} ALLOWED: "
-            f"{symbol}"
+            f"{raw_symbol}"
         )
 
         return False
@@ -211,12 +236,10 @@ def _has_existing_trade() -> bool:
 
         for trade in open_trades:
 
-            symbol = str(
-                trade.get(
-                    "symbol",
-                    ""
-                )
-            ).upper().strip()
+            symbol = trade.get(
+                "symbol",
+                ""
+            )
 
             status = str(
                 trade.get(
@@ -226,7 +249,7 @@ def _has_existing_trade() -> bool:
             ).upper().strip()
 
             if (
-                symbol == XAUUSD_SYMBOL
+                _is_xauusd_symbol(symbol)
                 and status in (
                     "OPEN",
                     "PAPER_OPEN",
@@ -278,11 +301,8 @@ def execute_trade(
         # Data
         # ====================================================
 
-        symbol = str(
-            opportunity.get(
-                "symbol"
-            )
-        ).upper().strip()
+        # Always use the broker's canonical symbol for execution.
+        symbol = XAUUSD_SYMBOL
 
         signal = _normalize_signal(
             opportunity.get(
