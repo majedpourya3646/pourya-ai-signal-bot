@@ -1,5 +1,4 @@
-# core/order_manager.py
-
+```python
 from typing import Optional, Dict, Any
 
 from core.logger import logger
@@ -23,6 +22,7 @@ from config import (
     DEFAULT_LOT,
     PAPER_TRADING,
     ALLOW_LIVE_TRADING,
+    MAX_OPEN_TRADES,
 )
 
 
@@ -32,14 +32,38 @@ from config import (
 
 MAGIC_NUMBER = 20260731
 
-MAX_OPEN_POSITIONS = 1
+# Maximum total open positions allowed by the trading system.
+#
+# This is intentionally taken from config so the position
+# limit has one central configuration source.
+MAX_OPEN_POSITIONS = int(MAX_OPEN_TRADES)
+
+# Absolute project-level volume ceiling for the pilot.
+#
+# Even if broker configuration permits a larger volume,
+# Pourya Trader AI must never exceed this limit.
+MAX_PROJECT_LOT = 0.03
 
 DEFAULT_DEVIATION = 20
+
+# Pilot symbol.
+#
+# The current controlled test account uses XAUUSD.su.
+PILOT_SYMBOL = "XAUUSD.su"
 
 
 # ============================================================
 # Helpers
 # ============================================================
+
+def _normalize_symbol(
+    symbol: str,
+) -> str:
+
+    return str(
+        symbol or ""
+    ).strip().upper()
+
 
 def _normalize_side(
     side: str,
@@ -48,7 +72,9 @@ def _normalize_side(
     if side is None:
         return None
 
-    side = str(side).upper().strip()
+    side = str(
+        side
+    ).upper().strip()
 
     if side in (
         "BUY",
@@ -71,6 +97,8 @@ def _live_trading_allowed() -> bool:
 
     PAPER_TRADING must be False AND
     ALLOW_LIVE_TRADING must be True.
+
+    Any configuration uncertainty fails closed.
     """
 
     try:
@@ -97,7 +125,7 @@ def _live_trading_allowed() -> bool:
         )
 
         # Fail-safe:
-        # never allow a real order when safety
+        # never allow a real order when the safety
         # configuration cannot be verified.
         return False
 
@@ -168,6 +196,15 @@ def get_position_count() -> int:
 
         positions = get_open_positions()
 
+        if positions is None:
+
+            logger.error(
+                "POSITION LIST RETURNED NONE"
+            )
+
+            # Fail-safe for position-limit decisions.
+            return MAX_OPEN_POSITIONS
+
         return len(positions)
 
     except Exception as exc:
@@ -190,9 +227,27 @@ def has_open_position(
 
     try:
 
-        positions = get_open_positions(
-            symbol=symbol,
+        normalized_symbol = _normalize_symbol(
+            symbol
         )
+
+        if not normalized_symbol:
+
+            return False
+
+        positions = get_open_positions(
+            symbol=normalized_symbol,
+        )
+
+        if positions is None:
+
+            logger.error(
+                f"OPEN POSITION LIST RETURNED NONE "
+                f"{normalized_symbol}"
+            )
+
+            # Fail closed.
+            return True
 
         return len(positions) > 0
 
@@ -219,18 +274,44 @@ def validate_symbol(
 
     try:
 
-        if not symbol:
+        normalized_symbol = _normalize_symbol(
+            symbol
+        )
+
+        if not normalized_symbol:
+
+            return False
+
+        # ----------------------------------------------------
+        # Pilot symbol restriction
+        # ----------------------------------------------------
+        #
+        # During the controlled 7-day test, only XAUUSD.su
+        # is permitted.
+        #
+        # This prevents an unexpected symbol from reaching
+        # the execution layer.
+        # ----------------------------------------------------
+
+        if normalized_symbol != PILOT_SYMBOL.upper():
+
+            logger.error(
+                f"PILOT SYMBOL REJECTED "
+                f"REQUESTED={normalized_symbol} "
+                f"ALLOWED={PILOT_SYMBOL}"
+            )
 
             return False
 
         info = get_symbol_info(
-            symbol,
+            normalized_symbol,
         )
 
         if info is None:
 
             logger.error(
-                f"SYMBOL NOT FOUND {symbol}"
+                f"SYMBOL NOT FOUND "
+                f"{normalized_symbol}"
             )
 
             return False
@@ -260,8 +341,12 @@ def validate_prices(
 
     try:
 
+        normalized_symbol = _normalize_symbol(
+            symbol
+        )
+
         tick = get_symbol_tick(
-            symbol,
+            normalized_symbol,
         )
 
         if tick is None:
@@ -279,7 +364,8 @@ def validate_prices(
         if sl is None or tp is None:
 
             logger.error(
-                f"MISSING SL/TP {symbol}"
+                f"MISSING SL/TP "
+                f"{normalized_symbol}"
             )
 
             return False
@@ -291,7 +377,7 @@ def validate_prices(
 
             logger.error(
                 f"INVALID SL/TP VALUES "
-                f"{symbol} "
+                f"{normalized_symbol} "
                 f"SL={sl} "
                 f"TP={tp}"
             )
@@ -312,7 +398,7 @@ def validate_prices(
 
                 logger.error(
                     f"INVALID BUY SL "
-                    f"{symbol} "
+                    f"{normalized_symbol} "
                     f"SL={sl} "
                     f"PRICE={current_price}"
                 )
@@ -323,7 +409,7 @@ def validate_prices(
 
                 logger.error(
                     f"INVALID BUY TP "
-                    f"{symbol} "
+                    f"{normalized_symbol} "
                     f"TP={tp} "
                     f"PRICE={current_price}"
                 )
@@ -344,7 +430,7 @@ def validate_prices(
 
                 logger.error(
                     f"INVALID SELL SL "
-                    f"{symbol} "
+                    f"{normalized_symbol} "
                     f"SL={sl} "
                     f"PRICE={current_price}"
                 )
@@ -355,7 +441,7 @@ def validate_prices(
 
                 logger.error(
                     f"INVALID SELL TP "
-                    f"{symbol} "
+                    f"{normalized_symbol} "
                     f"TP={tp} "
                     f"PRICE={current_price}"
                 )
@@ -389,7 +475,27 @@ def validate_volume(
 
         if lot <= 0:
 
+            logger.error(
+                f"INVALID NON-POSITIVE VOLUME "
+                f"{symbol} LOT={lot}"
+            )
+
             return None
+
+        # ----------------------------------------------------
+        # Project hard ceiling
+        # ----------------------------------------------------
+
+        if lot > MAX_PROJECT_LOT:
+
+            logger.warning(
+                f"PROJECT LOT LIMIT APPLIED "
+                f"{symbol} "
+                f"REQUESTED={lot} "
+                f"MAX={MAX_PROJECT_LOT}"
+            )
+
+            lot = MAX_PROJECT_LOT
 
         normalized = normalize_volume(
             symbol,
@@ -399,12 +505,29 @@ def validate_volume(
         if normalized is None:
 
             logger.error(
-                f"INVALID VOLUME {symbol}"
+                f"INVALID VOLUME "
+                f"{symbol}"
             )
 
             return None
 
         if normalized <= 0:
+
+            return None
+
+        # ----------------------------------------------------
+        # Defense-in-depth after broker normalization
+        # ----------------------------------------------------
+
+        if normalized > MAX_PROJECT_LOT:
+
+            logger.error(
+                f"NORMALIZED VOLUME EXCEEDS "
+                f"PROJECT LIMIT "
+                f"{symbol} "
+                f"VOLUME={normalized} "
+                f"MAX={MAX_PROJECT_LOT}"
+            )
 
             return None
 
@@ -430,6 +553,15 @@ def validate_position_limit() -> bool:
 
         count = get_position_count()
 
+        if count < 0:
+
+            logger.error(
+                f"INVALID POSITION COUNT "
+                f"{count}"
+            )
+
+            return False
+
         if count >= MAX_OPEN_POSITIONS:
 
             logger.warning(
@@ -438,6 +570,11 @@ def validate_position_limit() -> bool:
             )
 
             return False
+
+        logger.info(
+            f"POSITION CAP OK "
+            f"{count}/{MAX_OPEN_POSITIONS}"
+        )
 
         return True
 
@@ -466,6 +603,10 @@ def validate_order(
 
         return False
 
+    normalized_symbol = _normalize_symbol(
+        symbol
+    )
+
     side = _normalize_side(
         side,
     )
@@ -479,35 +620,40 @@ def validate_order(
         return False
 
     if not validate_symbol(
-        symbol,
+        normalized_symbol,
     ):
 
         return False
+
+    # --------------------------------------------------------
+    # Global position limit
+    # --------------------------------------------------------
 
     if not validate_position_limit():
 
         return False
 
-    if has_open_position(
-        symbol,
-    ):
+    # --------------------------------------------------------
+    # IMPORTANT:
+    #
+    # Do NOT reject an order simply because another position
+    # already exists for the same symbol.
+    #
+    # The pilot allows up to MAX_OPEN_POSITIONS total
+    # positions, including multiple XAUUSD.su positions.
+    # --------------------------------------------------------
 
-        logger.warning(
-            f"POSITION ALREADY EXISTS "
-            f"{symbol}"
-        )
-
-        return False
-
-    if validate_volume(
-        symbol,
+    volume = validate_volume(
+        normalized_symbol,
         lot,
-    ) is None:
+    )
+
+    if volume is None:
 
         return False
 
     if not validate_prices(
-        symbol,
+        normalized_symbol,
         side,
         sl,
         tp,
@@ -536,6 +682,10 @@ def open_market_position(
 
         original_side = side
 
+        normalized_symbol = _normalize_symbol(
+            symbol
+        )
+
         side = _normalize_side(
             side,
         )
@@ -543,13 +693,14 @@ def open_market_position(
         if side is None:
 
             logger.error(
-                f"INVALID SIDE {original_side}"
+                f"INVALID SIDE "
+                f"{original_side}"
             )
 
             return None
 
         if not validate_order(
-            symbol,
+            normalized_symbol,
             side,
             lot,
             sl,
@@ -558,23 +709,24 @@ def open_market_position(
 
             logger.warning(
                 f"ORDER REJECTED "
-                f"{symbol} {side}"
+                f"{normalized_symbol} "
+                f"{side}"
             )
 
             return None
 
         volume = validate_volume(
-            symbol,
+            normalized_symbol,
             lot,
         )
 
         sl = normalize_price(
-            symbol,
+            normalized_symbol,
             sl,
         )
 
         tp = normalize_price(
-            symbol,
+            normalized_symbol,
             tp,
         )
 
@@ -587,7 +739,7 @@ def open_market_position(
             return None
 
         tick = get_symbol_tick(
-            symbol,
+            normalized_symbol,
         )
 
         if tick is None:
@@ -610,13 +762,14 @@ def open_market_position(
 
             logger.error(
                 f"INVALID MARKET PRICE "
-                f"{symbol} {side}"
+                f"{normalized_symbol} "
+                f"{side}"
             )
 
             return None
 
         expected_price = normalize_price(
-            symbol,
+            normalized_symbol,
             expected_price,
         )
 
@@ -626,7 +779,7 @@ def open_market_position(
 
         logger.info(
             f"MT5 MARKET ORDER "
-            f"{symbol} {side}"
+            f"{normalized_symbol} {side}"
         )
 
         logger.info(
@@ -643,7 +796,19 @@ def open_market_position(
             )
 
         logger.info(
-            f"PAPER_TRADING={PAPER_TRADING}"
+            f"OPEN_POSITIONS="
+            f"{get_position_count()}/"
+            f"{MAX_OPEN_POSITIONS}"
+        )
+
+        logger.info(
+            f"MAX_PROJECT_LOT="
+            f"{MAX_PROJECT_LOT}"
+        )
+
+        logger.info(
+            f"PAPER_TRADING="
+            f"{PAPER_TRADING}"
         )
 
         logger.info(
@@ -672,7 +837,7 @@ def open_market_position(
 
                 "paper_trading": True,
 
-                "symbol": symbol,
+                "symbol": normalized_symbol,
 
                 "side": side,
 
@@ -704,7 +869,7 @@ def open_market_position(
 
             logger.critical(
                 "REAL MT5 ORDER BLOCKED "
-                f"{symbol} {side} "
+                f"{normalized_symbol} {side} "
                 "BY SAFETY GATE"
             )
 
@@ -716,7 +881,7 @@ def open_market_position(
 
         result = send_market_order(
 
-            symbol=symbol,
+            symbol=normalized_symbol,
 
             side=side,
 
@@ -738,7 +903,7 @@ def open_market_position(
 
             logger.error(
                 f"MT5 ORDER FAILED "
-                f"{symbol}"
+                f"{normalized_symbol}"
             )
 
             return None
@@ -750,16 +915,19 @@ def open_market_position(
 
             logger.error(
                 "MT5 ORDER REJECTED "
-                f"{symbol} "
+                f"{normalized_symbol} "
                 f"RETCODE={result.get('retcode')} "
                 f"ERROR={result.get('error')}"
             )
 
             return None
 
+        # ----------------------------------------------------
         # Connector exposes:
         # order = MT5 order ticket
         # deal  = executed deal ticket
+        # ----------------------------------------------------
+
         order = result.get(
             "order"
         )
@@ -782,11 +950,15 @@ def open_market_position(
 
             logger.error(
                 f"ORDER WITHOUT MT5 TICKET "
-                f"{symbol} "
+                f"{normalized_symbol} "
                 f"ORDER={order} "
                 f"DEAL={deal}"
             )
 
+            # IMPORTANT:
+            # Do not retry here automatically.
+            # An ambiguous broker response must never
+            # trigger a blind duplicate order.
             return None
 
         response = {
@@ -795,7 +967,7 @@ def open_market_position(
 
             "paper_trading": False,
 
-            "symbol": symbol,
+            "symbol": normalized_symbol,
 
             "side": side,
 
@@ -914,11 +1086,14 @@ def close_position(
 
             return False
 
-        # Paper positions are managed by
-        # paper_position_manager.py.
+        # ----------------------------------------------------
+        # Paper positions are managed by the paper position
+        # manager.
         #
         # This compatibility function must not attempt
         # a real MT5 close while PAPER_TRADING is active.
+        # ----------------------------------------------------
+
         if PAPER_TRADING:
 
             logger.info(
@@ -928,7 +1103,10 @@ def close_position(
 
             return True
 
+        # ----------------------------------------------------
         # Independent live safety gate.
+        # ----------------------------------------------------
+
         if not _live_trading_allowed():
 
             logger.critical(
@@ -979,6 +1157,12 @@ def get_positions(
 
     try:
 
+        if symbol is not None:
+
+            symbol = _normalize_symbol(
+                symbol
+            )
+
         return get_open_positions(
             symbol=symbol,
         )
@@ -1003,8 +1187,12 @@ def get_position(
 
     try:
 
+        normalized_symbol = _normalize_symbol(
+            symbol
+        )
+
         positions = get_open_positions(
-            symbol=symbol,
+            symbol=normalized_symbol,
         )
 
         if not positions:
@@ -1021,3 +1209,4 @@ def get_position(
         )
 
         return None
+```
