@@ -29,6 +29,9 @@ from config import (
 MAGIC_NUMBER = 20260731
 DEVIATION = 20
 
+# Pilot symbol
+PILOT_SYMBOL = "XAUUSD.su"
+
 # Automatic SL / TP
 ENABLE_AUTO_SL_TP = True
 
@@ -48,6 +51,33 @@ ENABLE_TRAILING_STOP = True
 TRAILING_START_PERCENT = 1.5
 TRAILING_DISTANCE_PERCENT = 0.75
 
+ORDER_COMMENT_SLTP = "Pourya AI SLTP"
+ORDER_COMMENT_CLOSE = "Pourya AI Close"
+
+
+# ============================================================
+# SYMBOL HELPERS
+# ============================================================
+
+def _normalize_symbol(
+    symbol: Any,
+) -> str:
+
+    if symbol is None:
+        return ""
+
+    return str(symbol).strip().upper()
+
+
+def _is_pilot_symbol(
+    symbol: Any,
+) -> bool:
+
+    return (
+        _normalize_symbol(symbol)
+        == _normalize_symbol(PILOT_SYMBOL)
+    )
+
 
 # ============================================================
 # LIVE TRADING SAFETY
@@ -57,7 +87,7 @@ def _live_trading_allowed() -> bool:
     """
     Independent safety gate for any real MT5 modification.
 
-    A real MT5 order/modification is allowed only when:
+    Real MT5 modifications are allowed only when:
 
         PAPER_TRADING == False
         ALLOW_LIVE_TRADING == True
@@ -96,7 +126,6 @@ def _live_trading_allowed() -> bool:
             exc,
         )
 
-        # Fail-safe.
         return False
 
 
@@ -120,12 +149,14 @@ def _get_value(
         )
 
     try:
+
         return getattr(
             obj,
             key,
         )
 
     except AttributeError:
+
         return default
 
 
@@ -315,8 +346,7 @@ def _ensure_mt5() -> bool:
     """
     Always use the centralized MT5 connector.
 
-    This is critical because the project uses the portable
-    terminal:
+    Portable terminal:
 
         C:\\MT5-Pourya\\terminal64.exe
     """
@@ -338,6 +368,96 @@ def _ensure_mt5() -> bool:
 
 
 # ============================================================
+# POSITION SAFETY VALIDATION
+# ============================================================
+
+def _validate_project_position(
+    position: Any,
+) -> bool:
+    """
+    Verify that a position belongs to the current
+    Pourya Trader AI pilot.
+
+    Required:
+        - XAUUSD.su
+        - MAGIC_NUMBER
+        - valid ticket
+        - valid BUY/SELL type
+        - positive volume
+    """
+
+    if position is None:
+        return False
+
+    ticket = _position_ticket(
+        position
+    )
+
+    symbol = _position_symbol(
+        position
+    )
+
+    magic = _position_magic(
+        position
+    )
+
+    position_type = _position_type(
+        position
+    )
+
+    volume = _position_volume(
+        position
+    )
+
+    if ticket is None:
+        return False
+
+    if not _is_pilot_symbol(symbol):
+        return False
+
+    if magic != MAGIC_NUMBER:
+        return False
+
+    if position_type not in (
+        mt5.POSITION_TYPE_BUY,
+        mt5.POSITION_TYPE_SELL,
+    ):
+        return False
+
+    if volume <= 0:
+        return False
+
+    return True
+
+
+def _get_position_by_ticket(
+    ticket: int,
+) -> Optional[Any]:
+
+    try:
+
+        positions = mt5.positions_get(
+            ticket=int(ticket)
+        )
+
+        if not positions:
+            return None
+
+        return positions[0]
+
+    except Exception as exc:
+
+        logger.exception(
+            "GET POSITION ERROR "
+            "TICKET=%s ERROR=%s",
+            ticket,
+            exc,
+        )
+
+        return None
+
+
+# ============================================================
 # ATR
 # ============================================================
 
@@ -348,6 +468,16 @@ def calculate_atr(
 ) -> Optional[float]:
 
     try:
+
+        if not _is_pilot_symbol(symbol):
+
+            logger.warning(
+                "ATR BLOCKED - "
+                "NON-PILOT SYMBOL=%s",
+                symbol,
+            )
+
+            return None
 
         if not _ensure_mt5():
 
@@ -465,6 +595,9 @@ def get_min_stop_distance(
 
     try:
 
+        if not _is_pilot_symbol(symbol):
+            return 0.0
+
         if not _ensure_mt5():
             return 0.0
 
@@ -510,7 +643,9 @@ def get_min_stop_distance(
         if point <= 0 or level <= 0:
             return 0.0
 
-        return level * point
+        return float(
+            level * point
+        )
 
     except Exception as exc:
 
@@ -536,7 +671,13 @@ def validate_sl_tp(
 
     try:
 
+        if not _is_pilot_symbol(symbol):
+            return False
+
         if not _ensure_mt5():
+            return False
+
+        if sl <= 0 or tp <= 0:
             return False
 
         tick = get_symbol_tick(
@@ -630,7 +771,8 @@ def validate_sl_tp(
     except Exception as exc:
 
         logger.exception(
-            "SL TP VALIDATION ERROR SYMBOL=%s ERROR=%s",
+            "SL TP VALIDATION ERROR "
+            "SYMBOL=%s ERROR=%s",
             symbol,
             exc,
         )
@@ -650,6 +792,9 @@ def calculate_atr_sl_tp(
 ) -> Optional[Dict[str, float]]:
 
     try:
+
+        if not _is_pilot_symbol(symbol):
+            return None
 
         if not _ensure_mt5():
             return None
@@ -760,6 +905,70 @@ def calculate_atr_sl_tp(
 
 
 # ============================================================
+# ORDER CHECK HELPER
+# ============================================================
+
+def _order_check(
+    request: Dict[str, Any],
+    operation: str,
+) -> bool:
+
+    try:
+
+        result = mt5.order_check(
+            request
+        )
+
+        if result is None:
+
+            logger.error(
+                "%s ORDER_CHECK FAILED "
+                "ERROR=%s",
+                operation,
+                mt5.last_error(),
+            )
+
+            return False
+
+        retcode = int(
+            getattr(
+                result,
+                "retcode",
+                0,
+            )
+            or 0
+        )
+
+        if retcode != 0:
+
+            logger.error(
+                "%s ORDER_CHECK REJECTED "
+                "RETCODE=%s COMMENT=%s",
+                operation,
+                retcode,
+                getattr(
+                    result,
+                    "comment",
+                    "",
+                ),
+            )
+
+            return False
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            "%s ORDER_CHECK ERROR %s",
+            operation,
+            exc,
+        )
+
+        return False
+
+
+# ============================================================
 # MODIFY POSITION SL / TP
 # ============================================================
 
@@ -771,6 +980,16 @@ def modify_position_sl_tp(
 ) -> bool:
 
     try:
+
+        if not _is_pilot_symbol(symbol):
+
+            logger.warning(
+                "MODIFY SLTP BLOCKED - "
+                "NON-PILOT SYMBOL=%s",
+                symbol,
+            )
+
+            return False
 
         if not _ensure_mt5():
 
@@ -791,11 +1010,11 @@ def modify_position_sl_tp(
 
             return False
 
-        positions = mt5.positions_get(
-            ticket=int(ticket)
+        position = _get_position_by_ticket(
+            ticket
         )
 
-        if not positions:
+        if position is None:
 
             logger.warning(
                 "MODIFY SLTP: "
@@ -805,24 +1024,37 @@ def modify_position_sl_tp(
 
             return False
 
-        position = positions[0]
+        if not _validate_project_position(
+            position
+        ):
 
-        current_sl = float(
-            getattr(
-                position,
-                "sl",
-                0.0,
+            logger.warning(
+                "MODIFY SLTP BLOCKED - "
+                "POSITION SAFETY VALIDATION FAILED "
+                "TICKET=%s",
+                ticket,
             )
-            or 0.0
+
+            return False
+
+        actual_symbol = _position_symbol(
+            position
         )
 
-        current_tp = float(
-            getattr(
-                position,
-                "tp",
-                0.0,
-            )
-            or 0.0
+        if not _is_pilot_symbol(actual_symbol):
+
+            return False
+
+        position_type = _position_type(
+            position
+        )
+
+        current_sl = _position_sl(
+            position
+        )
+
+        current_tp = _position_tp(
+            position
         )
 
         if sl is None:
@@ -839,6 +1071,50 @@ def modify_position_sl_tp(
             tp or 0.0
         )
 
+        if sl <= 0 or tp <= 0:
+
+            logger.warning(
+                "MODIFY SLTP BLOCKED - "
+                "INVALID SL/TP "
+                "TICKET=%s SL=%s TP=%s",
+                ticket,
+                sl,
+                tp,
+            )
+
+            return False
+
+        if not validate_sl_tp(
+            symbol=actual_symbol,
+            position_type=position_type,
+            sl=sl,
+            tp=tp,
+        ):
+
+            logger.warning(
+                "MODIFY SLTP BLOCKED - "
+                "SL/TP VALIDATION FAILED "
+                "TICKET=%s SL=%.5f TP=%.5f",
+                ticket,
+                sl,
+                tp,
+            )
+
+            return False
+
+        sl = normalize_price(
+            actual_symbol,
+            sl,
+        )
+
+        tp = normalize_price(
+            actual_symbol,
+            tp,
+        )
+
+        if sl is None or tp is None:
+            return False
+
         request = {
             "action":
                 mt5.TRADE_ACTION_SLTP,
@@ -847,20 +1123,45 @@ def modify_position_sl_tp(
                 int(ticket),
 
             "symbol":
-                symbol,
+                actual_symbol,
 
             "sl":
-                sl,
+                float(sl),
 
             "tp":
-                tp,
+                float(tp),
 
             "magic":
                 MAGIC_NUMBER,
 
             "comment":
-                "Pourya AI SLTP",
+                ORDER_COMMENT_SLTP,
         }
+
+        # ----------------------------------------------------
+        # PRE-FLIGHT ORDER CHECK
+        # ----------------------------------------------------
+
+        if not _order_check(
+            request,
+            "MODIFY SLTP",
+        ):
+
+            return False
+
+        logger.info(
+            "MODIFY SLTP: SEND "
+            "TICKET=%s SYMBOL=%s "
+            "SL=%.5f TP=%.5f",
+            ticket,
+            actual_symbol,
+            sl,
+            tp,
+        )
+
+        # ----------------------------------------------------
+        # SINGLE SEND - NO BLIND RETRY
+        # ----------------------------------------------------
 
         result = mt5.order_send(
             request
@@ -907,7 +1208,7 @@ def modify_position_sl_tp(
             "TICKET=%s SYMBOL=%s "
             "SL=%.5f TP=%.5f RETCODE=%s",
             ticket,
-            symbol,
+            actual_symbol,
             sl,
             tp,
             retcode,
@@ -935,15 +1236,15 @@ def close_position(
     ticket: int,
 ) -> bool:
     """
-    Close an existing MT5 position by ticket.
+    Close an existing Pourya Trader AI position.
 
-    IMPORTANT:
-        BUY positions are closed at BID.
-        SELL positions are closed at ASK.
-
-    This function contains an independent live-trading
-    safety gate and will never send a real close request
-    while PAPER_TRADING=True or ALLOW_LIVE_TRADING=False.
+    Safety requirements:
+        - XAUUSD.su only
+        - MAGIC_NUMBER must match
+        - PAPER_TRADING must be False
+        - ALLOW_LIVE_TRADING must be True
+        - order_check must pass
+        - exactly one order_send attempt
     """
 
     try:
@@ -968,11 +1269,11 @@ def close_position(
 
             return False
 
-        positions = mt5.positions_get(
-            ticket=int(ticket)
+        position = _get_position_by_ticket(
+            ticket
         )
 
-        if not positions:
+        if position is None:
 
             logger.warning(
                 "CLOSE POSITION: "
@@ -983,7 +1284,18 @@ def close_position(
 
             return False
 
-        position = positions[0]
+        if not _validate_project_position(
+            position
+        ):
+
+            logger.warning(
+                "CLOSE POSITION BLOCKED - "
+                "POSITION SAFETY VALIDATION FAILED "
+                "TICKET=%s",
+                ticket,
+            )
+
+            return False
 
         symbol = _position_symbol(
             position
@@ -997,36 +1309,7 @@ def close_position(
             position
         )
 
-        magic = _position_magic(
-            position
-        )
-
         if not symbol or volume <= 0:
-
-            logger.warning(
-                "CLOSE POSITION: "
-                "INVALID POSITION "
-                "TICKET=%s",
-                ticket,
-            )
-
-            return False
-
-        # ----------------------------------------------------
-        # SAFETY FILTER
-        # ----------------------------------------------------
-
-        if magic != MAGIC_NUMBER:
-
-            logger.warning(
-                "CLOSE POSITION BLOCKED: "
-                "FOREIGN POSITION "
-                "TICKET=%s MAGIC=%s EXPECTED=%s",
-                ticket,
-                magic,
-                MAGIC_NUMBER,
-            )
-
             return False
 
         tick = get_symbol_tick(
@@ -1063,29 +1346,7 @@ def close_position(
         )
 
         if bid <= 0 or ask <= 0:
-
-            logger.warning(
-                "CLOSE POSITION: "
-                "INVALID TICK SYMBOL=%s "
-                "TICKET=%s",
-                symbol,
-                ticket,
-            )
-
             return False
-
-        # ----------------------------------------------------
-        # CORRECT MARKET CLOSE PRICING
-        # ----------------------------------------------------
-        #
-        # BUY position:
-        #   original position bought at ASK
-        #   to close it, we SELL at BID
-        #
-        # SELL position:
-        #   original position sold at BID
-        #   to close it, we BUY at ASK
-        #
 
         if position_type == mt5.POSITION_TYPE_BUY:
 
@@ -1152,10 +1413,6 @@ def close_position(
             mt5.ORDER_FILLING_FOK,
         )
 
-        # ----------------------------------------------------
-        # LIVE SAFETY GATE
-        # ----------------------------------------------------
-
         if not _live_trading_allowed():
 
             logger.critical(
@@ -1194,7 +1451,7 @@ def close_position(
                 MAGIC_NUMBER,
 
             "comment":
-                "Pourya AI Close",
+                ORDER_COMMENT_CLOSE,
 
             "type_time":
                 mt5.ORDER_TIME_GTC,
@@ -1202,6 +1459,17 @@ def close_position(
             "type_filling":
                 filling_mode,
         }
+
+        # ----------------------------------------------------
+        # PRE-FLIGHT ORDER CHECK
+        # ----------------------------------------------------
+
+        if not _order_check(
+            request,
+            "CLOSE POSITION",
+        ):
+
+            return False
 
         logger.info(
             "CLOSE POSITION: SEND "
@@ -1215,8 +1483,12 @@ def close_position(
             volume,
             bid,
             ask,
-            price,
+            normalized_price,
         )
+
+        # ----------------------------------------------------
+        # SINGLE SEND - NO BLIND RETRY
+        # ----------------------------------------------------
 
         result = mt5.order_send(
             request
@@ -1297,6 +1569,11 @@ def manage_auto_sl_tp(
         if not _ensure_mt5():
             return False
 
+        if not _validate_project_position(
+            position
+        ):
+            return False
+
         ticket = _position_ticket(
             position
         )
@@ -1312,13 +1589,6 @@ def manage_auto_sl_tp(
         if ticket is None or not symbol:
             return False
 
-        if position_type not in (
-            mt5.POSITION_TYPE_BUY,
-            mt5.POSITION_TYPE_SELL,
-        ):
-
-            return False
-
         current_sl = _position_sl(
             position
         )
@@ -1332,13 +1602,6 @@ def manage_auto_sl_tp(
         )
 
         if entry_price <= 0:
-
-            logger.warning(
-                "AUTO SLTP: "
-                "INVALID ENTRY TICKET=%s",
-                ticket,
-            )
-
             return False
 
         if (
@@ -1453,6 +1716,9 @@ def check_position_result(
 
     try:
 
+        if not _is_pilot_symbol(symbol):
+            return False
+
         if not _ensure_mt5():
             return False
 
@@ -1471,6 +1737,13 @@ def check_position_result(
 
             return False
 
+        position = positions[0]
+
+        if not _validate_project_position(
+            position
+        ):
+            return False
+
         return True
 
     except Exception:
@@ -1487,6 +1760,11 @@ def calculate_profit_percent(
 ) -> float:
 
     try:
+
+        if not _validate_project_position(
+            position
+        ):
+            return 0.0
 
         if not _ensure_mt5():
             return 0.0
@@ -1576,6 +1854,11 @@ def manage_break_even(
     try:
 
         if not _ensure_mt5():
+            return False
+
+        if not _validate_project_position(
+            position
+        ):
             return False
 
         ticket = _position_ticket(
@@ -1720,6 +2003,11 @@ def manage_trailing_stop(
     try:
 
         if not _ensure_mt5():
+            return False
+
+        if not _validate_project_position(
+            position
+        ):
             return False
 
         ticket = _position_ticket(
@@ -1889,18 +2177,19 @@ def manage_trailing_stop(
 
 def monitor_positions() -> List[Dict[str, Any]]:
     """
-    Monitor ONLY positions belonging to Pourya Trader AI.
+    Monitor ONLY Pourya Trader AI positions for XAUUSD.su.
 
-    Manual / foreign positions are ignored.
+    Manual / foreign / other-symbol positions are ignored.
+
+    While PAPER_TRADING=True or ALLOW_LIVE_TRADING=False,
+    the manager may analyze positions but cannot perform
+    real MT5 modifications.
     """
 
     results: List[Dict[str, Any]] = []
 
     try:
 
-        # IMPORTANT:
-        # Never call mt5.terminal_info() directly as the
-        # connection gate. Use the centralized connector.
         if not _ensure_mt5():
 
             logger.warning(
@@ -1956,20 +2245,26 @@ def monitor_positions() -> List[Dict[str, Any]]:
                     continue
 
                 # ------------------------------------------------
-                # CRITICAL SAFETY FILTER
+                # SYMBOL FILTER
                 # ------------------------------------------------
 
-                if magic is None:
+                if not _is_pilot_symbol(symbol):
 
                     logger.info(
                         "POSITION MANAGER: "
-                        "SKIP FOREIGN POSITION "
-                        "TICKET=%s MAGIC=None SYMBOL=%s",
+                        "SKIP NON-PILOT POSITION "
+                        "TICKET=%s SYMBOL=%s "
+                        "PILOT=%s",
                         ticket,
                         symbol,
+                        PILOT_SYMBOL,
                     )
 
                     continue
+
+                # ------------------------------------------------
+                # MAGIC FILTER
+                # ------------------------------------------------
 
                 if magic != MAGIC_NUMBER:
 
@@ -1982,17 +2277,6 @@ def monitor_positions() -> List[Dict[str, Any]]:
                         magic,
                         MAGIC_NUMBER,
                         symbol,
-                    )
-
-                    continue
-
-                if not symbol:
-
-                    logger.warning(
-                        "POSITION PROCESS: "
-                        "SYMBOL MISSING "
-                        "TICKET=%s",
-                        ticket,
                     )
 
                     continue
@@ -2071,6 +2355,24 @@ def monitor_positions() -> List[Dict[str, Any]]:
                     )
 
                 # ------------------------------------------------
+                # REFRESH POSITION AFTER SL/TP CHANGE
+                # ------------------------------------------------
+
+                if action_result[
+                    "auto_sl_tp"
+                ]:
+
+                    refreshed = (
+                        _get_position_by_ticket(
+                            ticket
+                        )
+                    )
+
+                    if refreshed is not None:
+
+                        position = refreshed
+
+                # ------------------------------------------------
                 # BREAK EVEN
                 # ------------------------------------------------
 
@@ -2081,6 +2383,24 @@ def monitor_positions() -> List[Dict[str, Any]]:
                     ] = manage_break_even(
                         position
                     )
+
+                # ------------------------------------------------
+                # REFRESH AGAIN AFTER BREAK EVEN
+                # ------------------------------------------------
+
+                if action_result[
+                    "break_even"
+                ]:
+
+                    refreshed = (
+                        _get_position_by_ticket(
+                            ticket
+                        )
+                    )
+
+                    if refreshed is not None:
+
+                        position = refreshed
 
                 # ------------------------------------------------
                 # TRAILING STOP
@@ -2132,22 +2452,23 @@ def modify_position_sl(
         if not _ensure_mt5():
             return False
 
-        positions = mt5.positions_get(
-            ticket=int(ticket)
-        )
-
-        if not positions:
+        if not _is_pilot_symbol(symbol):
             return False
 
-        position = positions[0]
+        position = _get_position_by_ticket(
+            ticket
+        )
 
-        tp = float(
-            getattr(
-                position,
-                "tp",
-                0.0,
-            )
-            or 0.0
+        if position is None:
+            return False
+
+        if not _validate_project_position(
+            position
+        ):
+            return False
+
+        tp = _position_tp(
+            position
         )
 
         return modify_position_sl_tp(
