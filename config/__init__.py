@@ -1,4 +1,3 @@
-```python
 from __future__ import annotations
 
 import os
@@ -349,4 +348,3 @@ ALLOW_LIVE_TRADING = False
 ENV_FILE_PATH = str(
     ENV_FILE
 )
-```
