@@ -1,10 +1,8 @@
-```python
 # core/trading_loop.py
 
 from __future__ import annotations
 
 import threading
-import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -29,14 +27,17 @@ class TradingLoop:
     """
     Main automated trading loop.
 
-    Execution is delegated to trading_controller.run_trading_cycle().
+    Trading execution is delegated to
+    trading_controller.run_trading_cycle().
 
     When PAPER_TRADING=True:
+
         1. Existing paper positions are monitored first.
-        2. TP / SL status is updated.
-        3. Closed paper trades are finalized.
-        4. The normal trading cycle is executed.
-        5. Any new trade remains paper-only.
+        2. Current P/L is updated.
+        3. TP / SL is checked.
+        4. Closed paper trades are finalized.
+        5. Normal trading cycle is executed.
+        6. Any newly created trade remains paper-only.
 
     No direct live order execution is performed here.
     """
@@ -44,7 +45,11 @@ class TradingLoop:
     def __init__(self, interval: Optional[int] = None) -> None:
         self.interval = max(
             1,
-            int(interval if interval is not None else TRADING_INTERVAL),
+            int(
+                interval
+                if interval is not None
+                else TRADING_INTERVAL
+            ),
         )
 
         self.stop_event = threading.Event()
@@ -55,6 +60,7 @@ class TradingLoop:
         self.last_result: Any = None
         self.last_error: Optional[str] = None
 
+        # Paper-trading monitoring state
         self.last_paper_positions: list[dict[str, Any]] = []
         self.last_paper_error: Optional[str] = None
 
@@ -64,7 +70,8 @@ class TradingLoop:
 
     def _monitor_paper_positions(self) -> list[dict[str, Any]]:
         """
-        Monitor all open paper trades before running a new trading cycle.
+        Monitor existing paper positions before generating
+        a new trading opportunity.
 
         This function never sends a real MT5 order.
         """
@@ -72,11 +79,18 @@ class TradingLoop:
         if not PAPER_TRADING:
             self.last_paper_positions = []
             self.last_paper_error = None
+
+            logger.info(
+                "TRADING LOOP: PAPER TRADING DISABLED"
+            )
+
             return []
 
         try:
             logger.info("=" * 60)
-            logger.info("TRADING LOOP: PAPER POSITION MONITOR")
+            logger.info(
+                "TRADING LOOP: PAPER POSITION MONITOR"
+            )
             logger.info("=" * 60)
 
             positions = monitor_paper_positions()
@@ -88,6 +102,7 @@ class TradingLoop:
                 logger.info(
                     "TRADING LOOP: NO OPEN PAPER POSITIONS"
                 )
+
                 return []
 
             for position in positions:
@@ -129,12 +144,12 @@ class TradingLoop:
 
     def _cycle(self) -> Any:
         """
-        Run exactly one complete trading cycle.
+        Run one complete trading cycle.
 
-        Order of execution:
+        Execution order:
 
             1. Paper position monitoring
-            2. Normal trading controller
+            2. Existing trading controller
         """
 
         self.last_cycle_at = datetime.now()
@@ -154,7 +169,7 @@ class TradingLoop:
 
             # ----------------------------------------------------------
             # STEP 2
-            # Run the existing trading controller.
+            # Run existing trading controller.
             # ----------------------------------------------------------
 
             result = run_trading_cycle()
@@ -163,7 +178,9 @@ class TradingLoop:
             self.last_error = None
 
             logger.info("=" * 60)
-            logger.info("TRADING LOOP: CYCLE COMPLETED")
+            logger.info(
+                "TRADING LOOP: CYCLE COMPLETED"
+            )
             logger.info("=" * 60)
 
             return result
@@ -186,9 +203,8 @@ class TradingLoop:
         """
         Run exactly one trading cycle.
 
-        NOTE:
-        MT5 should already be initialized before calling run_once()
-        when the cycle needs market data.
+        MT5 should already be initialized before calling this
+        when market data is required.
         """
 
         return self._cycle()
@@ -206,20 +222,23 @@ class TradingLoop:
             logger.warning(
                 "TRADING LOOP: ALREADY RUNNING"
             )
+
             return
 
         self.running = True
         self.stop_event.clear()
 
         logger.info(
-            "TRADING LOOP STARTED | interval=%ss | paper_trading=%s",
+            "TRADING LOOP STARTED | "
+            "interval=%ss | "
+            "paper_trading=%s",
             self.interval,
             PAPER_TRADING,
         )
 
         try:
             # ----------------------------------------------------------
-            # INITIALIZE TRADING ENGINE ONCE
+            # INITIALIZE TRADING ENGINE
             # ----------------------------------------------------------
 
             initialized = initialize_trading()
@@ -230,7 +249,8 @@ class TradingLoop:
                 )
             else:
                 logger.error(
-                    "TRADING LOOP: MT5/TRADING ENGINE INITIALIZATION FAILED"
+                    "TRADING LOOP: "
+                    "MT5/TRADING ENGINE INITIALIZATION FAILED"
                 )
 
             # ----------------------------------------------------------
@@ -241,7 +261,9 @@ class TradingLoop:
 
                 self._cycle()
 
-                if self.stop_event.wait(self.interval):
+                if self.stop_event.wait(
+                    self.interval
+                ):
                     break
 
         except Exception as exc:
@@ -253,10 +275,6 @@ class TradingLoop:
             )
 
         finally:
-            # ----------------------------------------------------------
-            # SHUTDOWN
-            # ----------------------------------------------------------
-
             try:
                 shutdown_trading()
 
@@ -285,12 +303,17 @@ class TradingLoop:
             logger.warning(
                 "TRADING LOOP: ALREADY RUNNING"
             )
+
             return False
 
-        if self.thread is not None and self.thread.is_alive():
+        if (
+            self.thread is not None
+            and self.thread.is_alive()
+        ):
             logger.warning(
                 "TRADING LOOP: THREAD ALREADY ALIVE"
             )
+
             return False
 
         self.stop_event.clear()
@@ -315,7 +338,8 @@ class TradingLoop:
         """
 
         if not self.running and not (
-            self.thread and self.thread.is_alive()
+            self.thread
+            and self.thread.is_alive()
         ):
             return False
 
@@ -356,15 +380,20 @@ class TradingLoop:
         return {
             "running": self.running,
             "thread_alive": bool(
-                self.thread and self.thread.is_alive()
+                self.thread
+                and self.thread.is_alive()
             ),
             "interval": self.interval,
             "paper_trading": PAPER_TRADING,
             "last_cycle_at": self.last_cycle_at,
             "last_error": self.last_error,
             "last_result": self.last_result,
-            "last_paper_positions": self.last_paper_positions,
-            "last_paper_error": self.last_paper_error,
+            "last_paper_positions": (
+                self.last_paper_positions
+            ),
+            "last_paper_error": (
+                self.last_paper_error
+            ),
         }
 
 
@@ -418,4 +447,4 @@ __all__ = [
     "start",
     "stop",
 ]
-```
+
