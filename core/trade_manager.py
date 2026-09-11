@@ -194,6 +194,15 @@ def update_trade_status(
 
         cursor = conn.cursor()
 
+        normalized_status = str(status).upper()
+
+        is_closed = normalized_status in (
+            "CLOSED",
+            "CLOSE",
+            "TP",
+            "SL"
+        )
+
         cursor.execute(
             """
             UPDATE trades
@@ -201,15 +210,20 @@ def update_trade_status(
                 status=?,
                 pnl=COALESCE(?, pnl),
                 exit_price=COALESCE(?, exit_price),
-                closed_at=?
+                closed_at=
+                    CASE
+                        WHEN ? THEN ?
+                        ELSE closed_at
+                    END
             WHERE id=?
             """,
             (
-                status,
+                normalized_status,
                 float(pnl) if pnl is not None else None,
                 float(exit_price) if exit_price is not None else None,
+                1 if is_closed else 0,
                 datetime.utcnow().isoformat()
-                if status.upper() in ("CLOSED", "CLOSE", "TP", "SL")
+                if is_closed
                 else None,
                 trade_id
             )
@@ -232,7 +246,7 @@ def update_trade_status(
         logger.info(
             f"TRADE STATUS UPDATED "
             f"ID={trade_id} "
-            f"STATUS={status}"
+            f"STATUS={normalized_status}"
         )
 
         return True
@@ -265,6 +279,8 @@ def close_trade(
 
         cursor = conn.cursor()
 
+        close_time = datetime.utcnow().isoformat()
+
         cursor.execute(
             """
             UPDATE trades
@@ -279,7 +295,7 @@ def close_trade(
                 "CLOSED",
                 float(exit_price),
                 float(pnl),
-                datetime.utcnow().isoformat(),
+                close_time,
                 trade_id
             )
         )
