@@ -10,6 +10,10 @@ from config import (
 )
 
 
+# ============================================================
+# Timeframe Configuration
+# ============================================================
+
 TIMEFRAME_WEIGHTS = {
     "15": 0.25,
     "60": 0.35,
@@ -17,11 +21,17 @@ TIMEFRAME_WEIGHTS = {
 }
 
 
+# ============================================================
+# Target Calculation
+# ============================================================
+
 def calculate_target(
     price,
     side
 ):
+
     try:
+
         if price is None:
             return None, None
 
@@ -30,7 +40,12 @@ def calculate_target(
         if price <= 0:
             return None, None
 
+        side = str(
+            side or ""
+        ).upper().strip()
+
         if side == "BUY":
+
             tp = price * (
                 1 + DEFAULT_TP / 100
             )
@@ -40,6 +55,7 @@ def calculate_target(
             )
 
         elif side == "SELL":
+
             tp = price * (
                 1 - DEFAULT_TP / 100
             )
@@ -49,6 +65,7 @@ def calculate_target(
             )
 
         else:
+
             return None, None
 
         return (
@@ -57,69 +74,203 @@ def calculate_target(
         )
 
     except Exception as e:
+
         logger.exception(e)
+
         return None, None
 
+
+# ============================================================
+# Weight Normalization
+# ============================================================
+
+def normalize_weights(
+    available_timeframes
+):
+
+    try:
+
+        if not available_timeframes:
+            return {}
+
+        available = [
+            str(tf)
+            for tf in available_timeframes
+            if str(tf) in TIMEFRAME_WEIGHTS
+        ]
+
+        if not available:
+            return {}
+
+        total_weight = sum(
+            TIMEFRAME_WEIGHTS[tf]
+            for tf in available
+        )
+
+        if total_weight <= 0:
+            return {}
+
+        return {
+            tf: TIMEFRAME_WEIGHTS[tf] / total_weight
+            for tf in available
+        }
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return {}
+
+
+# ============================================================
+# MTF Agreement
+# ============================================================
+
+def calculate_mtf_agreement(
+    timeframe_results
+):
+
+    try:
+
+        if not timeframe_results:
+            return 0.0
+
+        signals = []
+
+        for result in timeframe_results.values():
+
+            if not isinstance(result, dict):
+                continue
+
+            signal = str(
+                result.get("signal") or ""
+            ).upper().strip()
+
+            if signal in (
+                "BUY",
+                "SELL"
+            ):
+
+                signals.append(
+                    signal
+                )
+
+        if not signals:
+            return 0.0
+
+        buy_count = signals.count(
+            "BUY"
+        )
+
+        sell_count = signals.count(
+            "SELL"
+        )
+
+        dominant_count = max(
+            buy_count,
+            sell_count
+        )
+
+        return round(
+            dominant_count / len(signals) * 100,
+            2
+        )
+
+    except Exception as e:
+
+        logger.exception(e)
+
+        return 0.0
+
+
+# ============================================================
+# Analyze Symbol
+# ============================================================
 
 def analyze_symbol(
     symbol
 ):
+
     try:
-        total_score = 0
-        buy_score = 0
-        sell_score = 0
-        last_price = None
 
         timeframe_results = {}
 
-        for tf, weight in TIMEFRAME_WEIGHTS.items():
+        last_price = None
+
+        # ----------------------------------------------------
+        # Collect available timeframe data first
+        # ----------------------------------------------------
+
+        for tf in TIMEFRAME_WEIGHTS:
 
             candles = get_market_data(
                 symbol,
                 tf
             )
 
-            # -------------------------------------------------
-            # MARKET DATA VALIDATION
-            # -------------------------------------------------
+            # ------------------------------------------------
+            # Market data validation
+            # ------------------------------------------------
 
             if candles is None:
+
                 logger.warning(
-                    f"NO MARKET DATA {symbol} TF={tf}"
+                    f"NO MARKET DATA "
+                    f"{symbol} TF={tf}"
                 )
+
                 continue
 
             try:
-                candle_count = len(candles)
-            except Exception:
-                logger.warning(
-                    f"INVALID MARKET DATA {symbol} TF={tf}"
+
+                candle_count = len(
+                    candles
                 )
+
+            except Exception:
+
+                logger.warning(
+                    f"INVALID MARKET DATA "
+                    f"{symbol} TF={tf}"
+                )
+
                 continue
 
             logger.info(
-                f"MARKET DATA {symbol} TF={tf} COUNT={candle_count}"
+                f"MARKET DATA "
+                f"{symbol} TF={tf} "
+                f"COUNT={candle_count}"
             )
 
             if candle_count == 0:
+
                 logger.warning(
-                    f"NO CANDLES {symbol} TF={tf}"
+                    f"NO CANDLES "
+                    f"{symbol} TF={tf}"
                 )
+
                 continue
 
-            # -------------------------------------------------
-            # SIGNAL ANALYSIS
-            # -------------------------------------------------
+            # ------------------------------------------------
+            # Signal analysis
+            # ------------------------------------------------
 
             result = analyze_signal(
                 candles
             )
 
             if not result:
+
                 logger.warning(
-                    f"NO SIGNAL RESULT {symbol} TF={tf}"
+                    f"NO SIGNAL RESULT "
+                    f"{symbol} TF={tf}"
                 )
+
                 continue
+
+            signal = str(
+                result.get("signal") or ""
+            ).upper().strip()
 
             confidence = result.get(
                 "confidence",
@@ -127,98 +278,211 @@ def analyze_symbol(
             )
 
             try:
-                confidence = float(confidence)
+
+                confidence = float(
+                    confidence
+                )
+
             except (
                 TypeError,
                 ValueError
             ):
-                confidence = 0
 
-            weighted = confidence * weight
-
-            total_score += weighted
-
-            signal = result.get(
-                "signal"
-            )
-
-            if signal == "BUY":
-                buy_score += weighted
-
-            elif signal == "SELL":
-                sell_score += weighted
+                confidence = 0.0
 
             price = result.get(
                 "price"
             )
 
             if price is not None:
+
                 try:
-                    last_price = float(price)
+
+                    price = float(
+                        price
+                    )
+
+                    if price > 0:
+                        last_price = price
+
                 except (
                     TypeError,
                     ValueError
                 ):
+
                     pass
 
-            timeframe_results[tf] = result
+            timeframe_results[
+                str(tf)
+            ] = result
 
             logger.info(
-                f"SIGNAL {symbol} TF={tf} "
-                f"{signal} CONF={confidence}"
+                f"SIGNAL "
+                f"{symbol} "
+                f"TF={tf} "
+                f"{signal} "
+                f"CONF={confidence}"
             )
 
-        # -----------------------------------------------------
-        # NO TIMEFRAME DATA
-        # -----------------------------------------------------
+        # ----------------------------------------------------
+        # No timeframe data
+        # ----------------------------------------------------
 
         if not timeframe_results:
+
             logger.warning(
-                f"NO TIMEFRAME RESULT {symbol}"
+                f"NO TIMEFRAME RESULT "
+                f"{symbol}"
             )
+
             return None
 
-        # -----------------------------------------------------
-        # SCORE VALIDATION
-        # -----------------------------------------------------
+        # ----------------------------------------------------
+        # Normalize weights according to available data
+        # ----------------------------------------------------
 
-        if total_score < 50:
-            logger.info(
-                f"LOW SCORE {symbol} SCORE={total_score}"
+        normalized_weights = normalize_weights(
+            timeframe_results.keys()
+        )
+
+        if not normalized_weights:
+
+            logger.warning(
+                f"NO VALID TIMEFRAME WEIGHTS "
+                f"{symbol}"
             )
+
             return None
 
-        # -----------------------------------------------------
-        # FINAL DIRECTION
-        # -----------------------------------------------------
+        # ----------------------------------------------------
+        # Calculate weighted direction scores
+        # ----------------------------------------------------
+
+        buy_score = 0.0
+        sell_score = 0.0
+
+        weighted_total = 0.0
+
+        for tf, result in timeframe_results.items():
+
+            weight = normalized_weights.get(
+                str(tf),
+                0.0
+            )
+
+            confidence = result.get(
+                "confidence",
+                0
+            )
+
+            try:
+
+                confidence = float(
+                    confidence
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                confidence = 0.0
+
+            weighted_score = (
+                confidence * weight
+            )
+
+            weighted_total += (
+                weighted_score
+            )
+
+            signal = str(
+                result.get("signal") or ""
+            ).upper().strip()
+
+            if signal == "BUY":
+
+                buy_score += (
+                    weighted_score
+                )
+
+            elif signal == "SELL":
+
+                sell_score += (
+                    weighted_score
+                )
+
+        # ----------------------------------------------------
+        # Direction
+        # ----------------------------------------------------
 
         if buy_score > sell_score:
+
             final_signal = "BUY"
-            confidence = buy_score
+
+            signal_strength = buy_score
 
         elif sell_score > buy_score:
+
             final_signal = "SELL"
-            confidence = sell_score
+
+            signal_strength = sell_score
 
         else:
+
             logger.info(
-                f"NO DIRECTION {symbol}"
+                f"NO DIRECTION "
+                f"{symbol}"
             )
+
             return None
 
-        # -----------------------------------------------------
-        # PRICE VALIDATION
-        # -----------------------------------------------------
+        # ----------------------------------------------------
+        # Agreement
+        # ----------------------------------------------------
 
-        if last_price is None or last_price <= 0:
+        mtf_agreement = calculate_mtf_agreement(
+            timeframe_results
+        )
+
+        # ----------------------------------------------------
+        # Data coverage
+        # ----------------------------------------------------
+
+        expected_timeframes = len(
+            TIMEFRAME_WEIGHTS
+        )
+
+        available_timeframes = len(
+            timeframe_results
+        )
+
+        data_coverage = round(
+            available_timeframes
+            / expected_timeframes
+            * 100,
+            2
+        )
+
+        # ----------------------------------------------------
+        # Price validation
+        # ----------------------------------------------------
+
+        if (
+            last_price is None
+            or last_price <= 0
+        ):
+
             logger.warning(
-                f"NO VALID PRICE {symbol}"
+                f"NO VALID PRICE "
+                f"{symbol}"
             )
+
             return None
 
-        # -----------------------------------------------------
-        # TARGETS
-        # -----------------------------------------------------
+        # ----------------------------------------------------
+        # Targets
+        # ----------------------------------------------------
 
         tp, sl = calculate_target(
             last_price,
@@ -226,24 +490,73 @@ def analyze_symbol(
         )
 
         if tp is None or sl is None:
+
             logger.warning(
-                f"INVALID TP SL {symbol}"
+                f"INVALID TP SL "
+                f"{symbol}"
             )
+
             return None
 
-        # -----------------------------------------------------
-        # FINAL RESULT
-        # -----------------------------------------------------
+        # ----------------------------------------------------
+        # Risk / Reward
+        # ----------------------------------------------------
+
+        if final_signal == "BUY":
+
+            risk = last_price - sl
+            reward = tp - last_price
+
+        else:
+
+            risk = sl - last_price
+            reward = last_price - tp
+
+        if risk <= 0:
+
+            logger.warning(
+                f"INVALID RISK "
+                f"{symbol}"
+            )
+
+            return None
+
+        risk_reward = round(
+            reward / risk,
+            3
+        )
+
+        # ----------------------------------------------------
+        # Final result
+        # ----------------------------------------------------
 
         result = {
+
             "symbol": symbol,
 
             "signal": final_signal,
 
+            # Backward-compatible field.
+            # This is a weighted signal strength,
+            # NOT a probability.
             "confidence": round(
-                confidence,
+                signal_strength,
                 2
             ),
+
+            "signal_strength": round(
+                signal_strength,
+                2
+            ),
+
+            "weighted_total": round(
+                weighted_total,
+                2
+            ),
+
+            "mtf_agreement": mtf_agreement,
+
+            "data_coverage": data_coverage,
 
             "entry": last_price,
 
@@ -253,15 +566,36 @@ def analyze_symbol(
 
             "sl": sl,
 
-            "timeframes": timeframe_results
+            "risk_reward": risk_reward,
+
+            "timeframes": timeframe_results,
+
+            "timeframe_weights": normalized_weights
         }
 
         logger.info(
-            f"FINAL ANALYSIS {result}"
+            f"MTF SUMMARY "
+            f"{symbol} "
+            f"BUY={round(buy_score, 2)} "
+            f"SELL={round(sell_score, 2)} "
+            f"STRENGTH={round(signal_strength, 2)} "
+            f"AGREEMENT={mtf_agreement}% "
+            f"COVERAGE={data_coverage}% "
+            f"RR={risk_reward}"
+        )
+
+        logger.info(
+            f"FINAL ANALYSIS "
+            f"{result}"
         )
 
         return result
 
     except Exception as e:
+
         logger.exception(e)
+
         return None
+
+
+# multi_timeframe.py END
