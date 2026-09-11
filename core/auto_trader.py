@@ -1,4 +1,3 @@
-```python
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
@@ -884,4 +883,4 @@ __all__ = [
     "_is_xauusd_symbol",
     "_normalize_signal",
 ]
-```
+
