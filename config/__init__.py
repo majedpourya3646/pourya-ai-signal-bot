@@ -1,5 +1,4 @@
-# config/__init__.py
-
+```python
 from __future__ import annotations
 
 import os
@@ -13,6 +12,7 @@ from dotenv import load_dotenv
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 ENV_FILE = PROJECT_ROOT / ".env"
 
 load_dotenv(
@@ -34,24 +34,53 @@ BOT_VERSION = "2.1.0-MT5"
 # META TRADER 5
 # ============================================================
 
-def _env_int(name: str, default: int = 0) -> int:
+def _env_int(
+    name: str,
+    default: int = 0,
+) -> int:
+
     try:
-        return int(os.getenv(name, str(default)).strip())
+
+        return int(
+            os.getenv(
+                name,
+                str(default),
+            ).strip()
+        )
+
     except (TypeError, ValueError):
+
         return default
 
 
-def _env_float(name: str, default: float = 0.0) -> float:
+def _env_float(
+    name: str,
+    default: float = 0.0,
+) -> float:
+
     try:
-        return float(os.getenv(name, str(default)).strip())
+
+        return float(
+            os.getenv(
+                name,
+                str(default),
+            ).strip()
+        )
+
     except (TypeError, ValueError):
+
         return default
 
 
-def _env_bool(name: str, default: bool = False) -> bool:
+def _env_bool(
+    name: str,
+    default: bool = False,
+) -> bool:
+
     value = os.getenv(name)
 
     if value is None:
+
         return default
 
     return value.strip().lower() in {
@@ -103,8 +132,11 @@ CHAT_ID = os.getenv(
 
 AUTO_TRADE = True
 
+# Paper trading remains enabled until the complete
+# live-trading safety chain has been validated.
 PAPER_TRADING = True
 
+# Explicit hard lock for real automated trading.
 ALLOW_LIVE_TRADING = False
 
 AUTO_CLOSE = True
@@ -122,7 +154,9 @@ LEVERAGE = 10
 # RISK MANAGEMENT
 # ============================================================
 
-MAX_OPEN_TRADES = 1
+# Maximum number of simultaneously open positions
+# allowed by the trading system during the controlled pilot.
+MAX_OPEN_TRADES = 5
 
 RISK_PER_TRADE = 1.0
 
@@ -130,6 +164,7 @@ RISK_REWARD = 2.0
 
 MIN_RISK_REWARD = 2.0
 
+# Maximum permitted daily loss.
 MAX_DAILY_LOSS_PERCENT = 5.0
 
 
@@ -137,7 +172,18 @@ MAX_DAILY_LOSS_PERCENT = 5.0
 # MT5 ORDER SETTINGS
 # ============================================================
 
+# Base/default order volume.
 DEFAULT_LOT = 0.01
+
+# IMPORTANT:
+# The project-level absolute lot ceiling for the pilot is
+# enforced in core/order_manager.py.
+#
+# Maximum allowed lot:
+#     0.03
+#
+# This value is intentionally not duplicated here as an
+# independent execution rule.
 
 MT5_DEVIATION = 20
 
@@ -159,6 +205,10 @@ DEFAULT_SL = 2.0
 # PORTFOLIO
 # ============================================================
 
+# Historical/default reference only.
+#
+# Risk controls for the real account MUST use the actual
+# MT5 account balance/equity rather than this value.
 INITIAL_BALANCE = 1000.0
 
 
@@ -166,8 +216,12 @@ INITIAL_BALANCE = 1000.0
 # SYMBOLS
 # ============================================================
 
+# Controlled pilot symbol.
+#
+# Do not add other symbols to the automated pilot until
+# XAUUSD.su has completed validation.
 SYMBOLS = [
-    "XAUUSD.st",
+    "XAUUSD.su",
 ]
 
 
@@ -267,9 +321,21 @@ TRAILING_DISTANCE_PERCENT = 0.75
 # SAFETY
 # ============================================================
 
-# Live automated trading remains explicitly disabled.
-# Do not change this until the strategy and paper-trading tests
-# have been validated.
+# ------------------------------------------------------------
+# LIVE TRADING HARD LOCK
+# ------------------------------------------------------------
+#
+# Both conditions are intentionally fail-closed:
+#
+# PAPER_TRADING=True
+# ALLOW_LIVE_TRADING=False
+#
+# Real automated trading MUST NOT be enabled merely by
+# changing MAX_OPEN_TRADES or other risk parameters.
+#
+# Live activation will require a separate explicit approval
+# after all execution safety checks have been validated.
+# ------------------------------------------------------------
 
 PAPER_TRADING = True
 
@@ -280,4 +346,7 @@ ALLOW_LIVE_TRADING = False
 # COMPATIBILITY
 # ============================================================
 
-ENV_FILE_PATH = str(ENV_FILE)
+ENV_FILE_PATH = str(
+    ENV_FILE
+)
+```
