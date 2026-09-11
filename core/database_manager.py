@@ -1,11 +1,15 @@
-import sqlite3
+# core/database_manager.py
+
+from __future__ import annotations
+
 import os
+import sqlite3
 
 from core.logger import logger
 
 
 # ===========================
-# Database
+# Database Configuration
 # ===========================
 
 DB_PATH = "data/pourya_trader.db"
@@ -15,71 +19,28 @@ DB_PATH = "data/pourya_trader.db"
 # Ensure Directory
 # ===========================
 
-def ensure_directory():
-
+def ensure_directory() -> bool:
     try:
+        folder = os.path.dirname(DB_PATH)
 
-        folder = os.path.dirname(
-            DB_PATH
-        )
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder, exist_ok=True)
 
-        if folder and not os.path.exists(
-            folder
-        ):
+        return True
 
-            os.makedirs(
-                folder
-            )
-
-    except Exception as e:
-
+    except Exception as exc:
         logger.exception(
-            f"DATABASE DIRECTORY ERROR {e}"
+            f"DATABASE DIRECTORY ERROR {exc}"
         )
+        return False
 
 
 # ===========================
-# Connection
+# Create Tables
 # ===========================
 
-def get_connection():
-
+def _create_tables(conn: sqlite3.Connection) -> bool:
     try:
-
-        ensure_directory()
-
-        conn = sqlite3.connect(
-            DB_PATH,
-            check_same_thread=False
-        )
-
-        conn.row_factory = sqlite3.Row
-
-        return conn
-
-    except Exception as e:
-
-        logger.exception(
-            f"DATABASE CONNECTION ERROR {e}"
-        )
-
-        return None
-
-
-# ===========================
-# Initialize Database
-# ===========================
-
-def initialize_database():
-
-    try:
-
-        conn = get_connection()
-
-        if conn is None:
-
-            return False
-
         cursor = conn.cursor()
 
         # ===========================
@@ -221,6 +182,59 @@ def initialize_database():
 
         conn.commit()
 
+        return True
+
+    except Exception as exc:
+        logger.exception(
+            f"DATABASE TABLE CREATION ERROR {exc}"
+        )
+        return False
+
+
+# ===========================
+# Connection
+# ===========================
+
+def get_connection():
+    try:
+        if not ensure_directory():
+            return None
+
+        conn = sqlite3.connect(
+            DB_PATH,
+            check_same_thread=False
+        )
+
+        conn.row_factory = sqlite3.Row
+
+        # Always make sure required tables exist.
+        if not _create_tables(conn):
+            conn.close()
+            return None
+
+        return conn
+
+    except Exception as exc:
+        logger.exception(
+            f"DATABASE CONNECTION ERROR {exc}"
+        )
+        return None
+
+
+# ===========================
+# Initialize Database
+# ===========================
+
+def initialize_database() -> bool:
+    try:
+        conn = get_connection()
+
+        if conn is None:
+            logger.error(
+                "DATABASE INITIALIZATION FAILED"
+            )
+            return False
+
         conn.close()
 
         logger.info(
@@ -229,12 +243,10 @@ def initialize_database():
 
         return True
 
-    except Exception as e:
-
+    except Exception as exc:
         logger.exception(
-            f"DATABASE INITIALIZATION ERROR {e}"
+            f"DATABASE INITIALIZATION ERROR {exc}"
         )
-
         return False
 
 
@@ -242,14 +254,11 @@ def initialize_database():
 # Database Status
 # ===========================
 
-def database_status():
-
+def database_status() -> bool:
     try:
-
         conn = get_connection()
 
         if conn is None:
-
             return False
 
         cursor = conn.cursor()
@@ -264,12 +273,10 @@ def database_status():
 
         return result is not None
 
-    except Exception as e:
-
+    except Exception as exc:
         logger.exception(
-            f"DATABASE STATUS ERROR {e}"
+            f"DATABASE STATUS ERROR {exc}"
         )
-
         return False
 
 
@@ -277,17 +284,10 @@ def database_status():
 # Reset Database
 # ===========================
 
-def reset_database():
-
+def reset_database() -> bool:
     try:
-
-        if os.path.exists(
-            DB_PATH
-        ):
-
-            os.remove(
-                DB_PATH
-            )
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
 
         logger.warning(
             "DATABASE RESET"
@@ -295,10 +295,18 @@ def reset_database():
 
         return initialize_database()
 
-    except Exception as e:
-
+    except Exception as exc:
         logger.exception(
-            f"DATABASE RESET ERROR {e}"
+            f"DATABASE RESET ERROR {exc}"
         )
-
         return False
+
+
+__all__ = [
+    "DB_PATH",
+    "ensure_directory",
+    "get_connection",
+    "initialize_database",
+    "database_status",
+    "reset_database",
+]
