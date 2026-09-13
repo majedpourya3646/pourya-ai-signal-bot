@@ -1,8 +1,7 @@
-# core/mt5_connector.py
-
 from __future__ import annotations
 
 import math
+import os
 from datetime import datetime, time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,9 +20,7 @@ from config import (
     MT5_SERVER,
     MT5_TERMINAL_PATH,
     MT5_PORTABLE,
-    MT5_TIMEOUT,
     PAPER_TRADING,
-    SYMBOLS,
 )
 
 from core.logger import logger
@@ -51,18 +48,33 @@ MAX_PROJECT_POSITIONS = 5
 
 PROJECT_MAX_POSITIONS = min(
     MAX_PROJECT_POSITIONS,
-    int(MAX_OPEN_TRADES),
+    max(1, int(MAX_OPEN_TRADES)),
 )
 
-MT5_PATH = str(MT5_TERMINAL_PATH)
+MT5_PATH = str(
+    MT5_TERMINAL_PATH
+).strip()
 
-MT5_LOGIN_TARGET = int(MT5_LOGIN)
+MT5_LOGIN_TARGET = int(
+    MT5_LOGIN
+)
 
-MT5_SERVER_TARGET = str(MT5_SERVER).strip()
+MT5_SERVER_TARGET = str(
+    MT5_SERVER
+).strip()
 
-MT5_PORTABLE_MODE = bool(MT5_PORTABLE)
+MT5_PORTABLE_MODE = bool(
+    MT5_PORTABLE
+)
 
-MT5_CONNECTION_TIMEOUT = int(MT5_TIMEOUT)
+# Keep connector independent from a missing config constant.
+MT5_CONNECTION_TIMEOUT = int(
+    os.getenv(
+        "MT5_TIMEOUT",
+        "60000",
+    ).strip()
+    or "60000"
+)
 
 DEFAULT_TIMEFRAME = "15"
 
@@ -93,7 +105,10 @@ _initialized_by_project = False
 # INTERNAL HELPERS
 # ============================================================
 
-def _safe_float(value: Any) -> Optional[float]:
+def _safe_float(
+    value: Any,
+) -> Optional[float]:
+
     try:
         result = float(value)
 
@@ -106,7 +121,10 @@ def _safe_float(value: Any) -> Optional[float]:
         return None
 
 
-def _safe_int(value: Any) -> Optional[int]:
+def _safe_int(
+    value: Any,
+) -> Optional[int]:
+
     try:
         return int(value)
 
@@ -114,14 +132,20 @@ def _safe_int(value: Any) -> Optional[int]:
         return None
 
 
-def _normalize_symbol(symbol: Any) -> str:
+def _normalize_symbol(
+    symbol: Any,
+) -> str:
+
     if symbol is None:
         return ""
 
     return str(symbol).strip()
 
 
-def _is_pilot_symbol(symbol: Any) -> bool:
+def _is_pilot_symbol(
+    symbol: Any,
+) -> bool:
+
     return (
         _normalize_symbol(symbol).upper()
         == PILOT_SYMBOL.upper()
@@ -168,11 +192,6 @@ def _is_project_position(
 
 
 def _today_start_timestamp() -> int:
-    """
-    Return today's local midnight timestamp.
-
-    MT5 history uses the terminal's local time context.
-    """
 
     now = datetime.now()
 
@@ -192,14 +211,12 @@ def _today_start_timestamp() -> int:
 
 def live_trading_allowed() -> bool:
     """
-    Final configuration-level live trading gate.
-
-    Real trading requires BOTH:
+    Real execution requires BOTH:
 
         ALLOW_LIVE_TRADING=True
         PAPER_TRADING=False
 
-    Fail closed in every other condition.
+    Fail closed otherwise.
     """
 
     try:
@@ -223,22 +240,73 @@ def live_trading_allowed() -> bool:
 
 
 # ============================================================
+# ACCOUNT IDENTITY
+# ============================================================
+
+def _validate_account_identity(
+    account: Any,
+) -> Tuple[bool, str]:
+
+    if account is None:
+
+        return (
+            False,
+            "ACCOUNT_UNAVAILABLE",
+        )
+
+    actual_login = _safe_int(
+        getattr(
+            account,
+            "login",
+            None,
+        )
+    )
+
+    actual_server = str(
+        getattr(
+            account,
+            "server",
+            "",
+        )
+    ).strip()
+
+    if (
+        MT5_LOGIN_TARGET > 0
+        and actual_login != MT5_LOGIN_TARGET
+    ):
+
+        return (
+            False,
+            (
+                "WRONG_MT5_LOGIN:"
+                f"expected={MT5_LOGIN_TARGET}:"
+                f"actual={actual_login}"
+            ),
+        )
+
+    if (
+        MT5_SERVER_TARGET
+        and actual_server.lower()
+        != MT5_SERVER_TARGET.lower()
+    ):
+
+        return (
+            False,
+            (
+                "WRONG_MT5_SERVER:"
+                f"expected={MT5_SERVER_TARGET}:"
+                f"actual={actual_server}"
+            ),
+        )
+
+    return True, "OK"
+
+
+# ============================================================
 # INITIALIZATION
 # ============================================================
 
 def initialize_mt5() -> bool:
-    """
-    Initialize and verify the dedicated portable MT5 terminal.
-
-    The connection is accepted only when:
-        - MT5 initializes successfully
-        - terminal is connected
-        - account information is available
-        - expected login matches configured login, when configured
-        - expected server matches configured server, when configured
-
-    No order is sent here.
-    """
 
     global _initialized_by_project
 
@@ -252,7 +320,6 @@ def initialize_mt5() -> bool:
 
         try:
             mt5.shutdown()
-
         except Exception:
             pass
 
@@ -264,11 +331,9 @@ def initialize_mt5() -> bool:
 
         if not initialized:
 
-            error = mt5.last_error()
-
             logger.error(
                 "MT5 INITIALIZE FAILED | error=%s",
-                error,
+                mt5.last_error(),
             )
 
             _initialized_by_project = False
@@ -317,54 +382,17 @@ def initialize_mt5() -> bool:
 
             return False
 
-        actual_login = _safe_int(
-            getattr(
-                account,
-                "login",
-                None,
+        identity_ok, identity_reason = (
+            _validate_account_identity(
+                account
             )
         )
 
-        actual_server = str(
-            getattr(
-                account,
-                "server",
-                "",
-            )
-        ).strip()
-
-        # ----------------------------------------------------
-        # ACCOUNT IDENTITY VERIFICATION
-        # ----------------------------------------------------
-
-        if (
-            MT5_LOGIN_TARGET > 0
-            and actual_login != MT5_LOGIN_TARGET
-        ):
+        if not identity_ok:
 
             logger.critical(
-                "MT5 ACCOUNT BLOCKED | "
-                "EXPECTED LOGIN=%s | ACTUAL LOGIN=%s",
-                MT5_LOGIN_TARGET,
-                actual_login,
-            )
-
-            shutdown_mt5()
-
-            return False
-
-        if (
-            MT5_SERVER_TARGET
-            and actual_server
-            and actual_server.lower()
-            != MT5_SERVER_TARGET.lower()
-        ):
-
-            logger.critical(
-                "MT5 SERVER BLOCKED | "
-                "EXPECTED=%s | ACTUAL=%s",
-                MT5_SERVER_TARGET,
-                actual_server,
+                "MT5 ACCOUNT IDENTITY BLOCKED | %s",
+                identity_reason,
             )
 
             shutdown_mt5()
@@ -392,9 +420,18 @@ def initialize_mt5() -> bool:
 
         logger.info(
             "MT5 TRADING PERMISSIONS | "
-            "trade_allowed=%s | trade_expert=%s",
-            getattr(account, "trade_allowed", None),
-            getattr(account, "trade_expert", None),
+            "trade_allowed=%s | "
+            "trade_expert=%s",
+            getattr(
+                account,
+                "trade_allowed",
+                None,
+            ),
+            getattr(
+                account,
+                "trade_expert",
+                None,
+            ),
         )
 
         logger.info(
@@ -424,7 +461,6 @@ def initialize_mt5() -> bool:
 
         try:
             mt5.shutdown()
-
         except Exception:
             pass
 
@@ -432,9 +468,6 @@ def initialize_mt5() -> bool:
 
 
 def shutdown_mt5() -> bool:
-    """
-    Shutdown the Python MT5 connection.
-    """
 
     global _initialized_by_project
 
@@ -467,9 +500,6 @@ def shutdown_mt5() -> bool:
 # ============================================================
 
 def is_connected() -> bool:
-    """
-    Verify MT5 terminal and account connectivity.
-    """
 
     try:
 
@@ -492,34 +522,13 @@ def is_connected() -> bool:
         if account is None:
             return False
 
-        actual_login = _safe_int(
-            getattr(
-                account,
-                "login",
-                None,
+        identity_ok, _ = (
+            _validate_account_identity(
+                account
             )
         )
 
-        actual_server = str(
-            getattr(
-                account,
-                "server",
-                "",
-            )
-        ).strip()
-
-        if (
-            MT5_LOGIN_TARGET > 0
-            and actual_login != MT5_LOGIN_TARGET
-        ):
-            return False
-
-        if (
-            MT5_SERVER_TARGET
-            and actual_server
-            and actual_server.lower()
-            != MT5_SERVER_TARGET.lower()
-        ):
+        if not identity_ok:
             return False
 
         return True
@@ -530,13 +539,6 @@ def is_connected() -> bool:
 
 
 def ensure_connection() -> bool:
-    """
-    Ensure active connection.
-
-    If disconnected, perform one controlled initialization.
-
-    This function NEVER retries an order.
-    """
 
     if is_connected():
         return True
@@ -560,7 +562,27 @@ def get_account_info() -> Optional[Any]:
         if not ensure_connection():
             return None
 
-        return mt5.account_info()
+        account = mt5.account_info()
+
+        if account is None:
+            return None
+
+        identity_ok, reason = (
+            _validate_account_identity(
+                account
+            )
+        )
+
+        if not identity_ok:
+
+            logger.critical(
+                "ACCOUNT IDENTITY REJECTED | %s",
+                reason,
+            )
+
+            return None
+
+        return account
 
     except Exception as exc:
 
@@ -573,11 +595,6 @@ def get_account_info() -> Optional[Any]:
 
 
 def get_account_snapshot() -> Optional[Dict[str, Any]]:
-    """
-    Return normalized live account information.
-
-    Actual equity/free margin must be used for risk decisions.
-    """
 
     account = get_account_info()
 
@@ -666,6 +683,14 @@ def get_account_snapshot() -> Optional[Dict[str, Any]]:
                 "margin_mode",
                 None,
             ),
+            "credit": float(
+                getattr(
+                    account,
+                    "credit",
+                    0.0,
+                )
+                or 0.0
+            ),
         }
 
     except Exception as exc:
@@ -731,25 +756,19 @@ def get_account_trading_permissions() -> Dict[str, bool]:
 
 
 # ============================================================
-# DAILY LOSS CONTROL
+# DAILY LOSS DATA
 # ============================================================
 
 def get_today_realized_profit() -> Optional[float]:
-    """
-    Return realized P/L from today's MT5 deals.
-
-    This includes the profit/commission/swap fields reported
-    by MT5 deals.
-
-    Returns None on data failure.
-    """
 
     try:
 
         if not ensure_connection():
             return None
 
-        start_timestamp = _today_start_timestamp()
+        start_timestamp = (
+            _today_start_timestamp()
+        )
 
         deals = mt5.history_deals_get(
             start_timestamp,
@@ -763,13 +782,38 @@ def get_today_realized_profit() -> Optional[float]:
 
         for deal in deals:
 
-            deal_profit = _safe_float(
+            symbol = _normalize_symbol(
+                getattr(
+                    deal,
+                    "symbol",
+                    "",
+                )
+            )
+
+            magic = _safe_int(
+                getattr(
+                    deal,
+                    "magic",
+                    -1,
+                )
+            )
+
+            # Project-only daily P/L.
+            if not _is_pilot_symbol(
+                symbol
+            ):
+                continue
+
+            if magic != DEFAULT_MAGIC:
+                continue
+
+            profit = _safe_float(
                 getattr(
                     deal,
                     "profit",
                     0.0,
                 )
-            )
+            ) or 0.0
 
             commission = _safe_float(
                 getattr(
@@ -777,7 +821,7 @@ def get_today_realized_profit() -> Optional[float]:
                     "commission",
                     0.0,
                 )
-            )
+            ) or 0.0
 
             swap = _safe_float(
                 getattr(
@@ -785,21 +829,21 @@ def get_today_realized_profit() -> Optional[float]:
                     "swap",
                     0.0,
                 )
-            )
+            ) or 0.0
 
-            if deal_profit is None:
-                deal_profit = 0.0
-
-            if commission is None:
-                commission = 0.0
-
-            if swap is None:
-                swap = 0.0
+            fee = _safe_float(
+                getattr(
+                    deal,
+                    "fee",
+                    0.0,
+                )
+            ) or 0.0
 
             total += (
-                deal_profit
+                profit
                 + commission
                 + swap
+                + fee
             )
 
         return float(total)
@@ -816,17 +860,11 @@ def get_today_realized_profit() -> Optional[float]:
 
 def get_daily_loss_snapshot() -> Optional[Dict[str, Any]]:
     """
-    Return today's realized P/L and current floating P/L.
+    Diagnostic snapshot.
 
-    This is deliberately conservative.
-
-    The system uses the current live equity as the minimum
-    reference available to prevent accepting a loss larger than
-    the configured daily percentage when a persistent
-    start-of-day equity baseline is not available.
-
-    A future persistent daily baseline can make this stricter
-    and more precise.
+    The authoritative session/day baseline is maintained by
+    trading_controller. This connector-level function is kept
+    as a secondary safety diagnostic.
     """
 
     account = get_account_snapshot()
@@ -834,20 +872,12 @@ def get_daily_loss_snapshot() -> Optional[Dict[str, Any]]:
     if account is None:
         return None
 
-    realized = get_today_realized_profit()
+    realized = (
+        get_today_realized_profit()
+    )
 
     if realized is None:
         return None
-
-    floating = _safe_float(
-        account.get(
-            "profit",
-            0.0,
-        )
-    )
-
-    if floating is None:
-        floating = 0.0
 
     equity = _safe_float(
         account.get(
@@ -856,8 +886,21 @@ def get_daily_loss_snapshot() -> Optional[Dict[str, Any]]:
         )
     )
 
-    if equity is None or equity <= 0:
+    floating = _safe_float(
+        account.get(
+            "profit",
+            0.0,
+        )
+    )
+
+    if (
+        equity is None
+        or equity <= 0
+    ):
         return None
+
+    if floating is None:
+        floating = 0.0
 
     net_today = (
         realized
@@ -867,7 +910,9 @@ def get_daily_loss_snapshot() -> Optional[Dict[str, Any]]:
     max_loss_amount = (
         equity
         * (
-            float(MAX_DAILY_LOSS_PERCENT)
+            float(
+                MAX_DAILY_LOSS_PERCENT
+            )
             / 100.0
         )
     )
@@ -941,9 +986,13 @@ def get_symbol_info(
     symbol: str = DEFAULT_SYMBOL,
 ) -> Optional[Any]:
 
-    symbol = _normalize_symbol(symbol)
+    symbol = _normalize_symbol(
+        symbol
+    )
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
 
         logger.error(
             "SYMBOL BLOCKED | "
@@ -1017,9 +1066,13 @@ def get_symbol_tick(
     symbol: str = DEFAULT_SYMBOL,
 ) -> Optional[Any]:
 
-    symbol = _normalize_symbol(symbol)
+    symbol = _normalize_symbol(
+        symbol
+    )
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
         return None
 
     try:
@@ -1102,7 +1155,9 @@ def get_filling_mode(
     symbol: str = DEFAULT_SYMBOL,
 ) -> int:
 
-    info = get_symbol_info(symbol)
+    info = get_symbol_info(
+        symbol
+    )
 
     if info is None:
         return mt5.ORDER_FILLING_IOC
@@ -1117,14 +1172,15 @@ def get_filling_mode(
             )
         )
 
-        # SYMBOL_FILLING_FOK = 1
+        # FOK
         if filling_mode & 1:
             return mt5.ORDER_FILLING_FOK
 
-        # SYMBOL_FILLING_IOC = 2
+        # IOC
         if filling_mode & 2:
             return mt5.ORDER_FILLING_IOC
 
+        # RETURN
         return mt5.ORDER_FILLING_RETURN
 
     except Exception:
@@ -1159,9 +1215,13 @@ def get_rates(
     count: int = 200,
 ) -> Optional[List[Any]]:
 
-    symbol = _normalize_symbol(symbol)
+    symbol = _normalize_symbol(
+        symbol
+    )
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
 
         logger.error(
             "RATES BLOCKED | symbol=%s",
@@ -1188,16 +1248,20 @@ def get_rates(
 
             return None
 
-        count = int(count)
+        count = int(
+            count
+        )
 
         if count <= 0:
             return None
 
-        rates = mt5.copy_rates_from_pos(
-            symbol,
-            tf,
-            0,
-            count,
+        rates = (
+            mt5.copy_rates_from_pos(
+                symbol,
+                tf,
+                0,
+                count,
+            )
         )
 
         if rates is None:
@@ -1216,7 +1280,9 @@ def get_rates(
         if len(rates) == 0:
             return None
 
-        return list(rates)
+        return list(
+            rates
+        )
 
     except Exception as exc:
 
@@ -1241,12 +1307,19 @@ def normalize_price(
         symbol
     )
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
         return None
 
-    value = _safe_float(price)
+    value = _safe_float(
+        price
+    )
 
-    if value is None or value <= 0:
+    if (
+        value is None
+        or value <= 0
+    ):
         return None
 
     info = get_symbol_info(
@@ -1289,7 +1362,9 @@ def normalize_volume(
         symbol
     )
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
         return 0.0
 
     value = _safe_float(
@@ -1299,7 +1374,7 @@ def normalize_volume(
     if value is None:
         return 0.0
 
-    # NEVER silently cap an oversized request.
+    # Hard project ceiling.
     if value > MAX_PROJECT_LOT:
 
         logger.error(
@@ -1502,6 +1577,7 @@ def validate_sl_tp(
     if not _is_pilot_symbol(
         symbol
     ):
+
         return (
             False,
             "PILOT_SYMBOL_ONLY",
@@ -1524,6 +1600,7 @@ def validate_sl_tp(
         or sl_value is None
         or tp_value is None
     ):
+
         return (
             False,
             "INVALID_PRICE",
@@ -1534,6 +1611,7 @@ def validate_sl_tp(
         or sl_value <= 0
         or tp_value <= 0
     ):
+
         return (
             False,
             "NON_POSITIVE_PRICE",
@@ -1548,12 +1626,14 @@ def validate_sl_tp(
     if side == "BUY":
 
         if sl_value >= entry_value:
+
             return (
                 False,
                 "BUY_SL_NOT_BELOW_ENTRY",
             )
 
         if tp_value <= entry_value:
+
             return (
                 False,
                 "BUY_TP_NOT_ABOVE_ENTRY",
@@ -1566,6 +1646,7 @@ def validate_sl_tp(
                 - sl_value
                 < minimum_distance
             ):
+
                 return (
                     False,
                     "BUY_SL_TOO_CLOSE",
@@ -1576,6 +1657,7 @@ def validate_sl_tp(
                 - entry_value
                 < minimum_distance
             ):
+
                 return (
                     False,
                     "BUY_TP_TOO_CLOSE",
@@ -1584,12 +1666,14 @@ def validate_sl_tp(
     elif side == "SELL":
 
         if sl_value <= entry_value:
+
             return (
                 False,
                 "SELL_SL_NOT_ABOVE_ENTRY",
             )
 
         if tp_value >= entry_value:
+
             return (
                 False,
                 "SELL_TP_NOT_BELOW_ENTRY",
@@ -1602,6 +1686,7 @@ def validate_sl_tp(
                 - entry_value
                 < minimum_distance
             ):
+
                 return (
                     False,
                     "SELL_SL_TOO_CLOSE",
@@ -1612,6 +1697,7 @@ def validate_sl_tp(
                 - tp_value
                 < minimum_distance
             ):
+
                 return (
                     False,
                     "SELL_TP_TOO_CLOSE",
@@ -2195,7 +2281,7 @@ def check_market_order(
         )
 
     # --------------------------------------------------------
-    # DAILY LOSS LIMIT
+    # DAILY LOSS
     # --------------------------------------------------------
 
     daily_ok, daily_reason = (
@@ -2499,30 +2585,29 @@ def send_market_order(
     comment: str = DEFAULT_COMMENT,
     lot: Optional[float] = None,
 ) -> Dict[str, Any]:
+
     """
-    Send exactly ONE market order.
+    Send exactly ONE real MT5 market order.
 
-    IMPORTANT:
+    Safety rules:
 
-    - Paper trading blocks all real execution.
-    - Live trading requires both live flags.
-    - No automatic retry exists after order_send().
-    - An ambiguous result is never automatically retried.
-    - Project lot hard limit is 0.03.
-    - Project position limit is 5.
-    - order_check() must pass before order_send().
+    - PAPER_TRADING blocks execution.
+    - ALLOW_LIVE_TRADING must be True.
+    - Account identity must match.
+    - Symbol must be XAUUSD.su.
+    - Volume must be 0.01..0.03.
+    - Position count must remain <= 5.
+    - Daily loss gate must pass.
+    - Margin check must pass.
+    - order_check() must pass.
+    - Only ONE order_send() is performed.
+    - No automatic retry after order_send().
     """
-
-    # --------------------------------------------------------
-    # COMPATIBILITY: lot= alias
-    # --------------------------------------------------------
 
     if volume is None:
-
         volume = lot
 
     if volume is None:
-
         volume = DEFAULT_LOT
 
     if sl is None or tp is None:
@@ -2539,7 +2624,7 @@ def send_market_order(
         }
 
     # --------------------------------------------------------
-    # PAPER MODE HARD STOP
+    # PAPER HARD STOP
     # --------------------------------------------------------
 
     if bool(PAPER_TRADING):
@@ -2565,7 +2650,9 @@ def send_market_order(
     # LIVE FLAG HARD STOP
     # --------------------------------------------------------
 
-    if not bool(ALLOW_LIVE_TRADING):
+    if not bool(
+        ALLOW_LIVE_TRADING
+    ):
 
         logger.warning(
             "MT5 ORDER BLOCKED | "
@@ -2587,17 +2674,37 @@ def send_market_order(
     # FINAL SAFETY GATE
     # --------------------------------------------------------
 
-    gate_ok, request, reason = (
-        check_market_order(
-            symbol=symbol,
-            side=side,
-            volume=float(volume),
-            sl=float(sl),
-            tp=float(tp),
-            magic=magic,
-            comment=comment,
+    try:
+
+        gate_ok, request, reason = (
+            check_market_order(
+                symbol=symbol,
+                side=side,
+                volume=float(volume),
+                sl=float(sl),
+                tp=float(tp),
+                magic=magic,
+                comment=comment,
+            )
         )
-    )
+
+    except Exception as exc:
+
+        logger.exception(
+            "MARKET ORDER SAFETY GATE ERROR: %s",
+            exc,
+        )
+
+        return {
+            "success": False,
+            "status": "BLOCKED",
+            "reason": "SAFETY_GATE_EXCEPTION",
+            "ticket": None,
+            "order": None,
+            "deal": None,
+            "retcode": None,
+            "result": None,
+        }
 
     if not gate_ok:
 
@@ -2792,7 +2899,7 @@ def send_market_order(
 
 
 # ============================================================
-# COMPATIBILITY TRADE STATUS
+# COMPATIBILITY
 # ============================================================
 
 def update_trade_status(
@@ -2810,16 +2917,9 @@ def update_trade_status(
     return True
 
 
-# ============================================================
-# COMPATIBILITY ALIAS
-# ============================================================
-
 def get_tick(
     symbol: str = DEFAULT_SYMBOL,
 ) -> Optional[Any]:
-    """
-    Backward-compatible alias used by legacy modules.
-    """
 
     return get_symbol_tick(
         symbol
@@ -2831,9 +2931,6 @@ def get_tick(
 # ============================================================
 
 class MT5Connector:
-    """
-    Object-oriented compatibility wrapper.
-    """
 
     def __init__(
         self,
@@ -2842,73 +2939,55 @@ class MT5Connector:
     ) -> None:
 
         self.path = path
-
         self.portable = portable
 
     def initialize(self) -> bool:
-
         return initialize_mt5()
 
     def shutdown(self) -> bool:
-
         return shutdown_mt5()
 
     def is_connected(self) -> bool:
-
         return is_connected()
 
     def ensure_connection(self) -> bool:
-
         return ensure_connection()
 
     def live_trading_allowed(self) -> bool:
-
         return live_trading_allowed()
 
     def get_account_info(
         self,
     ) -> Optional[Any]:
-
         return get_account_info()
 
     def get_account_snapshot(
         self,
     ) -> Optional[Dict[str, Any]]:
-
         return get_account_snapshot()
 
     def get_account_trading_permissions(
         self,
     ) -> Dict[str, bool]:
-
         return get_account_trading_permissions()
 
     def get_symbol_info(
         self,
         symbol: str = DEFAULT_SYMBOL,
     ) -> Optional[Any]:
-
-        return get_symbol_info(
-            symbol
-        )
+        return get_symbol_info(symbol)
 
     def get_symbol_tick(
         self,
         symbol: str = DEFAULT_SYMBOL,
     ) -> Optional[Any]:
-
-        return get_symbol_tick(
-            symbol
-        )
+        return get_symbol_tick(symbol)
 
     def get_tick(
         self,
         symbol: str = DEFAULT_SYMBOL,
     ) -> Optional[Any]:
-
-        return get_symbol_tick(
-            symbol
-        )
+        return get_symbol_tick(symbol)
 
     def get_rates(
         self,
@@ -2916,7 +2995,6 @@ class MT5Connector:
         timeframe: str = DEFAULT_TIMEFRAME,
         count: int = 200,
     ) -> Optional[List[Any]]:
-
         return get_rates(
             symbol,
             timeframe,
@@ -2927,17 +3005,13 @@ class MT5Connector:
         self,
         symbol: Optional[str] = None,
     ) -> List[Any]:
-
-        return get_open_positions(
-            symbol
-        )
+        return get_open_positions(symbol)
 
     def get_project_positions(
         self,
         symbol: str = PILOT_SYMBOL,
         magic: int = DEFAULT_MAGIC,
     ) -> List[Any]:
-
         return get_project_positions(
             symbol,
             magic,
@@ -2948,7 +3022,6 @@ class MT5Connector:
         symbol: str = PILOT_SYMBOL,
         magic: int = DEFAULT_MAGIC,
     ) -> int:
-
         return get_open_position_count(
             symbol,
             magic,
@@ -2959,7 +3032,6 @@ class MT5Connector:
         symbol: str,
         volume: Any,
     ) -> float:
-
         return normalize_volume(
             symbol,
             volume,
@@ -2970,7 +3042,6 @@ class MT5Connector:
         symbol: str,
         price: Any,
     ) -> Optional[float]:
-
         return normalize_price(
             symbol,
             price,
@@ -2983,7 +3054,6 @@ class MT5Connector:
         volume: float,
         price: float,
     ) -> Optional[float]:
-
         return calculate_margin(
             symbol,
             side,
@@ -2994,7 +3064,6 @@ class MT5Connector:
     def validate_daily_loss_limit(
         self,
     ) -> Tuple[bool, str]:
-
         return validate_daily_loss_limit()
 
     def send_market_order(
