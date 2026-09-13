@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, time
 from typing import Any, Optional
 
 from config import (
     ALLOW_LIVE_TRADING,
     AUTO_TRADE,
-    MAX_DAILY_LOSS_PERCENT,
     MAX_OPEN_TRADES,
     MT5_MAGIC_NUMBER,
     PAPER_TRADING,
@@ -14,16 +12,17 @@ from config import (
 
 from core.logger import logger
 
-from core.auto_trader import (
-    execute_trade,
-)
+from core.auto_trader import execute_trade
 
 from core.mt5_connector import (
     PILOT_SYMBOL,
     ensure_connection,
     get_account_info,
-    get_project_positions,
+    get_daily_loss_snapshot,
     get_open_position_count,
+    live_trading_allowed,
+    validate_daily_loss_limit,
+    validate_position_limit,
 )
 
 from core.opportunity_engine import (
@@ -36,10 +35,14 @@ from core.position_manager import (
 
 
 # ============================================================
-# TRADING CONTROLLER
+# PROJECT CONTROL
 # ============================================================
 
 TRADING_ENABLED = True
+
+PROJECT_MAGIC = int(
+    MT5_MAGIC_NUMBER
+)
 
 PROJECT_MAX_POSITIONS = min(
     5,
@@ -49,72 +52,24 @@ PROJECT_MAX_POSITIONS = min(
     ),
 )
 
-PROJECT_MAGIC = int(
-    MT5_MAGIC_NUMBER
-)
-
-
-# ============================================================
-# DAILY RISK STATE
-# ============================================================
-
-# The live account currently has:
-#
-# balance  = -5.64 USD
-# credit   = 100.00 USD
-# equity   = 94.36 USD
-#
-# Therefore the daily risk baseline MUST NOT use balance.
-# We use the actual account equity observed at the beginning
-# of the controller session/day.
-#
-# This state is intentionally kept in memory for now.
-# Persistent daily-risk storage can be added later through
-# the database layer without changing the trading flow.
-
-_RISK_DAY: Optional[datetime.date] = None
-
-_RISK_DAY_START_EQUITY: Optional[float] = None
-
-
-# ============================================================
-# MT5
-# ============================================================
-
-def _get_mt5():
-
-    import MetaTrader5 as mt5
-
-    return mt5
-
-
-# ============================================================
-# LIVE TRADING GATE
-# ============================================================
-
-def _live_gate_open() -> bool:
-
-    if bool(PAPER_TRADING):
-        return False
-
-    if not bool(ALLOW_LIVE_TRADING):
-        return False
-
-    return True
-
 
 # ============================================================
 # POSITION COUNT
 # ============================================================
 
 def _get_project_position_count() -> int:
+    """
+    Return the number of currently open project positions.
+
+    Only XAUUSD.su + project magic are counted.
+    """
 
     try:
 
         return int(
             get_open_position_count(
-                PILOT_SYMBOL,
-                PROJECT_MAGIC,
+                symbol=PILOT_SYMBOL,
+                magic=PROJECT_MAGIC,
             )
         )
 
@@ -131,391 +86,136 @@ def _get_project_position_count() -> int:
 
 def _validate_position_limit() -> bool:
 
-    count = (
-        _get_project_position_count()
-    )
+    try:
 
-    return (
-        count < PROJECT_MAX_POSITIONS
-    )
+        valid, reason = (
+            validate_position_limit(
+                symbol=PILOT_SYMBOL,
+                magic=PROJECT_MAGIC,
+            )
+        )
 
+        if not valid:
 
-# ============================================================
-# DATE / RISK BASELINE
-# ============================================================
-
-def _get_day_start() -> datetime:
-
-    now = datetime.now()
-
-    return datetime.combine(
-        now.date(),
-        time.min,
-    )
-
-
-def _reset_daily_risk_if_needed(
-    current_equity: float,
-) -> bool:
-
-    global _RISK_DAY
-    global _RISK_DAY_START_EQUITY
-
-    today = datetime.now().date()
-
-    if (
-        _RISK_DAY != today
-        or _RISK_DAY_START_EQUITY is None
-    ):
-
-        if current_equity <= 0:
-            logger.error(
-                "CONTROLLER: INVALID EQUITY "
-                "FOR DAILY RISK BASELINE: %.4f",
-                current_equity,
+            logger.warning(
+                "CONTROLLER: POSITION LIMIT BLOCKED | %s",
+                reason,
             )
 
             return False
 
-        _RISK_DAY = today
-
-        _RISK_DAY_START_EQUITY = (
-            float(current_equity)
-        )
-
-        logger.info(
-            "CONTROLLER: DAILY RISK BASELINE "
-            "INITIALIZED | DATE=%s | "
-            "START_EQUITY=%.2f",
-            today.isoformat(),
-            _RISK_DAY_START_EQUITY,
-        )
-
-    return True
-
-
-# ============================================================
-# PROJECT REALIZED PNL
-# ============================================================
-
-def _get_project_today_realized_pnl() -> float:
-
-    try:
-
-        mt5 = _get_mt5()
-
-        start = _get_day_start()
-
-        end = datetime.now()
-
-        deals = mt5.history_deals_get(
-            start,
-            end,
-        )
-
-        if deals is None:
-            return 0.0
-
-        total = 0.0
-
-        for deal in deals:
-
-            symbol = getattr(
-                deal,
-                "symbol",
-                "",
-            )
-
-            magic = int(
-                getattr(
-                    deal,
-                    "magic",
-                    -1,
-                )
-                or -1
-            )
-
-            if symbol != PILOT_SYMBOL:
-                continue
-
-            if magic != PROJECT_MAGIC:
-                continue
-
-            total += float(
-                getattr(
-                    deal,
-                    "profit",
-                    0.0,
-                )
-                or 0.0
-            )
-
-            total += float(
-                getattr(
-                    deal,
-                    "swap",
-                    0.0,
-                )
-                or 0.0
-            )
-
-            total += float(
-                getattr(
-                    deal,
-                    "commission",
-                    0.0,
-                )
-                or 0.0
-            )
-
-            total += float(
-                getattr(
-                    deal,
-                    "fee",
-                    0.0,
-                )
-                or 0.0
-            )
-
-        return total
+        return True
 
     except Exception as exc:
 
         logger.exception(
-            "CONTROLLER: REALIZED PNL ERROR: %s",
+            "CONTROLLER: POSITION LIMIT ERROR: %s",
             exc,
         )
 
-        # Fail conservatively.
-        return 0.0
+        return False
 
 
 # ============================================================
-# PROJECT FLOATING PNL
-# ============================================================
-
-def _get_project_floating_pnl() -> float:
-
-    try:
-
-        positions = get_project_positions(
-            PILOT_SYMBOL,
-            PROJECT_MAGIC,
-        )
-
-        total = 0.0
-
-        for position in positions:
-
-            total += float(
-                getattr(
-                    position,
-                    "profit",
-                    0.0,
-                )
-                or 0.0
-            )
-
-        return total
-
-    except Exception as exc:
-
-        logger.exception(
-            "CONTROLLER: FLOATING PNL ERROR: %s",
-            exc,
-        )
-
-        # Fail conservatively.
-        return 0.0
-
-
-# ============================================================
-# DAILY LOSS STATUS
+# DAILY LOSS
 # ============================================================
 
 def get_daily_loss_status() -> dict[str, Any]:
+    """
+    Return the connector's current daily-loss snapshot.
 
-    account = get_account_info()
+    The connector is the single source of truth for this
+    safety gate.
+    """
 
-    if account is None:
+    try:
 
-        return {
-            "allowed": False,
-            "error": "ACCOUNT_UNAVAILABLE",
-        }
-
-    balance = float(
-        getattr(
-            account,
-            "balance",
-            0.0,
+        snapshot = (
+            get_daily_loss_snapshot()
         )
-        or 0.0
-    )
 
-    equity = float(
-        getattr(
-            account,
-            "equity",
-            0.0,
+        if snapshot is None:
+
+            return {
+                "allowed": False,
+                "error": (
+                    "DAILY_LOSS_DATA_UNAVAILABLE"
+                ),
+            }
+
+        limit_reached = bool(
+            snapshot.get(
+                "limit_reached",
+                True,
+            )
         )
-        or 0.0
-    )
 
-    credit = float(
-        getattr(
-            account,
-            "credit",
-            0.0,
+        return {
+            **snapshot,
+            "allowed": not limit_reached,
+            "error": None,
+        }
+
+    except Exception as exc:
+
+        logger.exception(
+            "CONTROLLER: DAILY LOSS STATUS ERROR: %s",
+            exc,
         )
-        or 0.0
-    )
-
-    if equity <= 0:
 
         return {
             "allowed": False,
-            "error": "INVALID_EQUITY",
-            "balance": balance,
-            "equity": equity,
-            "credit": credit,
+            "error": str(exc),
         }
 
-    if not _reset_daily_risk_if_needed(
-        equity
-    ):
 
-        return {
-            "allowed": False,
-            "error": "RISK_BASELINE_INITIALIZATION_FAILED",
-            "balance": balance,
-            "equity": equity,
-            "credit": credit,
-        }
+def _validate_daily_loss() -> bool:
+    """
+    Final daily-loss gate.
 
-    day_start_equity = float(
-        _RISK_DAY_START_EQUITY or 0.0
-    )
+    Any unavailable/invalid risk data blocks trading.
+    """
 
-    if day_start_equity <= 0:
+    try:
 
-        return {
-            "allowed": False,
-            "error": "INVALID_DAY_START_EQUITY",
-            "balance": balance,
-            "equity": equity,
-            "credit": credit,
-        }
+        allowed, reason = (
+            validate_daily_loss_limit()
+        )
 
-    realized = (
-        _get_project_today_realized_pnl()
-    )
+        if not allowed:
 
-    floating = (
-        _get_project_floating_pnl()
-    )
+            logger.warning(
+                "CONTROLLER: DAILY LOSS BLOCKED | %s",
+                reason,
+            )
 
-    # --------------------------------------------------------
-    # Loss calculation
-    # --------------------------------------------------------
-    #
-    # For the project risk gate, the important quantity is
-    # the deterioration from the day's starting equity.
-    #
-    # This naturally handles:
-    #
-    #   realized losses
-    #   floating losses
-    #
-    # without relying on the broker's balance field, which in
-    # the current test account is negative because of the
-    # account's credit structure.
-    #
-    equity_drawdown = (
-        day_start_equity - equity
-    )
+            return False
 
-    equity_drawdown = max(
-        0.0,
-        equity_drawdown,
-    )
+        return True
 
-    realized_loss = max(
-        0.0,
-        -realized,
-    )
+    except Exception as exc:
 
-    floating_loss = max(
-        0.0,
-        -floating,
-    )
+        logger.exception(
+            "CONTROLLER: DAILY LOSS GATE ERROR: %s",
+            exc,
+        )
 
-    # Equity drawdown is the primary hard risk metric.
-    total_loss = equity_drawdown
-
-    limit_amount = (
-        day_start_equity
-        * MAX_DAILY_LOSS_PERCENT
-        / 100.0
-    )
-
-    if limit_amount <= 0:
-
-        return {
-            "allowed": False,
-            "error": "INVALID_DAILY_LOSS_LIMIT",
-            "balance": balance,
-            "equity": equity,
-            "credit": credit,
-            "day_start_equity": day_start_equity,
-        }
-
-    loss_percent = (
-        total_loss
-        / day_start_equity
-        * 100.0
-    )
-
-    allowed = (
-        total_loss < limit_amount
-    )
-
-    # Small numerical tolerance prevents an insignificant
-    # floating-point difference from triggering the hard stop.
-    if total_loss >= (
-        limit_amount - 0.0001
-    ):
-
-        allowed = False
-
-    return {
-        "allowed": allowed,
-        "balance": balance,
-        "equity": equity,
-        "credit": credit,
-        "day_start_equity": day_start_equity,
-        "realized_pnl": realized,
-        "floating_pnl": floating,
-        "realized_loss": realized_loss,
-        "floating_loss": floating_loss,
-        "equity_drawdown": equity_drawdown,
-        "total_loss": total_loss,
-        "loss_percent": loss_percent,
-        "limit_amount": limit_amount,
-        "limit_percent": MAX_DAILY_LOSS_PERCENT,
-        "risk_date": (
-            _RISK_DAY.isoformat()
-            if _RISK_DAY is not None
-            else None
-        ),
-    }
+        return False
 
 
 # ============================================================
-# RISK GATE
+# GENERAL RISK GATE
 # ============================================================
 
 def _risk_gate() -> bool:
+    """
+    Central pre-trade safety gate.
+
+    Order path:
+        connection
+        -> position limit
+        -> daily loss
+    """
 
     if not TRADING_ENABLED:
 
@@ -528,44 +228,16 @@ def _risk_gate() -> bool:
     if not ensure_connection():
 
         logger.warning(
-            "CONTROLLER: MT5 CONNECTION FAILED"
+            "CONTROLLER: MT5 CONNECTION BLOCKED"
         )
 
         return False
 
     if not _validate_position_limit():
 
-        logger.warning(
-            "CONTROLLER: POSITION LIMIT REACHED"
-        )
-
         return False
 
-    risk = get_daily_loss_status()
-
-    if not risk.get(
-        "allowed",
-        False,
-    ):
-
-        logger.warning(
-            "CONTROLLER: DAILY LOSS GATE BLOCKED | "
-            "LOSS=%.2f%% | LIMIT=%.2f%%",
-            float(
-                risk.get(
-                    "loss_percent",
-                    0.0,
-                )
-                or 0.0
-            ),
-            float(
-                risk.get(
-                    "limit_percent",
-                    MAX_DAILY_LOSS_PERCENT,
-                )
-                or MAX_DAILY_LOSS_PERCENT
-            ),
-        )
+    if not _validate_daily_loss():
 
         return False
 
@@ -577,7 +249,9 @@ def _risk_gate() -> bool:
 # ============================================================
 
 def _validate_opportunity(
-    opportunity: Optional[dict[str, Any]],
+    opportunity: Optional[
+        dict[str, Any]
+    ],
 ) -> bool:
 
     if not opportunity:
@@ -591,13 +265,13 @@ def _validate_opportunity(
         )
     ).strip()
 
-    if symbol != PILOT_SYMBOL:
+    if symbol.upper() != PILOT_SYMBOL.upper():
 
         logger.warning(
-            "CONTROLLER: WRONG SYMBOL | "
-            "EXPECTED=%s | RECEIVED=%s",
-            PILOT_SYMBOL,
+            "CONTROLLER: SYMBOL REJECTED | "
+            "requested=%s | pilot=%s",
             symbol,
+            PILOT_SYMBOL,
         )
 
         return False
@@ -607,7 +281,7 @@ def _validate_opportunity(
             "signal",
             "",
         )
-    ).upper()
+    ).strip().upper()
 
     if signal not in {
         "BUY",
@@ -625,14 +299,17 @@ def _validate_opportunity(
             )
         )
 
-    except (
-        TypeError,
-        ValueError,
-    ):
+    except Exception:
 
         return False
 
-    if confidence < 60:
+    if confidence < 60.0:
+
+        logger.warning(
+            "CONTROLLER: CONFIDENCE REJECTED | "
+            "confidence=%s",
+            confidence,
+        )
 
         return False
 
@@ -640,7 +317,7 @@ def _validate_opportunity(
 
 
 # ============================================================
-# MAIN TRADING CYCLE
+# TRADING CYCLE
 # ============================================================
 
 def run_trading_cycle():
@@ -650,7 +327,7 @@ def run_trading_cycle():
     )
 
     # --------------------------------------------------------
-    # AUTO TRADE
+    # MASTER AUTO-TRADE SWITCH
     # --------------------------------------------------------
 
     if not AUTO_TRADE:
@@ -663,7 +340,7 @@ def run_trading_cycle():
         return None
 
     # --------------------------------------------------------
-    # INITIAL RISK GATE
+    # INITIAL SAFETY GATE
     # --------------------------------------------------------
 
     if not _risk_gate():
@@ -676,7 +353,14 @@ def run_trading_cycle():
 
     try:
 
-        monitor_positions()
+        monitor_result = (
+            monitor_positions()
+        )
+
+        logger.debug(
+            "CONTROLLER: POSITION MONITOR RESULT=%s",
+            monitor_result,
+        )
 
     except Exception as exc:
 
@@ -688,7 +372,7 @@ def run_trading_cycle():
         return None
 
     # --------------------------------------------------------
-    # RECHECK RISK
+    # RISK RECHECK
     # --------------------------------------------------------
 
     if not _risk_gate():
@@ -696,12 +380,23 @@ def run_trading_cycle():
         return None
 
     # --------------------------------------------------------
-    # OPPORTUNITY
+    # FIND BEST OPPORTUNITY
     # --------------------------------------------------------
 
-    opportunity = (
-        get_best_opportunity()
-    )
+    try:
+
+        opportunity = (
+            get_best_opportunity()
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "CONTROLLER: OPPORTUNITY ENGINE ERROR: %s",
+            exc,
+        )
+
+        return None
 
     if opportunity is None:
 
@@ -732,10 +427,18 @@ def run_trading_cycle():
         "CONFIDENCE=%s | "
         "RR=%s | "
         "SCORE=%s",
-        opportunity.get("symbol"),
-        opportunity.get("signal"),
-        opportunity.get("confidence"),
-        opportunity.get("risk_reward"),
+        opportunity.get(
+            "symbol"
+        ),
+        opportunity.get(
+            "signal"
+        ),
+        opportunity.get(
+            "confidence"
+        ),
+        opportunity.get(
+            "risk_reward"
+        ),
         opportunity.get(
             "opportunity_score",
             opportunity.get(
@@ -745,7 +448,7 @@ def run_trading_cycle():
     )
 
     # --------------------------------------------------------
-    # FINAL PRE-EXECUTION RISK CHECK
+    # FINAL PRE-EXECUTION GATE
     # --------------------------------------------------------
 
     if not _risk_gate():
@@ -756,8 +459,24 @@ def run_trading_cycle():
     # EXECUTION
     # --------------------------------------------------------
 
-    result = execute_trade(
-        opportunity
+    try:
+
+        result = execute_trade(
+            opportunity
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "CONTROLLER: TRADE EXECUTION ERROR: %s",
+            exc,
+        )
+
+        return None
+
+    logger.info(
+        "CONTROLLER: TRADE RESULT | %s",
+        result,
     )
 
     return result
@@ -769,20 +488,64 @@ def run_trading_cycle():
 
 def trading_status() -> dict[str, Any]:
 
+    try:
+
+        account = (
+            get_account_info()
+        )
+
+        account_available = (
+            account is not None
+        )
+
+    except Exception:
+
+        account = None
+        account_available = False
+
     return {
         "enabled": TRADING_ENABLED,
+
         "auto_trade": AUTO_TRADE,
-        "paper_trading": PAPER_TRADING,
-        "live_trading_allowed": (
-            _live_gate_open()
+
+        "paper_trading": bool(
+            PAPER_TRADING
         ),
+
+        "allow_live_trading": bool(
+            ALLOW_LIVE_TRADING
+        ),
+
+        "live_trading_allowed": (
+            live_trading_allowed()
+        ),
+
         "symbol": PILOT_SYMBOL,
+
+        "project_magic": PROJECT_MAGIC,
+
         "open_project_positions": (
             _get_project_position_count()
         ),
+
         "max_project_positions": (
             PROJECT_MAX_POSITIONS
         ),
+
+        "account_available": (
+            account_available
+        ),
+
+        "account_equity": (
+            getattr(
+                account,
+                "equity",
+                None,
+            )
+            if account is not None
+            else None
+        ),
+
         "daily_loss": (
             get_daily_loss_status()
         ),
@@ -802,60 +565,16 @@ def initialize_trading() -> bool:
 
     try:
 
-        connected = bool(
-            ensure_connection()
-        )
-
-        if not connected:
-
-            return False
-
-        account = get_account_info()
-
-        if account is None:
+        if not ensure_connection():
 
             logger.error(
-                "CONTROLLER: ACCOUNT INFO UNAVAILABLE"
+                "CONTROLLER: MT5 INITIALIZATION FAILED"
             )
-
-            return False
-
-        equity = float(
-            getattr(
-                account,
-                "equity",
-                0.0,
-            )
-            or 0.0
-        )
-
-        if equity <= 0:
-
-            logger.error(
-                "CONTROLLER: INVALID ACCOUNT EQUITY: %.4f",
-                equity,
-            )
-
-            return False
-
-        # Initialize daily risk baseline immediately
-        # during controller startup.
-        if not _reset_daily_risk_if_needed(
-            equity
-        ):
 
             return False
 
         logger.info(
-            "CONTROLLER: INITIALIZED | "
-            "SYMBOL=%s | "
-            "EQUITY=%.2f | "
-            "PAPER=%s | "
-            "LIVE_ALLOWED=%s",
-            PILOT_SYMBOL,
-            equity,
-            PAPER_TRADING,
-            ALLOW_LIVE_TRADING,
+            "CONTROLLER: MT5 INITIALIZATION PASSED"
         )
 
         return True
