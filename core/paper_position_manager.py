@@ -1,475 +1,853 @@
-```python
-# core/paper_position_manager.py
-
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import MetaTrader5 as mt5
 
 from core.logger import logger
-from core.trade_manager import (
-    get_open_trades,
-    close_trade,
-    update_trade_status,
+
+from core.mt5_connector import (
+    PILOT_SYMBOL,
+    DEFAULT_MAGIC,
+    ensure_connection,
+    get_project_positions,
+    get_symbol_info,
+    get_symbol_tick,
+    normalize_price,
 )
-from core.mt5_connector import initialize_mt5
+
+from core.database import (
+    get_open_trades,
+    update_trade,
+)
 
 
 # ============================================================
-# Helpers
+# PROJECT SETTINGS
 # ============================================================
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
+PROJECT_SYMBOL = PILOT_SYMBOL
+MAGIC_NUMBER = DEFAULT_MAGIC
+
+PAPER_STATUS = "PAPER_OPEN"
+
+
+# ============================================================
+# CONNECTION
+# ============================================================
+
+def _ensure_mt5() -> bool:
+    """
+    Reuse the existing connector connection.
+
+    Do NOT call initialize_mt5() on every tick/update.
+    """
+
     try:
-        if value is None:
-            return default
+        return bool(
+            ensure_connection()
+        )
+    except Exception as exc:
+        logger.exception(
+            "PAPER POSITION MANAGER: "
+            "CONNECTION ERROR: %s",
+            exc,
+        )
+        return False
+
+
+# ============================================================
+# SAFE CONVERSION
+# ============================================================
+
+def _float(
+    value: Any,
+    default: float = 0.0,
+) -> float:
+
+    try:
         return float(value)
-    except (TypeError, ValueError):
+    except Exception:
         return default
 
 
-def _normalize_side(side: Any) -> str:
-    return str(side or "").strip().upper()
+def _int(
+    value: Any,
+    default: int = 0,
+) -> int:
 
-
-def _get_tick(symbol: str):
     try:
-        if not initialize_mt5():
-            logger.warning(
-                "PAPER POSITION MANAGER: MT5 INITIALIZATION FAILED"
-            )
-            return None
+        return int(value)
+    except Exception:
+        return default
 
-        if not mt5.symbol_select(symbol, True):
-            logger.warning(
-                f"PAPER POSITION MANAGER: SYMBOL SELECT FAILED {symbol}"
-            )
-            return None
 
-        tick = mt5.symbol_info_tick(symbol)
+# ============================================================
+# SYMBOL INFO
+# ============================================================
 
-        if tick is None:
-            logger.warning(
-                f"PAPER POSITION MANAGER: NO TICK {symbol}"
-            )
-            return None
+def _get_contract_size(
+    symbol: str = PROJECT_SYMBOL,
+) -> float:
 
-        return tick
+    try:
+        info = get_symbol_info(
+            symbol
+        )
 
+        if info is None:
+            return 100.0
+
+        value = getattr(
+            info,
+            "trade_contract_size",
+            100.0,
+        )
+
+        value = _float(
+            value,
+            100.0,
+        )
+
+        if value <= 0:
+            return 100.0
+
+        return value
+
+    except Exception:
+        return 100.0
+
+
+# ============================================================
+# TICK
+# ============================================================
+
+def _get_tick(
+    symbol: str = PROJECT_SYMBOL,
+):
+    if not _ensure_mt5():
+        return None
+
+    try:
+        return get_symbol_tick(
+            symbol
+        )
     except Exception as exc:
         logger.exception(
-            f"PAPER TICK ERROR | {exc}"
+            "PAPER POSITION MANAGER: "
+            "TICK ERROR: %s",
+            exc,
         )
         return None
 
 
-def _get_contract_size(symbol: str) -> float:
-    try:
-        info = mt5.symbol_info(symbol)
+# ============================================================
+# PAPER P/L
+# ============================================================
 
-        if info is None:
-            return 0.0
-
-        return _safe_float(
-            getattr(info, "trade_contract_size", None),
-            0.0,
-        )
-
-    except Exception as exc:
-        logger.exception(
-            f"CONTRACT SIZE ERROR {symbol} | {exc}"
-        )
-        return 0.0
-
-
-def _calculate_pnl(
+def calculate_paper_profit(
     side: str,
-    entry: float,
+    entry_price: float,
     current_price: float,
-    quantity: float,
-    contract_size: float,
+    volume: float,
+    symbol: str = PROJECT_SYMBOL,
 ) -> float:
+    """
+    Calculate approximate paper P/L.
 
-    if contract_size <= 0:
+    Formula:
+        BUY  = (current - entry) * volume * contract_size
+        SELL = (entry - current) * volume * contract_size
+    """
+
+    try:
+        entry = float(
+            entry_price
+        )
+
+        current = float(
+            current_price
+        )
+
+        lot = float(
+            volume
+        )
+
+    except Exception:
         return 0.0
 
-    if quantity <= 0:
+    if (
+        entry <= 0
+        or current <= 0
+        or lot <= 0
+    ):
         return 0.0
 
-    side = _normalize_side(side)
+    contract_size = (
+        _get_contract_size(
+            symbol
+        )
+    )
+
+    side = str(
+        side
+    ).upper().strip()
 
     if side == "BUY":
-        difference = current_price - entry
+        price_difference = (
+            current - entry
+        )
 
     elif side == "SELL":
-        difference = entry - current_price
+        price_difference = (
+            entry - current
+        )
 
     else:
         return 0.0
 
     return (
-        difference
-        * quantity
+        price_difference
+        * lot
         * contract_size
     )
 
 
-def _check_exit(
+# ============================================================
+# CURRENT PRICE
+# ============================================================
+
+def get_current_price(
     side: str,
-    current_price: float,
-    tp: float,
-    sl: float,
-) -> str | None:
+    symbol: str = PROJECT_SYMBOL,
+) -> float:
 
-    side = _normalize_side(side)
+    tick = _get_tick(
+        symbol
+    )
 
-    if side == "BUY":
+    if tick is None:
+        return 0.0
 
-        if tp > 0 and current_price >= tp:
-            return "TP"
-
-        if sl > 0 and current_price <= sl:
-            return "SL"
-
-    elif side == "SELL":
-
-        if tp > 0 and current_price <= tp:
-            return "TP"
-
-        if sl > 0 and current_price >= sl:
-            return "SL"
-
-    return None
-
-
-# ============================================================
-# Monitor Single Paper Trade
-# ============================================================
-
-def monitor_paper_trade(
-    trade: dict[str, Any],
-) -> dict[str, Any] | None:
+    side = str(
+        side
+    ).upper().strip()
 
     try:
 
-        if not trade:
-            return None
-
-        trade_id = trade.get("id")
-
-        symbol = str(
-            trade.get("symbol") or ""
-        ).strip()
-
-        side = _normalize_side(
-            trade.get("side")
-        )
-
-        entry = _safe_float(
-            trade.get("entry")
-        )
-
-        tp = _safe_float(
-            trade.get("tp")
-        )
-
-        sl = _safe_float(
-            trade.get("sl")
-        )
-
-        quantity = _safe_float(
-            trade.get("quantity")
-        )
-
-        # ----------------------------------------------------
-        # Validation
-        # ----------------------------------------------------
-
-        if not trade_id:
-            logger.warning(
-                "PAPER TRADE INVALID - MISSING ID"
-            )
-            return None
-
-        if not symbol:
-            logger.warning(
-                f"PAPER TRADE INVALID ID={trade_id} - MISSING SYMBOL"
-            )
-            return None
-
-        if side not in ("BUY", "SELL"):
-            logger.warning(
-                f"PAPER TRADE INVALID SIDE "
-                f"ID={trade_id} SIDE={side}"
-            )
-            return None
-
-        if entry <= 0:
-            logger.warning(
-                f"PAPER TRADE INVALID ENTRY "
-                f"ID={trade_id} ENTRY={entry}"
-            )
-            return None
-
-        if quantity <= 0:
-            logger.warning(
-                f"PAPER TRADE INVALID QUANTITY "
-                f"ID={trade_id} QUANTITY={quantity}"
-            )
-            return None
-
-        # ----------------------------------------------------
-        # Current Market Data
-        # ----------------------------------------------------
-
-        tick = _get_tick(symbol)
-
-        if tick is None:
-            return None
-
-        bid = _safe_float(
-            getattr(tick, "bid", None)
-        )
-
-        ask = _safe_float(
-            getattr(tick, "ask", None)
-        )
-
-        if bid <= 0 or ask <= 0:
-            logger.warning(
-                f"PAPER TRADE INVALID TICK "
-                f"{symbol} BID={bid} ASK={ask}"
-            )
-            return None
-
-        # BUY closes against Bid.
-        # SELL closes against Ask.
-
         if side == "BUY":
-            current_price = bid
-        else:
-            current_price = ask
+            return float(
+                tick.bid
+            )
 
-        # ----------------------------------------------------
-        # P/L
-        # ----------------------------------------------------
+        if side == "SELL":
+            return float(
+                tick.ask
+            )
 
-        contract_size = _get_contract_size(
-            symbol
+    except Exception:
+        return 0.0
+
+    return 0.0
+
+
+# ============================================================
+# PAPER TRADE DATA HELPERS
+# ============================================================
+
+def _trade_value(
+    trade: Any,
+    *names: str,
+    default: Any = None,
+) -> Any:
+
+    for name in names:
+
+        if isinstance(
+            trade,
+            dict,
+        ):
+            if name in trade:
+                return trade[name]
+
+        if hasattr(
+            trade,
+            name,
+        ):
+            return getattr(
+                trade,
+                name,
+            )
+
+    return default
+
+
+def _trade_id(
+    trade: Any,
+) -> int:
+
+    value = _trade_value(
+        trade,
+        "id",
+        "trade_id",
+        "ticket",
+        default=0,
+    )
+
+    return _int(
+        value
+    )
+
+
+# ============================================================
+# DATABASE UPDATE
+# ============================================================
+
+def _update_paper_trade(
+    trade_id: int,
+    **fields: Any,
+) -> bool:
+
+    if trade_id <= 0:
+        return False
+
+    try:
+        update_trade(
+            trade_id,
+            **fields,
+        )
+        return True
+
+    except TypeError:
+        # Compatibility with update_trade implementations
+        # that accept a dictionary.
+        try:
+            update_trade(
+                trade_id,
+                fields,
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception(
+                "PAPER POSITION MANAGER: "
+                "DATABASE UPDATE ERROR: %s",
+                exc,
+            )
+            return False
+
+    except Exception as exc:
+        logger.exception(
+            "PAPER POSITION MANAGER: "
+            "DATABASE UPDATE ERROR: %s",
+            exc,
+        )
+        return False
+
+
+# ============================================================
+# PAPER POSITION UPDATE
+# ============================================================
+
+def update_paper_position(
+    trade: Any,
+) -> Dict[str, Any]:
+
+    trade_id = _trade_id(
+        trade
+    )
+
+    if trade_id <= 0:
+        return {
+            "success": False,
+            "reason": "INVALID_TRADE_ID",
+        }
+
+    symbol = str(
+        _trade_value(
+            trade,
+            "symbol",
+            default=PROJECT_SYMBOL,
+        )
+    ).strip()
+
+    if symbol != PROJECT_SYMBOL:
+        return {
+            "success": False,
+            "reason": "INVALID_SYMBOL",
+            "trade_id": trade_id,
+        }
+
+    side = str(
+        _trade_value(
+            trade,
+            "side",
+            "position_side",
+            "direction",
+            default="",
+        )
+    ).upper().strip()
+
+    if side not in {
+        "BUY",
+        "SELL",
+    }:
+        return {
+            "success": False,
+            "reason": "INVALID_SIDE",
+            "trade_id": trade_id,
+        }
+
+    entry_price = _float(
+        _trade_value(
+            trade,
+            "entry_price",
+            "entry",
+            "open_price",
+            default=0.0,
+        )
+    )
+
+    volume = _float(
+        _trade_value(
+            trade,
+            "volume",
+            "lot",
+            "quantity",
+            default=0.0,
+        )
+    )
+
+    sl = _float(
+        _trade_value(
+            trade,
+            "sl",
+            "stop_loss",
+            default=0.0,
+        )
+    )
+
+    tp = _float(
+        _trade_value(
+            trade,
+            "tp",
+            "take_profit",
+            default=0.0,
+        )
+    )
+
+    if (
+        entry_price <= 0
+        or volume <= 0
+    ):
+        return {
+            "success": False,
+            "reason": "INVALID_TRADE_PARAMETERS",
+            "trade_id": trade_id,
+        }
+
+    current_price = get_current_price(
+        side,
+        symbol,
+    )
+
+    if current_price <= 0:
+        return {
+            "success": False,
+            "reason": "NO_CURRENT_PRICE",
+            "trade_id": trade_id,
+        }
+
+    current_price = _float(
+        normalize_price(
+            symbol,
+            current_price,
+        ),
+        current_price,
+    )
+
+    profit = calculate_paper_profit(
+        side=side,
+        entry_price=entry_price,
+        current_price=current_price,
+        volume=volume,
+        symbol=symbol,
+    )
+
+    # --------------------------------------------------------
+    # TP / SL
+    # --------------------------------------------------------
+
+    close_reason: Optional[
+        str
+    ] = None
+
+    if side == "BUY":
+
+        if sl > 0 and current_price <= sl:
+            close_reason = "PAPER_SL"
+
+        elif tp > 0 and current_price >= tp:
+            close_reason = "PAPER_TP"
+
+    elif side == "SELL":
+
+        if sl > 0 and current_price >= sl:
+            close_reason = "PAPER_SL"
+
+        elif tp > 0 and current_price <= tp:
+            close_reason = "PAPER_TP"
+
+    # --------------------------------------------------------
+    # CLOSE PAPER POSITION
+    # --------------------------------------------------------
+
+    if close_reason is not None:
+
+        close_price = current_price
+
+        now = datetime.now(
+            timezone.utc
+        ).isoformat()
+
+        success = _update_paper_trade(
+            trade_id,
+            status="CLOSED",
+            close_price=close_price,
+            exit_price=close_price,
+            profit=profit,
+            pnl=profit,
+            close_reason=close_reason,
+            closed_at=now,
+            updated_at=now,
         )
 
-        pnl = _calculate_pnl(
-            side=side,
-            entry=entry,
-            current_price=current_price,
-            quantity=quantity,
-            contract_size=contract_size,
-        )
-
-        # ----------------------------------------------------
-        # TP / SL
-        # ----------------------------------------------------
-
-        exit_reason = _check_exit(
-            side=side,
-            current_price=current_price,
-            tp=tp,
-            sl=sl,
-        )
-
-        # ----------------------------------------------------
-        # CLOSE
-        # ----------------------------------------------------
-
-        if exit_reason:
-
-            logger.info(
-                "================================"
-            )
-
-            logger.info(
-                "PAPER TRADE EXIT DETECTED"
-            )
-
-            logger.info(
-                f"ID={trade_id}"
-            )
-
-            logger.info(
-                f"SYMBOL={symbol}"
-            )
-
-            logger.info(
-                f"SIDE={side}"
-            )
-
-            logger.info(
-                f"ENTRY={entry}"
-            )
-
-            logger.info(
-                f"EXIT={current_price}"
-            )
-
-            logger.info(
-                f"TP={tp}"
-            )
-
-            logger.info(
-                f"SL={sl}"
-            )
-
-            logger.info(
-                f"REASON={exit_reason}"
-            )
-
-            logger.info(
-                f"PNL={pnl}"
-            )
-
-            logger.info(
-                "================================"
-            )
-
-            closed = close_trade(
-                trade_id=trade_id,
-                exit_price=current_price,
-                pnl=pnl,
-            )
-
-            if not closed:
-
-                logger.error(
-                    f"PAPER TRADE CLOSE FAILED ID={trade_id}"
-                )
-
-                return None
-
-            return {
-                "id": trade_id,
-                "symbol": symbol,
-                "side": side,
-                "entry": entry,
-                "exit": current_price,
-                "tp": tp,
-                "sl": sl,
-                "quantity": quantity,
-                "contract_size": contract_size,
-                "pnl": pnl,
-                "status": "CLOSED",
-                "reason": exit_reason,
-            }
-
-        # ----------------------------------------------------
-        # Still Open
-        # ----------------------------------------------------
-
-        update_trade_status(
-            trade_id=trade_id,
-            status="OPEN",
-            pnl=pnl,
-            exit_price=None,
+        logger.info(
+            "PAPER POSITION MANAGER: "
+            "CLOSED | id=%s symbol=%s side=%s "
+            "entry=%.5f exit=%.5f "
+            "P/L=%.2f reason=%s",
+            trade_id,
+            symbol,
+            side,
+            entry_price,
+            close_price,
+            profit,
+            close_reason,
         )
 
         return {
-            "id": trade_id,
+            "success": success,
+            "status": "CLOSED",
+            "trade_id": trade_id,
             "symbol": symbol,
             "side": side,
-            "entry": entry,
+            "entry_price": entry_price,
             "current_price": current_price,
-            "tp": tp,
-            "sl": sl,
-            "quantity": quantity,
-            "contract_size": contract_size,
-            "pnl": pnl,
-            "status": "OPEN",
-            "reason": None,
+            "profit": profit,
+            "reason": close_reason,
+        }
+
+    # --------------------------------------------------------
+    # UPDATE OPEN PAPER POSITION
+    # --------------------------------------------------------
+
+    now = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    success = _update_paper_trade(
+        trade_id,
+        current_price=current_price,
+        mark_price=current_price,
+        profit=profit,
+        pnl=profit,
+        updated_at=now,
+    )
+
+    return {
+        "success": success,
+        "status": "OPEN",
+        "trade_id": trade_id,
+        "symbol": symbol,
+        "side": side,
+        "entry_price": entry_price,
+        "current_price": current_price,
+        "profit": profit,
+        "sl": sl,
+        "tp": tp,
+    }
+
+
+# ============================================================
+# GET OPEN PAPER TRADES
+# ============================================================
+
+def get_open_paper_trades() -> List[Any]:
+
+    try:
+        trades = get_open_trades()
+
+        if trades is None:
+            return []
+
+        result: List[Any] = []
+
+        for trade in trades:
+
+            status = str(
+                _trade_value(
+                    trade,
+                    "status",
+                    default="",
+                )
+            ).upper().strip()
+
+            symbol = str(
+                _trade_value(
+                    trade,
+                    "symbol",
+                    default="",
+                )
+            ).strip()
+
+            if symbol != PROJECT_SYMBOL:
+                continue
+
+            if status in {
+                "PAPER_OPEN",
+                "PAPER",
+                "OPEN",
+                "ACTIVE",
+            }:
+                result.append(
+                    trade
+                )
+
+        return result
+
+    except Exception as exc:
+
+        logger.exception(
+            "PAPER POSITION MANAGER: "
+            "GET OPEN TRADES ERROR: %s",
+            exc,
+        )
+
+        return []
+
+
+# ============================================================
+# UPDATE ALL PAPER POSITIONS
+# ============================================================
+
+def update_all_paper_positions(
+) -> Dict[str, Any]:
+
+    if not _ensure_mt5():
+        return {
+            "success": False,
+            "updated": 0,
+            "closed": 0,
+            "failed": 0,
+            "reason": "MT5_NOT_CONNECTED",
+        }
+
+    trades = (
+        get_open_paper_trades()
+    )
+
+    updated = 0
+    closed = 0
+    failed = 0
+
+    results: List[
+        Dict[str, Any]
+    ] = []
+
+    for trade in trades:
+
+        try:
+
+            result = (
+                update_paper_position(
+                    trade
+                )
+            )
+
+            results.append(
+                result
+            )
+
+            if not result.get(
+                "success"
+            ):
+                failed += 1
+                continue
+
+            updated += 1
+
+            if result.get(
+                "status"
+            ) == "CLOSED":
+                closed += 1
+
+        except Exception as exc:
+
+            failed += 1
+
+            logger.exception(
+                "PAPER POSITION MANAGER: "
+                "TRADE UPDATE ERROR: %s",
+                exc,
+            )
+
+    return {
+        "success": failed == 0,
+        "updated": updated,
+        "closed": closed,
+        "failed": failed,
+        "results": results,
+    }
+
+
+# ============================================================
+# SINGLE TICK UPDATE
+# ============================================================
+
+def update_positions() -> Dict[str, Any]:
+    """
+    Compatibility entry point.
+    """
+
+    return (
+        update_all_paper_positions()
+    )
+
+
+def process_paper_positions(
+) -> Dict[str, Any]:
+
+    return (
+        update_all_paper_positions()
+    )
+
+
+# ============================================================
+# STATUS
+# ============================================================
+
+def get_paper_position_status(
+) -> Dict[str, Any]:
+
+    try:
+
+        trades = (
+            get_open_paper_trades()
+        )
+
+        total_profit = 0.0
+
+        for trade in trades:
+
+            side = str(
+                _trade_value(
+                    trade,
+                    "side",
+                    default="",
+                )
+            )
+
+            entry = _float(
+                _trade_value(
+                    trade,
+                    "entry_price",
+                    "entry",
+                    default=0.0,
+                )
+            )
+
+            volume = _float(
+                _trade_value(
+                    trade,
+                    "volume",
+                    "lot",
+                    default=0.0,
+                )
+            )
+
+            if (
+                entry <= 0
+                or volume <= 0
+            ):
+                continue
+
+            current = (
+                get_current_price(
+                    side,
+                    PROJECT_SYMBOL,
+                )
+            )
+
+            if current <= 0:
+                continue
+
+            total_profit += (
+                calculate_paper_profit(
+                    side=side,
+                    entry_price=entry,
+                    current_price=current,
+                    volume=volume,
+                    symbol=PROJECT_SYMBOL,
+                )
+            )
+
+        return {
+            "connected":
+                _ensure_mt5(),
+            "symbol":
+                PROJECT_SYMBOL,
+            "open_paper_positions":
+                len(trades),
+            "floating_paper_profit":
+                total_profit,
         }
 
     except Exception as exc:
 
         logger.exception(
-            f"PAPER TRADE MONITOR ERROR | {exc}"
+            "PAPER POSITION MANAGER: "
+            "STATUS ERROR: %s",
+            exc,
         )
 
-        return None
+        return {
+            "connected": False,
+            "symbol":
+                PROJECT_SYMBOL,
+            "open_paper_positions":
+                0,
+            "floating_paper_profit":
+                0.0,
+            "error":
+                str(exc),
+        }
 
 
 # ============================================================
-# Monitor All Paper Positions
-# ============================================================
-
-def monitor_paper_positions() -> list[dict[str, Any]]:
-
-    results: list[dict[str, Any]] = []
-
-    try:
-
-        trades = get_open_trades()
-
-        if not trades:
-
-            logger.info(
-                "PAPER POSITION MANAGER: NO OPEN PAPER TRADES"
-            )
-
-            return results
-
-        logger.info(
-            "================================"
-        )
-
-        logger.info(
-            "PAPER POSITION MANAGER"
-        )
-
-        logger.info(
-            f"OPEN PAPER TRADES={len(trades)}"
-        )
-
-        logger.info(
-            "================================"
-        )
-
-        for trade in trades:
-
-            result = monitor_paper_trade(
-                trade
-            )
-
-            if result:
-
-                results.append(
-                    result
-                )
-
-        return results
-
-    except Exception as exc:
-
-        logger.exception(
-            f"PAPER POSITION MONITOR ERROR | {exc}"
-        )
-
-        return results
-
-
-# ============================================================
-# Cycle Alias
-# ============================================================
-
-def monitor_paper_positions_cycle():
-    return monitor_paper_positions()
-
-
-# ============================================================
-# Public API
+# EXPORTS
 # ============================================================
 
 __all__ = [
-    "monitor_paper_trade",
-    "monitor_paper_positions",
-    "monitor_paper_positions_cycle",
+    "PROJECT_SYMBOL",
+    "MAGIC_NUMBER",
+    "calculate_paper_profit",
+    "get_current_price",
+    "get_open_paper_trades",
+    "update_paper_position",
+    "update_all_paper_positions",
+    "update_positions",
+    "process_paper_positions",
+    "get_paper_position_status",
 ]
-```
