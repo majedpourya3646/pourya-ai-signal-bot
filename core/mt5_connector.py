@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, Dict, List, Optional, Tuple
 
 import MetaTrader5 as mt5
@@ -11,10 +11,17 @@ import MetaTrader5 as mt5
 from config import (
     ALLOW_LIVE_TRADING,
     DEFAULT_LOT,
+    MAX_DAILY_LOSS_PERCENT,
     MAX_OPEN_TRADES,
     MT5_DEVIATION,
+    MT5_LOGIN,
     MT5_MAGIC_NUMBER,
     MT5_ORDER_COMMENT,
+    MT5_PASSWORD,
+    MT5_SERVER,
+    MT5_TERMINAL_PATH,
+    MT5_PORTABLE,
+    MT5_TIMEOUT,
     PAPER_TRADING,
     SYMBOLS,
 )
@@ -29,12 +36,17 @@ from core.logger import logger
 PILOT_SYMBOL = "XAUUSD.su"
 
 DEFAULT_SYMBOL = PILOT_SYMBOL
+
 DEFAULT_MAGIC = int(MT5_MAGIC_NUMBER)
+
 DEFAULT_DEVIATION = int(MT5_DEVIATION)
+
 DEFAULT_COMMENT = str(MT5_ORDER_COMMENT)
 
 MIN_PROJECT_LOT = 0.01
+
 MAX_PROJECT_LOT = 0.03
+
 MAX_PROJECT_POSITIONS = 5
 
 PROJECT_MAX_POSITIONS = min(
@@ -42,7 +54,15 @@ PROJECT_MAX_POSITIONS = min(
     int(MAX_OPEN_TRADES),
 )
 
-MT5_PATH = r"C:\MT5-Pourya\terminal64.exe"
+MT5_PATH = str(MT5_TERMINAL_PATH)
+
+MT5_LOGIN_TARGET = int(MT5_LOGIN)
+
+MT5_SERVER_TARGET = str(MT5_SERVER).strip()
+
+MT5_PORTABLE_MODE = bool(MT5_PORTABLE)
+
+MT5_CONNECTION_TIMEOUT = int(MT5_TIMEOUT)
 
 DEFAULT_TIMEFRAME = "15"
 
@@ -89,6 +109,7 @@ def _safe_float(value: Any) -> Optional[float]:
 def _safe_int(value: Any) -> Optional[int]:
     try:
         return int(value)
+
     except Exception:
         return None
 
@@ -135,12 +156,34 @@ def _is_project_position(
         return False
 
     try:
+
         if int(position_magic) != int(magic):
             return False
+
     except Exception:
+
         return False
 
     return True
+
+
+def _today_start_timestamp() -> int:
+    """
+    Return today's local midnight timestamp.
+
+    MT5 history uses the terminal's local time context.
+    """
+
+    now = datetime.now()
+
+    start = datetime.combine(
+        now.date(),
+        time.min,
+    )
+
+    return int(
+        start.timestamp()
+    )
 
 
 # ============================================================
@@ -149,22 +192,28 @@ def _is_project_position(
 
 def live_trading_allowed() -> bool:
     """
-    Independent fail-closed live-trading gate.
+    Final configuration-level live trading gate.
 
-    Live trading requires:
+    Real trading requires BOTH:
+
         ALLOW_LIVE_TRADING=True
         PAPER_TRADING=False
 
-    Anything else blocks real order execution.
+    Fail closed in every other condition.
     """
 
     try:
-        return (
-            bool(ALLOW_LIVE_TRADING)
-            and not bool(PAPER_TRADING)
-        )
+
+        if bool(PAPER_TRADING):
+            return False
+
+        if not bool(ALLOW_LIVE_TRADING):
+            return False
+
+        return True
 
     except Exception as exc:
+
         logger.exception(
             "MT5 LIVE GATE ERROR: %s",
             exc,
@@ -179,31 +228,38 @@ def live_trading_allowed() -> bool:
 
 def initialize_mt5() -> bool:
     """
-    Initialize the dedicated portable MT5 terminal.
+    Initialize and verify the dedicated portable MT5 terminal.
 
-    The function:
-        1. shuts down any existing Python MT5 connection,
-        2. initializes the portable terminal,
-        3. verifies terminal connectivity,
-        4. verifies account information.
+    The connection is accepted only when:
+        - MT5 initializes successfully
+        - terminal is connected
+        - account information is available
+        - expected login matches configured login, when configured
+        - expected server matches configured server, when configured
+
+    No order is sent here.
     """
 
     global _initialized_by_project
 
     try:
+
         logger.info("=" * 70)
-        logger.info("MT5 CONNECTOR: INITIALIZATION")
+        logger.info(
+            "MT5 CONNECTOR: INITIALIZATION"
+        )
         logger.info("=" * 70)
 
         try:
             mt5.shutdown()
+
         except Exception:
             pass
 
         initialized = mt5.initialize(
             path=MT5_PATH,
-            portable=True,
-            timeout=60000,
+            portable=MT5_PORTABLE_MODE,
+            timeout=MT5_CONNECTION_TIMEOUT,
         )
 
         if not initialized:
@@ -228,12 +284,7 @@ def initialize_mt5() -> bool:
                 mt5.last_error(),
             )
 
-            try:
-                mt5.shutdown()
-            except Exception:
-                pass
-
-            _initialized_by_project = False
+            shutdown_mt5()
 
             return False
 
@@ -249,12 +300,7 @@ def initialize_mt5() -> bool:
                 "MT5 TERMINAL NOT CONNECTED"
             )
 
-            try:
-                mt5.shutdown()
-            except Exception:
-                pass
-
-            _initialized_by_project = False
+            shutdown_mt5()
 
             return False
 
@@ -267,12 +313,61 @@ def initialize_mt5() -> bool:
                 mt5.last_error(),
             )
 
-            try:
-                mt5.shutdown()
-            except Exception:
-                pass
+            shutdown_mt5()
 
-            _initialized_by_project = False
+            return False
+
+        actual_login = _safe_int(
+            getattr(
+                account,
+                "login",
+                None,
+            )
+        )
+
+        actual_server = str(
+            getattr(
+                account,
+                "server",
+                "",
+            )
+        ).strip()
+
+        # ----------------------------------------------------
+        # ACCOUNT IDENTITY VERIFICATION
+        # ----------------------------------------------------
+
+        if (
+            MT5_LOGIN_TARGET > 0
+            and actual_login != MT5_LOGIN_TARGET
+        ):
+
+            logger.critical(
+                "MT5 ACCOUNT BLOCKED | "
+                "EXPECTED LOGIN=%s | ACTUAL LOGIN=%s",
+                MT5_LOGIN_TARGET,
+                actual_login,
+            )
+
+            shutdown_mt5()
+
+            return False
+
+        if (
+            MT5_SERVER_TARGET
+            and actual_server
+            and actual_server.lower()
+            != MT5_SERVER_TARGET.lower()
+        ):
+
+            logger.critical(
+                "MT5 SERVER BLOCKED | "
+                "EXPECTED=%s | ACTUAL=%s",
+                MT5_SERVER_TARGET,
+                actual_server,
+            )
+
+            shutdown_mt5()
 
             return False
 
@@ -283,12 +378,15 @@ def initialize_mt5() -> bool:
         )
 
         logger.info(
-            "MT5 ACCOUNT | login=%s | server=%s | "
-            "balance=%s | equity=%s | currency=%s",
+            "MT5 ACCOUNT | "
+            "login=%s | server=%s | "
+            "balance=%s | equity=%s | "
+            "free_margin=%s | currency=%s",
             getattr(account, "login", None),
             getattr(account, "server", None),
             getattr(account, "balance", None),
             getattr(account, "equity", None),
+            getattr(account, "margin_free", None),
             getattr(account, "currency", None),
         )
 
@@ -304,6 +402,15 @@ def initialize_mt5() -> bool:
             PILOT_SYMBOL,
         )
 
+        logger.info(
+            "MT5 PROJECT LIMITS | "
+            "MAX_POSITIONS=%s | "
+            "MIN_LOT=%s | MAX_LOT=%s",
+            PROJECT_MAX_POSITIONS,
+            MIN_PROJECT_LOT,
+            MAX_PROJECT_LOT,
+        )
+
         return True
 
     except Exception as exc:
@@ -317,6 +424,7 @@ def initialize_mt5() -> bool:
 
         try:
             mt5.shutdown()
+
         except Exception:
             pass
 
@@ -384,6 +492,36 @@ def is_connected() -> bool:
         if account is None:
             return False
 
+        actual_login = _safe_int(
+            getattr(
+                account,
+                "login",
+                None,
+            )
+        )
+
+        actual_server = str(
+            getattr(
+                account,
+                "server",
+                "",
+            )
+        ).strip()
+
+        if (
+            MT5_LOGIN_TARGET > 0
+            and actual_login != MT5_LOGIN_TARGET
+        ):
+            return False
+
+        if (
+            MT5_SERVER_TARGET
+            and actual_server
+            and actual_server.lower()
+            != MT5_SERVER_TARGET.lower()
+        ):
+            return False
+
         return True
 
     except Exception:
@@ -393,17 +531,19 @@ def is_connected() -> bool:
 
 def ensure_connection() -> bool:
     """
-    Ensure an active MT5 connection.
+    Ensure active connection.
 
-    If connection is unavailable, attempt one controlled
-    initialization. No order retry is performed here.
+    If disconnected, perform one controlled initialization.
+
+    This function NEVER retries an order.
     """
 
     if is_connected():
         return True
 
     logger.warning(
-        "MT5 CONNECTION LOST - REINITIALIZING"
+        "MT5 CONNECTION LOST - "
+        "REINITIALIZING"
     )
 
     return initialize_mt5()
@@ -414,6 +554,7 @@ def ensure_connection() -> bool:
 # ============================================================
 
 def get_account_info() -> Optional[Any]:
+
     try:
 
         if not ensure_connection():
@@ -433,7 +574,9 @@ def get_account_info() -> Optional[Any]:
 
 def get_account_snapshot() -> Optional[Dict[str, Any]]:
     """
-    Return normalized account snapshot.
+    Return normalized live account information.
+
+    Actual equity/free margin must be used for risk decisions.
     """
 
     account = get_account_info()
@@ -536,13 +679,6 @@ def get_account_snapshot() -> Optional[Dict[str, Any]]:
 
 
 def get_margin_mode() -> Optional[int]:
-    """
-    Return MT5 account margin mode.
-
-    This is important because hedging accounts can hold
-    multiple independent positions on the same symbol,
-    while netting accounts cannot.
-    """
 
     account = get_account_info()
 
@@ -550,6 +686,7 @@ def get_margin_mode() -> Optional[int]:
         return None
 
     try:
+
         return int(
             getattr(
                 account,
@@ -558,13 +695,16 @@ def get_margin_mode() -> Optional[int]:
         )
 
     except Exception:
+
         return None
 
 
 def get_account_trading_permissions() -> Dict[str, bool]:
+
     account = get_account_info()
 
     if account is None:
+
         return {
             "account_available": False,
             "trade_allowed": False,
@@ -591,6 +731,209 @@ def get_account_trading_permissions() -> Dict[str, bool]:
 
 
 # ============================================================
+# DAILY LOSS CONTROL
+# ============================================================
+
+def get_today_realized_profit() -> Optional[float]:
+    """
+    Return realized P/L from today's MT5 deals.
+
+    This includes the profit/commission/swap fields reported
+    by MT5 deals.
+
+    Returns None on data failure.
+    """
+
+    try:
+
+        if not ensure_connection():
+            return None
+
+        start_timestamp = _today_start_timestamp()
+
+        deals = mt5.history_deals_get(
+            start_timestamp,
+            datetime.now(),
+        )
+
+        if deals is None:
+            return None
+
+        total = 0.0
+
+        for deal in deals:
+
+            deal_profit = _safe_float(
+                getattr(
+                    deal,
+                    "profit",
+                    0.0,
+                )
+            )
+
+            commission = _safe_float(
+                getattr(
+                    deal,
+                    "commission",
+                    0.0,
+                )
+            )
+
+            swap = _safe_float(
+                getattr(
+                    deal,
+                    "swap",
+                    0.0,
+                )
+            )
+
+            if deal_profit is None:
+                deal_profit = 0.0
+
+            if commission is None:
+                commission = 0.0
+
+            if swap is None:
+                swap = 0.0
+
+            total += (
+                deal_profit
+                + commission
+                + swap
+            )
+
+        return float(total)
+
+    except Exception as exc:
+
+        logger.exception(
+            "DAILY REALIZED P/L ERROR: %s",
+            exc,
+        )
+
+        return None
+
+
+def get_daily_loss_snapshot() -> Optional[Dict[str, Any]]:
+    """
+    Return today's realized P/L and current floating P/L.
+
+    This is deliberately conservative.
+
+    The system uses the current live equity as the minimum
+    reference available to prevent accepting a loss larger than
+    the configured daily percentage when a persistent
+    start-of-day equity baseline is not available.
+
+    A future persistent daily baseline can make this stricter
+    and more precise.
+    """
+
+    account = get_account_snapshot()
+
+    if account is None:
+        return None
+
+    realized = get_today_realized_profit()
+
+    if realized is None:
+        return None
+
+    floating = _safe_float(
+        account.get(
+            "profit",
+            0.0,
+        )
+    )
+
+    if floating is None:
+        floating = 0.0
+
+    equity = _safe_float(
+        account.get(
+            "equity",
+            0.0,
+        )
+    )
+
+    if equity is None or equity <= 0:
+        return None
+
+    net_today = (
+        realized
+        + floating
+    )
+
+    max_loss_amount = (
+        equity
+        * (
+            float(MAX_DAILY_LOSS_PERCENT)
+            / 100.0
+        )
+    )
+
+    loss_used = max(
+        0.0,
+        -net_today,
+    )
+
+    loss_percent = (
+        loss_used
+        / equity
+        * 100.0
+    )
+
+    return {
+        "realized": realized,
+        "floating": floating,
+        "net_today": net_today,
+        "equity": equity,
+        "loss_used": loss_used,
+        "loss_percent": loss_percent,
+        "max_loss_percent": float(
+            MAX_DAILY_LOSS_PERCENT
+        ),
+        "max_loss_amount": max_loss_amount,
+        "limit_reached": (
+            loss_used
+            >= max_loss_amount
+        ),
+    }
+
+
+def validate_daily_loss_limit() -> Tuple[bool, str]:
+
+    snapshot = (
+        get_daily_loss_snapshot()
+    )
+
+    if snapshot is None:
+
+        return (
+            False,
+            "DAILY_LOSS_DATA_UNAVAILABLE",
+        )
+
+    if bool(
+        snapshot.get(
+            "limit_reached",
+            False,
+        )
+    ):
+
+        return (
+            False,
+            (
+                "DAILY_LOSS_LIMIT_REACHED:"
+                f"{snapshot['loss_percent']:.2f}%/"
+                f"{snapshot['max_loss_percent']:.2f}%"
+            ),
+        )
+
+    return True, "OK"
+
+
+# ============================================================
 # SYMBOL
 # ============================================================
 
@@ -603,7 +946,8 @@ def get_symbol_info(
     if not _is_pilot_symbol(symbol):
 
         logger.error(
-            "SYMBOL BLOCKED | requested=%s | pilot=%s",
+            "SYMBOL BLOCKED | "
+            "requested=%s | pilot=%s",
             symbol,
             PILOT_SYMBOL,
         )
@@ -615,12 +959,15 @@ def get_symbol_info(
         if not ensure_connection():
             return None
 
-        info = mt5.symbol_info(symbol)
+        info = mt5.symbol_info(
+            symbol
+        )
 
         if info is None:
 
             logger.error(
-                "SYMBOL INFO FAILED | symbol=%s | error=%s",
+                "SYMBOL INFO FAILED | "
+                "symbol=%s | error=%s",
                 symbol,
                 mt5.last_error(),
             )
@@ -643,13 +990,16 @@ def get_symbol_info(
             if not selected:
 
                 logger.error(
-                    "SYMBOL SELECT FAILED | symbol=%s",
+                    "SYMBOL SELECT FAILED | "
+                    "symbol=%s",
                     symbol,
                 )
 
                 return None
 
-            info = mt5.symbol_info(symbol)
+            info = mt5.symbol_info(
+                symbol
+            )
 
         return info
 
@@ -677,6 +1027,12 @@ def get_symbol_tick(
         if not ensure_connection():
             return None
 
+        if not mt5.symbol_select(
+            symbol,
+            True,
+        ):
+            return None
+
         tick = mt5.symbol_info_tick(
             symbol
         )
@@ -684,9 +1040,44 @@ def get_symbol_tick(
         if tick is None:
 
             logger.error(
-                "SYMBOL TICK FAILED | symbol=%s | error=%s",
+                "SYMBOL TICK FAILED | "
+                "symbol=%s | error=%s",
                 symbol,
                 mt5.last_error(),
+            )
+
+            return None
+
+        bid = _safe_float(
+            getattr(
+                tick,
+                "bid",
+                None,
+            )
+        )
+
+        ask = _safe_float(
+            getattr(
+                tick,
+                "ask",
+                None,
+            )
+        )
+
+        if (
+            bid is None
+            or ask is None
+            or bid <= 0
+            or ask <= 0
+            or ask < bid
+        ):
+
+            logger.error(
+                "INVALID TICK | "
+                "symbol=%s | bid=%s | ask=%s",
+                symbol,
+                bid,
+                ask,
             )
 
             return None
@@ -726,11 +1117,11 @@ def get_filling_mode(
             )
         )
 
-        # MT5 SYMBOL_FILLING_FOK = 1
+        # SYMBOL_FILLING_FOK = 1
         if filling_mode & 1:
             return mt5.ORDER_FILLING_FOK
 
-        # MT5 SYMBOL_FILLING_IOC = 2
+        # SYMBOL_FILLING_IOC = 2
         if filling_mode & 2:
             return mt5.ORDER_FILLING_IOC
 
@@ -749,9 +1140,13 @@ def get_timeframe(
     timeframe: Any,
 ) -> Optional[int]:
 
-    key = str(timeframe).strip()
+    key = str(
+        timeframe
+    ).strip()
 
-    return TIMEFRAME_MAP.get(key)
+    return TIMEFRAME_MAP.get(
+        key
+    )
 
 
 # ============================================================
@@ -808,8 +1203,9 @@ def get_rates(
         if rates is None:
 
             logger.error(
-                "COPY RATES FAILED | symbol=%s | "
-                "timeframe=%s | error=%s",
+                "COPY RATES FAILED | "
+                "symbol=%s | timeframe=%s | "
+                "error=%s",
                 symbol,
                 timeframe,
                 mt5.last_error(),
@@ -820,7 +1216,7 @@ def get_rates(
         if len(rates) == 0:
             return None
 
-        return rates
+        return list(rates)
 
     except Exception as exc:
 
@@ -841,7 +1237,9 @@ def normalize_price(
     price: Any,
 ) -> Optional[float]:
 
-    symbol = _normalize_symbol(symbol)
+    symbol = _normalize_symbol(
+        symbol
+    )
 
     if not _is_pilot_symbol(symbol):
         return None
@@ -851,7 +1249,9 @@ def normalize_price(
     if value is None or value <= 0:
         return None
 
-    info = get_symbol_info(symbol)
+    info = get_symbol_info(
+        symbol
+    )
 
     if info is None:
         return None
@@ -872,6 +1272,7 @@ def normalize_price(
         )
 
     except Exception:
+
         return None
 
 
@@ -884,21 +1285,26 @@ def normalize_volume(
     volume: Any,
 ) -> float:
 
-    symbol = _normalize_symbol(symbol)
+    symbol = _normalize_symbol(
+        symbol
+    )
 
     if not _is_pilot_symbol(symbol):
         return 0.0
 
-    value = _safe_float(volume)
+    value = _safe_float(
+        volume
+    )
 
     if value is None:
         return 0.0
 
-    # HARD PROJECT LIMIT.
-    # Never silently cap a requested lot above 0.03.
+    # NEVER silently cap an oversized request.
     if value > MAX_PROJECT_LOT:
+
         logger.error(
-            "LOT BLOCKED | requested=%s | max=%s",
+            "LOT BLOCKED | "
+            "requested=%s | max=%s",
             value,
             MAX_PROJECT_LOT,
         )
@@ -906,44 +1312,42 @@ def normalize_volume(
         return 0.0
 
     if value < MIN_PROJECT_LOT:
+
         logger.error(
-            "LOT BLOCKED | requested=%s | min=%s",
+            "LOT BLOCKED | "
+            "requested=%s | min=%s",
             value,
             MIN_PROJECT_LOT,
         )
 
         return 0.0
 
-    info = get_symbol_info(symbol)
+    info = get_symbol_info(
+        symbol
+    )
 
     if info is None:
         return 0.0
 
     try:
 
-        volume_min = max(
-            MIN_PROJECT_LOT,
-            float(
-                getattr(
-                    info,
-                    "volume_min",
-                    MIN_PROJECT_LOT,
-                )
-            ),
+        broker_min = float(
+            getattr(
+                info,
+                "volume_min",
+                MIN_PROJECT_LOT,
+            )
         )
 
-        volume_max = min(
-            MAX_PROJECT_LOT,
-            float(
-                getattr(
-                    info,
-                    "volume_max",
-                    MAX_PROJECT_LOT,
-                )
-            ),
+        broker_max = float(
+            getattr(
+                info,
+                "volume_max",
+                MAX_PROJECT_LOT,
+            )
         )
 
-        volume_step = float(
+        broker_step = float(
             getattr(
                 info,
                 "volume_step",
@@ -951,8 +1355,24 @@ def normalize_volume(
             )
         )
 
-        if volume_step <= 0:
-            volume_step = 0.01
+        volume_min = max(
+            MIN_PROJECT_LOT,
+            broker_min,
+        )
+
+        volume_max = min(
+            MAX_PROJECT_LOT,
+            broker_max,
+        )
+
+        if broker_step <= 0:
+            broker_step = 0.01
+
+        if (
+            volume_min
+            > volume_max
+        ):
+            return 0.0
 
         if value < volume_min:
             return 0.0
@@ -962,14 +1382,16 @@ def normalize_volume(
 
         steps = math.floor(
             (
-                value - volume_min
-            ) / volume_step
+                value
+                - volume_min
+            )
+            / broker_step
             + 1e-9
         )
 
         normalized = (
             volume_min
-            + steps * volume_step
+            + steps * broker_step
         )
 
         normalized = round(
@@ -977,10 +1399,16 @@ def normalize_volume(
             8,
         )
 
-        if normalized < MIN_PROJECT_LOT:
+        if (
+            normalized
+            < MIN_PROJECT_LOT
+        ):
             return 0.0
 
-        if normalized > MAX_PROJECT_LOT:
+        if (
+            normalized
+            > MAX_PROJECT_LOT
+        ):
             return 0.0
 
         return normalized
@@ -1003,7 +1431,9 @@ def get_stop_freeze_distance(
     symbol: str = DEFAULT_SYMBOL,
 ) -> float:
 
-    info = get_symbol_info(symbol)
+    info = get_symbol_info(
+        symbol
+    )
 
     if info is None:
         return 0.0
@@ -1045,6 +1475,7 @@ def get_stop_freeze_distance(
         )
 
     except Exception:
+
         return 0.0
 
 
@@ -1060,81 +1491,138 @@ def validate_sl_tp(
     tp: float,
 ) -> Tuple[bool, str]:
 
-    symbol = _normalize_symbol(symbol)
-    side = str(side).strip().upper()
+    symbol = _normalize_symbol(
+        symbol
+    )
 
-    if not _is_pilot_symbol(symbol):
-        return False, "PILOT_SYMBOL_ONLY"
+    side = str(
+        side
+    ).strip().upper()
 
-    entry_value = _safe_float(entry)
-    sl_value = _safe_float(sl)
-    tp_value = _safe_float(tp)
+    if not _is_pilot_symbol(
+        symbol
+    ):
+        return (
+            False,
+            "PILOT_SYMBOL_ONLY",
+        )
+
+    entry_value = _safe_float(
+        entry
+    )
+
+    sl_value = _safe_float(
+        sl
+    )
+
+    tp_value = _safe_float(
+        tp
+    )
 
     if (
         entry_value is None
         or sl_value is None
         or tp_value is None
     ):
-        return False, "INVALID_PRICE"
+        return (
+            False,
+            "INVALID_PRICE",
+        )
 
     if (
         entry_value <= 0
         or sl_value <= 0
         or tp_value <= 0
     ):
-        return False, "NON_POSITIVE_PRICE"
+        return (
+            False,
+            "NON_POSITIVE_PRICE",
+        )
 
-    minimum_distance = get_stop_freeze_distance(
-        symbol
+    minimum_distance = (
+        get_stop_freeze_distance(
+            symbol
+        )
     )
 
     if side == "BUY":
 
         if sl_value >= entry_value:
-            return False, "BUY_SL_NOT_BELOW_ENTRY"
+            return (
+                False,
+                "BUY_SL_NOT_BELOW_ENTRY",
+            )
 
         if tp_value <= entry_value:
-            return False, "BUY_TP_NOT_ABOVE_ENTRY"
+            return (
+                False,
+                "BUY_TP_NOT_ABOVE_ENTRY",
+            )
 
         if minimum_distance > 0:
 
             if (
-                entry_value - sl_value
+                entry_value
+                - sl_value
                 < minimum_distance
             ):
-                return False, "BUY_SL_TOO_CLOSE"
+                return (
+                    False,
+                    "BUY_SL_TOO_CLOSE",
+                )
 
             if (
-                tp_value - entry_value
+                tp_value
+                - entry_value
                 < minimum_distance
             ):
-                return False, "BUY_TP_TOO_CLOSE"
+                return (
+                    False,
+                    "BUY_TP_TOO_CLOSE",
+                )
 
     elif side == "SELL":
 
         if sl_value <= entry_value:
-            return False, "SELL_SL_NOT_ABOVE_ENTRY"
+            return (
+                False,
+                "SELL_SL_NOT_ABOVE_ENTRY",
+            )
 
         if tp_value >= entry_value:
-            return False, "SELL_TP_NOT_BELOW_ENTRY"
+            return (
+                False,
+                "SELL_TP_NOT_BELOW_ENTRY",
+            )
 
         if minimum_distance > 0:
 
             if (
-                sl_value - entry_value
+                sl_value
+                - entry_value
                 < minimum_distance
             ):
-                return False, "SELL_SL_TOO_CLOSE"
+                return (
+                    False,
+                    "SELL_SL_TOO_CLOSE",
+                )
 
             if (
-                entry_value - tp_value
+                entry_value
+                - tp_value
                 < minimum_distance
             ):
-                return False, "SELL_TP_TOO_CLOSE"
+                return (
+                    False,
+                    "SELL_TP_TOO_CLOSE",
+                )
 
     else:
 
-        return False, "INVALID_SIDE"
+        return (
+            False,
+            "INVALID_SIDE",
+        )
 
     return True, "OK"
 
@@ -1154,23 +1642,33 @@ def get_open_positions(
 
         if symbol is not None:
 
-            symbol = _normalize_symbol(symbol)
+            symbol = _normalize_symbol(
+                symbol
+            )
 
-            if not _is_pilot_symbol(symbol):
+            if not _is_pilot_symbol(
+                symbol
+            ):
                 return []
 
-            positions = mt5.positions_get(
-                symbol=symbol
+            positions = (
+                mt5.positions_get(
+                    symbol=symbol
+                )
             )
 
         else:
 
-            positions = mt5.positions_get()
+            positions = (
+                mt5.positions_get()
+            )
 
         if positions is None:
             return []
 
-        return list(positions)
+        return list(
+            positions
+        )
 
     except Exception as exc:
 
@@ -1187,7 +1685,9 @@ def get_project_positions(
     magic: int = DEFAULT_MAGIC,
 ) -> List[Any]:
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
         return []
 
     positions = get_open_positions(
@@ -1233,8 +1733,9 @@ def validate_position_limit(
         return (
             False,
             (
-                f"PROJECT_POSITION_LIMIT_REACHED:"
-                f"{count}/{PROJECT_MAX_POSITIONS}"
+                "PROJECT_POSITION_LIMIT_REACHED:"
+                f"{count}/"
+                f"{PROJECT_MAX_POSITIONS}"
             ),
         )
 
@@ -1252,19 +1753,33 @@ def calculate_margin(
     price: float,
 ) -> Optional[float]:
 
-    symbol = _normalize_symbol(symbol)
-    side = str(side).strip().upper()
+    symbol = _normalize_symbol(
+        symbol
+    )
 
-    if not _is_pilot_symbol(symbol):
+    side = str(
+        side
+    ).strip().upper()
+
+    if not _is_pilot_symbol(
+        symbol
+    ):
         return None
 
     if side == "BUY":
-        order_type = mt5.ORDER_TYPE_BUY
+
+        order_type = (
+            mt5.ORDER_TYPE_BUY
+        )
 
     elif side == "SELL":
-        order_type = mt5.ORDER_TYPE_SELL
+
+        order_type = (
+            mt5.ORDER_TYPE_SELL
+        )
 
     else:
+
         return None
 
     try:
@@ -1282,7 +1797,17 @@ def calculate_margin(
         if result is None:
             return None
 
-        return float(result)
+        result_value = _safe_float(
+            result
+        )
+
+        if (
+            result_value is None
+            or result_value < 0
+        ):
+            return None
+
+        return result_value
 
     except Exception as exc:
 
@@ -1304,7 +1829,11 @@ def validate_free_margin(
     account = get_account_info()
 
     if account is None:
-        return False, "ACCOUNT_UNAVAILABLE"
+
+        return (
+            False,
+            "ACCOUNT_UNAVAILABLE",
+        )
 
     margin = calculate_margin(
         symbol,
@@ -1314,9 +1843,13 @@ def validate_free_margin(
     )
 
     if margin is None:
-        return False, "MARGIN_CALC_FAILED"
 
-    free_margin = float(
+        return (
+            False,
+            "MARGIN_CALC_FAILED",
+        )
+
+    free_margin = _safe_float(
         getattr(
             account,
             "margin_free",
@@ -1324,11 +1857,19 @@ def validate_free_margin(
         )
     )
 
+    if free_margin is None:
+
+        return (
+            False,
+            "FREE_MARGIN_UNAVAILABLE",
+        )
+
     if margin > free_margin:
+
         return (
             False,
             (
-                f"INSUFFICIENT_MARGIN:"
+                "INSUFFICIENT_MARGIN:"
                 f"required={margin}:"
                 f"free={free_margin}"
             ),
@@ -1345,7 +1886,9 @@ def _get_order_type(
     side: str,
 ) -> Optional[int]:
 
-    side = str(side).strip().upper()
+    side = str(
+        side
+    ).strip().upper()
 
     if side == "BUY":
         return mt5.ORDER_TYPE_BUY
@@ -1370,18 +1913,29 @@ def _build_market_request(
     comment: str = DEFAULT_COMMENT,
 ) -> Optional[Dict[str, Any]]:
 
-    symbol = _normalize_symbol(symbol)
-    side = str(side).strip().upper()
+    symbol = _normalize_symbol(
+        symbol
+    )
 
-    if not _is_pilot_symbol(symbol):
+    side = str(
+        side
+    ).strip().upper()
+
+    if not _is_pilot_symbol(
+        symbol
+    ):
         return None
 
-    order_type = _get_order_type(side)
+    order_type = _get_order_type(
+        side
+    )
 
     if order_type is None:
         return None
 
-    tick = get_symbol_tick(symbol)
+    tick = get_symbol_tick(
+        symbol
+    )
 
     if tick is None:
         return None
@@ -1406,25 +1960,34 @@ def _build_market_request(
             )
         )
 
-    if price is None or price <= 0:
+    if (
+        price is None
+        or price <= 0
+    ):
         return None
 
-    normalized_volume = normalize_volume(
-        symbol,
-        volume,
+    normalized_volume = (
+        normalize_volume(
+            symbol,
+            volume,
+        )
     )
 
     if normalized_volume <= 0:
         return None
 
-    normalized_sl = normalize_price(
-        symbol,
-        sl,
+    normalized_sl = (
+        normalize_price(
+            symbol,
+            sl,
+        )
     )
 
-    normalized_tp = normalize_price(
-        symbol,
-        tp,
+    normalized_tp = (
+        normalize_price(
+            symbol,
+            tp,
+        )
     )
 
     if (
@@ -1433,18 +1996,21 @@ def _build_market_request(
     ):
         return None
 
-    valid, reason = validate_sl_tp(
-        symbol=symbol,
-        side=side,
-        entry=price,
-        sl=normalized_sl,
-        tp=normalized_tp,
+    valid, reason = (
+        validate_sl_tp(
+            symbol=symbol,
+            side=side,
+            entry=price,
+            sl=normalized_sl,
+            tp=normalized_tp,
+        )
     )
 
     if not valid:
 
         logger.error(
-            "ORDER REQUEST BLOCKED | SL/TP | reason=%s",
+            "ORDER REQUEST BLOCKED | "
+            "SL/TP | reason=%s",
             reason,
         )
 
@@ -1462,7 +2028,9 @@ def _build_market_request(
         "magic": int(magic),
         "comment": str(comment),
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": get_filling_mode(symbol),
+        "type_filling": get_filling_mode(
+            symbol
+        ),
     }
 
 
@@ -1484,13 +2052,19 @@ def _order_check_success(
     )
 
     try:
-        retcode = int(retcode)
+
+        retcode = int(
+            retcode
+        )
+
     except Exception:
+
         return False
 
-    # MT5 successful order_check normally returns
-    # TRADE_RETCODE_DONE (10009).
-    return retcode == mt5.TRADE_RETCODE_DONE
+    return (
+        retcode
+        == mt5.TRADE_RETCODE_DONE
+    )
 
 
 # ============================================================
@@ -1505,16 +2079,26 @@ def check_market_order(
     tp: float,
     magic: int = DEFAULT_MAGIC,
     comment: str = DEFAULT_COMMENT,
-) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+) -> Tuple[
+    bool,
+    Optional[Dict[str, Any]],
+    str,
+]:
 
-    symbol = _normalize_symbol(symbol)
-    side = str(side).strip().upper()
+    symbol = _normalize_symbol(
+        symbol
+    )
+
+    side = str(
+        side
+    ).strip().upper()
 
     # --------------------------------------------------------
     # CONNECTION
     # --------------------------------------------------------
 
     if not ensure_connection():
+
         return (
             False,
             None,
@@ -1522,7 +2106,7 @@ def check_market_order(
         )
 
     # --------------------------------------------------------
-    # LIVE SAFETY GATE
+    # LIVE GATE
     # --------------------------------------------------------
 
     if not live_trading_allowed():
@@ -1537,10 +2121,12 @@ def check_market_order(
         )
 
     # --------------------------------------------------------
-    # PILOT SYMBOL
+    # SYMBOL
     # --------------------------------------------------------
 
-    if not _is_pilot_symbol(symbol):
+    if not _is_pilot_symbol(
+        symbol
+    ):
 
         return (
             False,
@@ -1609,6 +2195,22 @@ def check_market_order(
         )
 
     # --------------------------------------------------------
+    # DAILY LOSS LIMIT
+    # --------------------------------------------------------
+
+    daily_ok, daily_reason = (
+        validate_daily_loss_limit()
+    )
+
+    if not daily_ok:
+
+        return (
+            False,
+            None,
+            daily_reason,
+        )
+
+    # --------------------------------------------------------
     # VOLUME
     # --------------------------------------------------------
 
@@ -1625,7 +2227,8 @@ def check_market_order(
         )
 
     if (
-        requested_volume < MIN_PROJECT_LOT
+        requested_volume
+        < MIN_PROJECT_LOT
     ):
 
         return (
@@ -1635,7 +2238,8 @@ def check_market_order(
         )
 
     if (
-        requested_volume > MAX_PROJECT_LOT
+        requested_volume
+        > MAX_PROJECT_LOT
     ):
 
         return (
@@ -1644,9 +2248,11 @@ def check_market_order(
             "VOLUME_ABOVE_PROJECT_MAX",
         )
 
-    normalized_volume = normalize_volume(
-        symbol,
-        requested_volume,
+    normalized_volume = (
+        normalize_volume(
+            symbol,
+            requested_volume,
+        )
     )
 
     if normalized_volume <= 0:
@@ -1658,10 +2264,12 @@ def check_market_order(
         )
 
     # --------------------------------------------------------
-    # TICK / ENTRY
+    # ENTRY PRICE
     # --------------------------------------------------------
 
-    tick = get_symbol_tick(symbol)
+    tick = get_symbol_tick(
+        symbol
+    )
 
     if tick is None:
 
@@ -1699,7 +2307,10 @@ def check_market_order(
             "INVALID_SIDE",
         )
 
-    if entry is None or entry <= 0:
+    if (
+        entry is None
+        or entry <= 0
+    ):
 
         return (
             False,
@@ -1711,14 +2322,18 @@ def check_market_order(
     # SL / TP
     # --------------------------------------------------------
 
-    normalized_sl = normalize_price(
-        symbol,
-        sl,
+    normalized_sl = (
+        normalize_price(
+            symbol,
+            sl,
+        )
     )
 
-    normalized_tp = normalize_price(
-        symbol,
-        tp,
+    normalized_tp = (
+        normalize_price(
+            symbol,
+            tp,
+        )
     )
 
     if (
@@ -1797,9 +2412,26 @@ def check_market_order(
     # FINAL MT5 ORDER CHECK
     # --------------------------------------------------------
 
-    check_result = mt5.order_check(
-        request
-    )
+    try:
+
+        check_result = (
+            mt5.order_check(
+                request
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "MT5 ORDER CHECK EXCEPTION: %s",
+            exc,
+        )
+
+        return (
+            False,
+            None,
+            "ORDER_CHECK_EXCEPTION",
+        )
 
     if check_result is None:
 
@@ -1828,14 +2460,16 @@ def check_market_order(
             (
                 "ORDER_CHECK_FAILED:"
                 f"retcode={check_retcode}:"
-                f"comment={getattr(check_result, 'comment', '')}"
+                f"comment="
+                f"{getattr(check_result, 'comment', '')}"
             ),
         )
 
     logger.info(
         "FINAL ORDER CHECK PASSED | "
-        "symbol=%s | side=%s | volume=%s | "
-        "entry=%s | sl=%s | tp=%s",
+        "symbol=%s | side=%s | "
+        "volume=%s | entry=%s | "
+        "sl=%s | tp=%s",
         symbol,
         side,
         normalized_volume,
@@ -1858,31 +2492,108 @@ def check_market_order(
 def send_market_order(
     symbol: str,
     side: str,
-    volume: float,
-    sl: float,
-    tp: float,
+    volume: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp: Optional[float] = None,
     magic: int = DEFAULT_MAGIC,
     comment: str = DEFAULT_COMMENT,
+    lot: Optional[float] = None,
 ) -> Dict[str, Any]:
-
     """
     Send exactly ONE market order.
 
-    Important:
-        There is intentionally NO automatic retry after
-        mt5.order_send().
+    IMPORTANT:
 
-    An ambiguous result must never be retried automatically,
-    because the first request may have reached the broker.
+    - Paper trading blocks all real execution.
+    - Live trading requires both live flags.
+    - No automatic retry exists after order_send().
+    - An ambiguous result is never automatically retried.
+    - Project lot hard limit is 0.03.
+    - Project position limit is 5.
+    - order_check() must pass before order_send().
     """
+
+    # --------------------------------------------------------
+    # COMPATIBILITY: lot= alias
+    # --------------------------------------------------------
+
+    if volume is None:
+
+        volume = lot
+
+    if volume is None:
+
+        volume = DEFAULT_LOT
+
+    if sl is None or tp is None:
+
+        return {
+            "success": False,
+            "status": "BLOCKED",
+            "reason": "SL_TP_REQUIRED",
+            "ticket": None,
+            "order": None,
+            "deal": None,
+            "retcode": None,
+            "result": None,
+        }
+
+    # --------------------------------------------------------
+    # PAPER MODE HARD STOP
+    # --------------------------------------------------------
+
+    if bool(PAPER_TRADING):
+
+        logger.info(
+            "MT5 ORDER BLOCKED | "
+            "PAPER_TRADING=True | "
+            "NO REAL ORDER SEND"
+        )
+
+        return {
+            "success": False,
+            "status": "PAPER_BLOCKED",
+            "reason": "PAPER_TRADING_ENABLED",
+            "ticket": None,
+            "order": None,
+            "deal": None,
+            "retcode": None,
+            "result": None,
+        }
+
+    # --------------------------------------------------------
+    # LIVE FLAG HARD STOP
+    # --------------------------------------------------------
+
+    if not bool(ALLOW_LIVE_TRADING):
+
+        logger.warning(
+            "MT5 ORDER BLOCKED | "
+            "ALLOW_LIVE_TRADING=False"
+        )
+
+        return {
+            "success": False,
+            "status": "LIVE_BLOCKED",
+            "reason": "ALLOW_LIVE_TRADING_FALSE",
+            "ticket": None,
+            "order": None,
+            "deal": None,
+            "retcode": None,
+            "result": None,
+        }
+
+    # --------------------------------------------------------
+    # FINAL SAFETY GATE
+    # --------------------------------------------------------
 
     gate_ok, request, reason = (
         check_market_order(
             symbol=symbol,
             side=side,
-            volume=volume,
-            sl=sl,
-            tp=tp,
+            volume=float(volume),
+            sl=float(sl),
+            tp=float(tp),
             magic=magic,
             comment=comment,
         )
@@ -1891,7 +2602,8 @@ def send_market_order(
     if not gate_ok:
 
         logger.warning(
-            "MARKET ORDER BLOCKED | reason=%s",
+            "MARKET ORDER BLOCKED | "
+            "reason=%s",
             reason,
         )
 
@@ -1903,16 +2615,24 @@ def send_market_order(
             "order": None,
             "deal": None,
             "retcode": None,
+            "result": None,
         }
+
+    # --------------------------------------------------------
+    # EXACTLY ONE ORDER_SEND
+    # --------------------------------------------------------
 
     try:
 
         logger.warning(
             "MT5 ORDER SEND | "
-            "symbol=%s | side=%s | volume=%s",
+            "symbol=%s | side=%s | "
+            "volume=%s | sl=%s | tp=%s",
             symbol,
             side,
             request.get("volume"),
+            request.get("sl"),
+            request.get("tp"),
         )
 
         result = mt5.order_send(
@@ -1922,7 +2642,8 @@ def send_market_order(
     except Exception as exc:
 
         logger.exception(
-            "MT5 ORDER SEND EXCEPTION: %s",
+            "MT5 ORDER SEND EXCEPTION | "
+            "NO AUTOMATIC RETRY: %s",
             exc,
         )
 
@@ -1934,17 +2655,19 @@ def send_market_order(
             "order": None,
             "deal": None,
             "retcode": None,
+            "result": None,
         }
 
     # --------------------------------------------------------
-    # Ambiguous result
+    # AMBIGUOUS RESULT
     # --------------------------------------------------------
 
     if result is None:
 
         logger.error(
             "MT5 ORDER SEND RETURNED NONE | "
-            "NO AUTOMATIC RETRY | error=%s",
+            "NO AUTOMATIC RETRY | "
+            "error=%s",
             mt5.last_error(),
         )
 
@@ -1958,7 +2681,12 @@ def send_market_order(
             "order": None,
             "deal": None,
             "retcode": None,
+            "result": None,
         }
+
+    # --------------------------------------------------------
+    # RESULT EXTRACTION
+    # --------------------------------------------------------
 
     retcode = getattr(
         result,
@@ -1978,16 +2706,30 @@ def send_market_order(
         None,
     )
 
+    try:
+
+        retcode_int = int(
+            retcode
+        )
+
+    except Exception:
+
+        retcode_int = None
+
     # --------------------------------------------------------
-    # Success
+    # SUCCESS
     # --------------------------------------------------------
 
     success_codes = {
-        mt5.TRADE_RETCODE_DONE,
-        mt5.TRADE_RETCODE_DONE_PARTIAL,
+        int(
+            mt5.TRADE_RETCODE_DONE
+        ),
+        int(
+            mt5.TRADE_RETCODE_DONE_PARTIAL
+        ),
     }
 
-    if retcode in success_codes:
+    if retcode_int in success_codes:
 
         ticket = (
             deal_ticket
@@ -1996,8 +2738,9 @@ def send_market_order(
 
         logger.info(
             "MT5 ORDER SUCCESS | "
-            "retcode=%s | order=%s | deal=%s",
-            retcode,
+            "retcode=%s | "
+            "order=%s | deal=%s",
+            retcode_int,
             order_ticket,
             deal_ticket,
         )
@@ -2013,18 +2756,18 @@ def send_market_order(
             "ticket": ticket,
             "order": order_ticket,
             "deal": deal_ticket,
-            "retcode": retcode,
+            "retcode": retcode_int,
             "result": result,
         }
 
     # --------------------------------------------------------
-    # Failed order
+    # FAILED ORDER
     # --------------------------------------------------------
 
     logger.error(
         "MT5 ORDER FAILED | "
         "retcode=%s | comment=%s",
-        retcode,
+        retcode_int,
         getattr(
             result,
             "comment",
@@ -2043,7 +2786,7 @@ def send_market_order(
         "ticket": None,
         "order": order_ticket,
         "deal": deal_ticket,
-        "retcode": retcode,
+        "retcode": retcode_int,
         "result": result,
     }
 
@@ -2056,15 +2799,10 @@ def update_trade_status(
     ticket: int,
     status: str,
 ) -> bool:
-    """
-    Compatibility helper.
-
-    Database persistence remains handled by trade_manager.
-    This function intentionally does not mutate MT5 state.
-    """
 
     logger.info(
-        "TRADE STATUS | ticket=%s | status=%s",
+        "TRADE STATUS | "
+        "ticket=%s | status=%s",
         ticket,
         status,
     )
@@ -2073,55 +2811,104 @@ def update_trade_status(
 
 
 # ============================================================
+# COMPATIBILITY ALIAS
+# ============================================================
+
+def get_tick(
+    symbol: str = DEFAULT_SYMBOL,
+) -> Optional[Any]:
+    """
+    Backward-compatible alias used by legacy modules.
+    """
+
+    return get_symbol_tick(
+        symbol
+    )
+
+
+# ============================================================
 # CONNECTOR CLASS
 # ============================================================
 
 class MT5Connector:
     """
-    Object-oriented compatibility wrapper around the
-    module-level MT5 connector functions.
+    Object-oriented compatibility wrapper.
     """
 
     def __init__(
         self,
         path: str = MT5_PATH,
-        portable: bool = True,
+        portable: bool = MT5_PORTABLE_MODE,
     ) -> None:
 
         self.path = path
+
         self.portable = portable
 
     def initialize(self) -> bool:
+
         return initialize_mt5()
 
     def shutdown(self) -> bool:
+
         return shutdown_mt5()
 
     def is_connected(self) -> bool:
+
         return is_connected()
 
     def ensure_connection(self) -> bool:
+
         return ensure_connection()
 
-    def get_account_info(self) -> Optional[Any]:
+    def live_trading_allowed(self) -> bool:
+
+        return live_trading_allowed()
+
+    def get_account_info(
+        self,
+    ) -> Optional[Any]:
+
         return get_account_info()
 
     def get_account_snapshot(
         self,
     ) -> Optional[Dict[str, Any]]:
+
         return get_account_snapshot()
+
+    def get_account_trading_permissions(
+        self,
+    ) -> Dict[str, bool]:
+
+        return get_account_trading_permissions()
 
     def get_symbol_info(
         self,
         symbol: str = DEFAULT_SYMBOL,
     ) -> Optional[Any]:
-        return get_symbol_info(symbol)
+
+        return get_symbol_info(
+            symbol
+        )
 
     def get_symbol_tick(
         self,
         symbol: str = DEFAULT_SYMBOL,
     ) -> Optional[Any]:
-        return get_symbol_tick(symbol)
+
+        return get_symbol_tick(
+            symbol
+        )
+
+    def get_tick(
+        self,
+        symbol: str = DEFAULT_SYMBOL,
+    ) -> Optional[Any]:
+
+        return get_symbol_tick(
+            symbol
+        )
 
     def get_rates(
         self,
@@ -2129,6 +2916,7 @@ class MT5Connector:
         timeframe: str = DEFAULT_TIMEFRAME,
         count: int = 200,
     ) -> Optional[List[Any]]:
+
         return get_rates(
             symbol,
             timeframe,
@@ -2139,13 +2927,17 @@ class MT5Connector:
         self,
         symbol: Optional[str] = None,
     ) -> List[Any]:
-        return get_open_positions(symbol)
+
+        return get_open_positions(
+            symbol
+        )
 
     def get_project_positions(
         self,
         symbol: str = PILOT_SYMBOL,
         magic: int = DEFAULT_MAGIC,
     ) -> List[Any]:
+
         return get_project_positions(
             symbol,
             magic,
@@ -2156,6 +2948,7 @@ class MT5Connector:
         symbol: str = PILOT_SYMBOL,
         magic: int = DEFAULT_MAGIC,
     ) -> int:
+
         return get_open_position_count(
             symbol,
             magic,
@@ -2166,6 +2959,7 @@ class MT5Connector:
         symbol: str,
         volume: Any,
     ) -> float:
+
         return normalize_volume(
             symbol,
             volume,
@@ -2176,21 +2970,45 @@ class MT5Connector:
         symbol: str,
         price: Any,
     ) -> Optional[float]:
+
         return normalize_price(
             symbol,
             price,
         )
 
-    def send_market_order(
+    def calculate_margin(
         self,
         symbol: str,
         side: str,
         volume: float,
-        sl: float,
-        tp: float,
+        price: float,
+    ) -> Optional[float]:
+
+        return calculate_margin(
+            symbol,
+            side,
+            volume,
+            price,
+        )
+
+    def validate_daily_loss_limit(
+        self,
+    ) -> Tuple[bool, str]:
+
+        return validate_daily_loss_limit()
+
+    def send_market_order(
+        self,
+        symbol: str,
+        side: str,
+        volume: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
         magic: int = DEFAULT_MAGIC,
         comment: str = DEFAULT_COMMENT,
+        lot: Optional[float] = None,
     ) -> Dict[str, Any]:
+
         return send_market_order(
             symbol=symbol,
             side=side,
@@ -2199,6 +3017,7 @@ class MT5Connector:
             tp=tp,
             magic=magic,
             comment=comment,
+            lot=lot,
         )
 
 
@@ -2217,6 +3036,8 @@ __all__ = [
     "MAX_PROJECT_POSITIONS",
     "PROJECT_MAX_POSITIONS",
     "MT5_PATH",
+    "MT5_LOGIN_TARGET",
+    "MT5_SERVER_TARGET",
     "TIMEFRAME_MAP",
     "live_trading_allowed",
     "initialize_mt5",
@@ -2227,8 +3048,12 @@ __all__ = [
     "get_account_snapshot",
     "get_margin_mode",
     "get_account_trading_permissions",
+    "get_today_realized_profit",
+    "get_daily_loss_snapshot",
+    "validate_daily_loss_limit",
     "get_symbol_info",
     "get_symbol_tick",
+    "get_tick",
     "get_filling_mode",
     "get_timeframe",
     "get_rates",
