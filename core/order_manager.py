@@ -1,4 +1,3 @@
-```python
 # core/order_manager.py
 
 from __future__ import annotations
@@ -1497,4 +1496,3 @@ __all__ = [
     "close_position",
     "get_order_manager_status",
 ]
-```
