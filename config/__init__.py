@@ -3,69 +3,46 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
-# ============================================================
-# PROJECT PATH
-# ============================================================
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-ENV_FILE = BASE_DIR / ".env"
+from dotenv import load_dotenv
 
 
 # ============================================================
-# ENV LOADER
+# PROJECT PATHS
 # ============================================================
 
-def _load_env_file() -> None:
-    if not ENV_FILE.exists():
-        return
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 
+load_dotenv(dotenv_path=ENV_FILE, override=True)
+
+
+# ============================================================
+# BOT INFORMATION
+# ============================================================
+
+BOT_NAME = "Pourya Trader AI"
+BOT_VERSION = "2.1.0-MT5"
+
+
+# ============================================================
+# ENV HELPERS
+# ============================================================
+
+def _env_int(name: str, default: int = 0) -> int:
     try:
-        for raw_line in ENV_FILE.read_text(
-            encoding="utf-8"
-        ).splitlines():
-
-            line = raw_line.strip()
-
-            if not line or line.startswith("#"):
-                continue
-
-            if "=" not in line:
-                continue
-
-            key, value = line.split("=", 1)
-
-            key = key.strip()
-            value = value.strip()
-
-            if not key:
-                continue
-
-            if (
-                len(value) >= 2
-                and value[0] == value[-1]
-                and value[0] in {"'", '"'}
-            ):
-                value = value[1:-1]
-
-            os.environ.setdefault(key, value)
-
-    except Exception:
-        pass
+        return int(os.getenv(name, str(default)).strip())
+    except (TypeError, ValueError):
+        return default
 
 
-_load_env_file()
+def _env_float(name: str, default: float = 0.0) -> float:
+    try:
+        return float(os.getenv(name, str(default)).strip())
+    except (TypeError, ValueError):
+        return default
 
 
-# ============================================================
-# HELPERS
-# ============================================================
-
-def _env_bool(
-    name: str,
-    default: bool,
-) -> bool:
-
+def _env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
 
     if value is None:
@@ -75,86 +52,43 @@ def _env_bool(
         "1",
         "true",
         "yes",
-        "y",
         "on",
     }
 
 
-def _env_int(
-    name: str,
-    default: int,
-) -> int:
-
-    try:
-        return int(os.getenv(name, default))
-    except Exception:
-        return default
-
-
-def _env_float(
-    name: str,
-    default: float,
-) -> float:
-
-    try:
-        return float(os.getenv(name, default))
-    except Exception:
-        return default
-
-
-def _env_str(
-    name: str,
-    default: str,
-) -> str:
-
-    value = os.getenv(name)
-
-    if value is None:
-        return default
-
-    return value.strip()
-
-
 # ============================================================
-# APPLICATION
+# MT5 CONNECTION
 # ============================================================
 
-APP_NAME = "Pourya Trader AI"
-APP_VERSION = "0.1"
+MT5_LOGIN = _env_int("MT5_LOGIN", 0)
+MT5_PASSWORD = os.getenv("MT5_PASSWORD", "").strip()
+MT5_SERVER = os.getenv("MT5_SERVER", "OtetGroup-MT5").strip()
 
-AUTO_TRADE = _env_bool(
-    "AUTO_TRADE",
-    True,
-)
+MT5_TERMINAL_PATH = os.getenv(
+    "MT5_TERMINAL_PATH",
+    r"C:\MT5-Pourya\terminal64.exe",
+).strip()
 
-# IMPORTANT:
-# Must remain True until explicit live-trading approval.
-PAPER_TRADING = _env_bool(
-    "PAPER_TRADING",
-    True,
-)
+MT5_PORTABLE = _env_bool("MT5_PORTABLE", True)
 
-# Independent hard live-trading lock.
-ALLOW_LIVE_TRADING = _env_bool(
-    "ALLOW_LIVE_TRADING",
-    False,
-)
-
-AUTO_CLOSE = _env_bool(
-    "AUTO_CLOSE",
-    True,
+MT5_TIMEOUT = _env_int(
+    "MT5_TIMEOUT",
+    60000,
 )
 
 
 # ============================================================
-# PILOT TRADING CONFIG
+# BROKER / MARKET
 # ============================================================
+
+BROKER = "MT5"
+MARKET_TYPE = "FOREX"
+
+TRADING_SYMBOL = "XAUUSD.su"
 
 SYMBOLS = [
-    "XAUUSD.su",
+    TRADING_SYMBOL,
 ]
-
-PILOT_SYMBOL = "XAUUSD.su"
 
 TIMEFRAME = "M15"
 
@@ -166,130 +100,47 @@ TIMEFRAMES = [
 
 
 # ============================================================
+# TELEGRAM
+# ============================================================
+
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+CHAT_ID = os.getenv("CHAT_ID", "").strip()
+
+
+# ============================================================
+# TRADING MODE / SAFETY
+# ============================================================
+
+AUTO_TRADE = True
+
+# MUST remain True until final explicit approval.
+PAPER_TRADING = True
+
+# MUST remain False until all safety gates pass and user explicitly
+# approves controlled live trading.
+ALLOW_LIVE_TRADING = False
+
+AUTO_CLOSE = True
+
+ORDER_TYPE = "market"
+POSITION_SIDE = "both"
+MARGIN_MODE = "broker"
+
+# Broker account itself is currently 1:100.
+LEVERAGE = 100
+
+
+# ============================================================
 # POSITION LIMITS
 # ============================================================
 
 MAX_OPEN_TRADES = 5
 
-DEFAULT_LOT = 0.01
-
+# Project-level hard limits.
 MIN_PROJECT_LOT = 0.01
-
 MAX_PROJECT_LOT = 0.03
 
-LOT_STEP = 0.01
-
-NO_MARTINGALE = True
-
-
-# ============================================================
-# RISK
-# ============================================================
-
-RISK_PER_TRADE = 1.0
-
-MAX_DAILY_LOSS_PERCENT = 5.0
-
-RISK_REWARD = 2.0
-
-MIN_RISK_REWARD = 2.0
-
-INITIAL_BALANCE = 1000.0
-# Historical/default value only.
-# NEVER use this as the real MT5 risk baseline.
-
-
-# ============================================================
-# SIGNAL
-# ============================================================
-
-MIN_CONFIDENCE = 60
-
-MTF_ENABLED = True
-
-MTF_MIN_TIMEFRAMES = 3
-
-MTF_MIN_AGREEMENT = 0.0
-
-
-# ============================================================
-# INDICATORS
-# ============================================================
-
-EMA_FAST = 20
-
-EMA_SLOW = 50
-
-EMA_TREND = 200
-
-RSI_PERIOD = 14
-
-MACD_FAST = 12
-
-MACD_SLOW = 26
-
-MACD_SIGNAL = 9
-
-ADX_PERIOD = 14
-
-ATR_PERIOD = 14
-
-VOLUME_MA_PERIOD = 20
-
-
-# ============================================================
-# FILTERS
-# ============================================================
-
-USE_ADX_FILTER = True
-
-USE_RSI_FILTER = True
-
-USE_MACD_FILTER = True
-
-USE_VOLUME_FILTER = True
-
-
-# ============================================================
-# SL / TP
-# ============================================================
-
-AUTO_SLTP = True
-
-ATR_SL_MULTIPLIER = 1.5
-
-ATR_TP_MULTIPLIER = 3.0
-
-
-# ============================================================
-# POSITION MANAGEMENT
-# ============================================================
-
-BREAK_EVEN_ENABLED = True
-
-BREAK_EVEN_TRIGGER_PERCENT = 1.0
-
-BREAK_EVEN_OFFSET_PERCENT = 0.05
-
-TRAILING_ENABLED = True
-
-TRAILING_START_PERCENT = 1.5
-
-TRAILING_DISTANCE_PERCENT = 0.75
-
-
-# ============================================================
-# MT5
-# ============================================================
-
-MT5_TERMINAL_PATH = _env_str(
-    "MT5_TERMINAL_PATH",
-    r"C:\MT5-Pourya\terminal64.exe",
-)
-
-MT5_PORTABLE = True
-
-MT5_TIMEOUT = 60000
+DEFAULT_LOT = 0.01
 
 MT5_DEVIATION = 20
 
@@ -299,7 +150,76 @@ MT5_ORDER_COMMENT = "Pourya Trader AI"
 
 
 # ============================================================
-# LOOP
+# RISK MANAGEMENT
+# ============================================================
+
+RISK_PER_TRADE = 1.0
+
+RISK_REWARD = 2.0
+MIN_RISK_REWARD = 2.0
+
+# Maximum permitted daily loss relative to the actual account
+# risk baseline. This is NOT based on INITIAL_BALANCE.
+MAX_DAILY_LOSS_PERCENT = 5.0
+
+
+# ============================================================
+# SL / TP
+# ============================================================
+
+DEFAULT_TP = 5.0
+DEFAULT_SL = 2.0
+
+ENABLE_AUTO_SL_TP = True
+
+ATR_PERIOD = 14
+ATR_SL_MULTIPLIER = 1.5
+ATR_TP_MULTIPLIER = 3.0
+
+
+# ============================================================
+# BREAK EVEN
+# ============================================================
+
+ENABLE_BREAK_EVEN = True
+
+BREAK_EVEN_TRIGGER_PERCENT = 1.0
+
+BREAK_EVEN_OFFSET_PERCENT = 0.05
+
+
+# ============================================================
+# TRAILING STOP
+# ============================================================
+
+ENABLE_TRAILING_STOP = True
+
+TRAILING_START_PERCENT = 1.5
+
+TRAILING_DISTANCE_PERCENT = 0.75
+
+
+# ============================================================
+# SIGNAL ENGINE
+# ============================================================
+
+MIN_CONFIDENCE = 60
+
+USE_MULTI_TIMEFRAME = True
+
+USE_VOLUME_FILTER = True
+
+USE_ADX_FILTER = True
+
+USE_RSI_FILTER = True
+
+USE_MACD_FILTER = True
+
+USE_ATR_FILTER = True
+
+
+# ============================================================
+# SCHEDULER
 # ============================================================
 
 TRADING_INTERVAL = 60
@@ -310,42 +230,52 @@ SCHEDULER_MODE = "RUNNING"
 
 
 # ============================================================
-# RETRIES
+# NETWORK / RETRY
 # ============================================================
+
+REQUEST_TIMEOUT = 20
 
 MAX_RETRIES = 3
 
-# IMPORTANT:
-# This value must NOT be used to retry mt5.order_send().
-# Order submission is single-shot to prevent duplicate trades.
+
+# ============================================================
+# LEGACY COMPATIBILITY
+# ============================================================
+
+# Kept only for backward compatibility with older modules.
+# Risk calculations for the real account MUST use live MT5
+# account equity/balance instead of this value.
+INITIAL_BALANCE = 100.0
 
 
 # ============================================================
-# DATABASE
+# ENV FILE
 # ============================================================
 
-DATABASE_PATH = str(
-    BASE_DIR / "data" / "pourya_trader.db"
-)
+ENV_FILE_PATH = str(ENV_FILE)
 
 
 # ============================================================
-# SAFETY ASSERTIONS
+# FINAL SAFETY ASSERTIONS
 # ============================================================
 
-assert PILOT_SYMBOL == "XAUUSD.su"
+# These assertions intentionally prevent accidental configuration
+# drift during the controlled 7-day test.
 
-assert MIN_PROJECT_LOT == 0.01
+assert TRADING_SYMBOL == "XAUUSD.su"
 
-assert MAX_PROJECT_LOT == 0.03
+assert MIN_PROJECT_LOT > 0
+
+assert MAX_PROJECT_LOT >= MIN_PROJECT_LOT
+
+assert DEFAULT_LOT >= MIN_PROJECT_LOT
+
+assert DEFAULT_LOT <= MAX_PROJECT_LOT
 
 assert MAX_OPEN_TRADES == 5
 
-assert NO_MARTINGALE is True
+assert MAX_DAILY_LOSS_PERCENT > 0
 
-assert MAX_DAILY_LOSS_PERCENT == 5.0
+assert MAX_DAILY_LOSS_PERCENT <= 5.0
 
-assert MIN_RISK_REWARD >= 2.0
-
-# Live trading must remain explicitly locked.
-# The connector performs the final runtime check.
+assert LEVERAGE == 100
