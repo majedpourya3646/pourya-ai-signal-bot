@@ -54,6 +54,15 @@ except Exception:
     DAILY_LOSS_LIMIT_PCT = float(os.getenv("DAILY_LOSS_LIMIT_PCT", "5"))
 
 
+# Explicit module-level project symbol export.
+# This must exist even if a non-symbol config import is missing.
+try:
+    from config import PILOT_SYMBOL as _CONFIG_PILOT_SYMBOL
+except Exception:
+    _CONFIG_PILOT_SYMBOL = os.getenv("PILOT_SYMBOL", "XAUUSD.su")
+PILOT_SYMBOL = str(_CONFIG_PILOT_SYMBOL)
+
+
 # Compatibility aliases used by older project modules.
 DEFAULT_MAGIC = MT5_MAGIC_NUMBER
 MAGIC_NUMBER = MT5_MAGIC_NUMBER
