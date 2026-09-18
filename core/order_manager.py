@@ -34,7 +34,6 @@ from core.mt5_connector import (
     normalize_volume,
     send_market_order,
     validate_daily_loss_limit,
-    validate_position_limit,
 )
 
 from core.position_manager import (
@@ -46,7 +45,7 @@ from core.position_manager import (
 # CONFIGURATION
 # ============================================================
 
-MAGIC_NUMBER = MT5_MAGIC_NUMBER
+MAGIC_NUMBER = int(MT5_MAGIC_NUMBER)
 PROJECT_SYMBOL = PILOT_SYMBOL
 
 MAX_OPEN_POSITIONS = min(
@@ -54,10 +53,11 @@ MAX_OPEN_POSITIONS = min(
     5,
 )
 
-MIN_LOT = MIN_PROJECT_LOT
-MAX_LOT = MAX_PROJECT_LOT
+MIN_LOT = float(MIN_PROJECT_LOT)
+MAX_LOT = float(MAX_PROJECT_LOT)
 
-DEFAULT_DEVIATION_VALUE = DEFAULT_DEVIATION
+DEFAULT_LOT_VALUE = float(DEFAULT_LOT)
+DEFAULT_DEVIATION_VALUE = int(DEFAULT_DEVIATION)
 DEFAULT_COMMENT = MT5_ORDER_COMMENT
 
 
@@ -65,25 +65,17 @@ DEFAULT_COMMENT = MT5_ORDER_COMMENT
 # SIDE
 # ============================================================
 
-def _normalize_side(
-    side: str,
-) -> Optional[str]:
+def _normalize_side(side: str) -> Optional[str]:
 
     if side is None:
         return None
 
     value = str(side).upper().strip()
 
-    if value in (
-        "BUY",
-        "STRONG BUY",
-    ):
+    if value in ("BUY", "STRONG BUY"):
         return "BUY"
 
-    if value in (
-        "SELL",
-        "STRONG SELL",
-    ):
+    if value in ("SELL", "STRONG SELL"):
         return "SELL"
 
     return None
@@ -97,22 +89,18 @@ def check_connection() -> bool:
 
     try:
         if not ensure_connection():
-
             logger.error(
                 "ORDER MANAGER: MT5 NOT CONNECTED"
             )
-
             return False
 
         return True
 
     except Exception as exc:
-
         logger.exception(
             "ORDER MANAGER CONNECTION ERROR: %s",
             exc,
         )
-
         return False
 
 
@@ -123,26 +111,21 @@ def check_connection() -> bool:
 def get_account():
 
     try:
-
         account = get_account_info()
 
         if account is None:
-
             logger.error(
                 "ORDER MANAGER: ACCOUNT INFO UNAVAILABLE"
             )
-
             return None
 
         return account
 
     except Exception as exc:
-
         logger.exception(
             "ORDER MANAGER ACCOUNT ERROR: %s",
             exc,
         )
-
         return None
 
 
@@ -154,12 +137,7 @@ def get_account_equity() -> float:
         return 0.0
 
     return float(
-        getattr(
-            account,
-            "equity",
-            0.0,
-        )
-        or 0.0
+        getattr(account, "equity", 0.0) or 0.0
     )
 
 
@@ -171,18 +149,21 @@ def get_account_balance() -> float:
         return 0.0
 
     return float(
-        getattr(
-            account,
-            "balance",
-            0.0,
-        )
-        or 0.0
+        getattr(account, "balance", 0.0) or 0.0
     )
 
 
 def get_account_free_margin() -> float:
 
-    return get_free_margin()
+    try:
+        return float(get_free_margin() or 0.0)
+
+    except Exception as exc:
+        logger.exception(
+            "FREE MARGIN ERROR: %s",
+            exc,
+        )
+        return 0.0
 
 
 # ============================================================
@@ -192,13 +173,14 @@ def get_account_free_margin() -> float:
 def get_position_count() -> int:
 
     try:
-
         return int(
-            get_project_position_count()
+            get_project_position_count(
+                symbol=PROJECT_SYMBOL,
+                magic=MAGIC_NUMBER,
+            )
         )
 
     except Exception as exc:
-
         logger.exception(
             "PROJECT POSITION COUNT ERROR: %s",
             exc,
@@ -213,21 +195,42 @@ def get_positions(
 ):
 
     try:
-
-        if symbol is None:
-            symbol = PROJECT_SYMBOL
+        target_symbol = symbol or PROJECT_SYMBOL
 
         return get_open_positions(
-            symbol=symbol
+            symbol=target_symbol,
+            magic=MAGIC_NUMBER,
         )
 
-    except Exception as exc:
+    except TypeError:
+        # Compatibility with connectors that do not expose
+        # magic as a keyword argument.
+        try:
+            target_symbol = symbol or PROJECT_SYMBOL
+            positions = get_open_positions(
+                symbol=target_symbol
+            )
 
+            return [
+                position
+                for position in positions
+                if int(
+                    getattr(position, "magic", 0) or 0
+                ) == MAGIC_NUMBER
+            ]
+
+        except Exception as exc:
+            logger.exception(
+                "GET POSITIONS COMPATIBILITY ERROR: %s",
+                exc,
+            )
+            return []
+
+    except Exception as exc:
         logger.exception(
             "GET POSITIONS ERROR: %s",
             exc,
         )
-
         return []
 
 
@@ -236,31 +239,14 @@ def get_position_count_for_symbol(
 ) -> int:
 
     try:
-
-        positions = get_open_positions(
-            symbol=symbol
+        return int(
+            get_project_position_count(
+                symbol=symbol,
+                magic=MAGIC_NUMBER,
+            )
         )
 
-        count = 0
-
-        for position in positions:
-
-            magic = int(
-                getattr(
-                    position,
-                    "magic",
-                    0,
-                )
-                or 0
-            )
-
-            if magic == int(MAGIC_NUMBER):
-                count += 1
-
-        return count
-
     except Exception as exc:
-
         logger.exception(
             "SYMBOL POSITION COUNT ERROR: %s",
             exc,
@@ -278,29 +264,12 @@ def has_open_position(
 ) -> bool:
 
     try:
-
-        positions = get_open_positions(
-            symbol=symbol
+        return (
+            get_position_count_for_symbol(symbol)
+            > 0
         )
 
-        for position in positions:
-
-            magic = int(
-                getattr(
-                    position,
-                    "magic",
-                    0,
-                )
-                or 0
-            )
-
-            if magic == int(MAGIC_NUMBER):
-                return True
-
-        return False
-
     except Exception as exc:
-
         logger.exception(
             "OPEN POSITION CHECK ERROR %s: %s",
             symbol,
@@ -316,32 +285,15 @@ def has_same_direction_position(
     side: str,
 ) -> bool:
 
-    normalized_side = _normalize_side(
-        side
-    )
+    normalized_side = _normalize_side(side)
 
     if normalized_side is None:
         return True
 
     try:
-
-        positions = get_open_positions(
-            symbol=symbol
-        )
+        positions = get_positions(symbol)
 
         for position in positions:
-
-            magic = int(
-                getattr(
-                    position,
-                    "magic",
-                    0,
-                )
-                or 0
-            )
-
-            if magic != int(MAGIC_NUMBER):
-                continue
 
             position_type = getattr(
                 position,
@@ -352,6 +304,7 @@ def has_same_direction_position(
             # MT5:
             # POSITION_TYPE_BUY = 0
             # POSITION_TYPE_SELL = 1
+
             if (
                 normalized_side == "BUY"
                 and position_type == 0
@@ -367,7 +320,6 @@ def has_same_direction_position(
         return False
 
     except Exception as exc:
-
         logger.exception(
             "DIRECTION POSITION CHECK ERROR: %s",
             exc,
@@ -380,9 +332,7 @@ def has_same_direction_position(
 # SYMBOL
 # ============================================================
 
-def validate_symbol(
-    symbol: str,
-) -> bool:
+def validate_symbol(symbol: str) -> bool:
 
     if not symbol:
         return False
@@ -397,24 +347,27 @@ def validate_symbol(
         return False
 
     try:
-
-        info = get_symbol_info(
-            symbol
-        )
+        info = get_symbol_info(symbol)
 
         if info is None:
-
             logger.error(
                 "SYMBOL NOT FOUND: %s",
                 symbol,
             )
+            return False
 
+        if not bool(
+            getattr(info, "visible", True)
+        ):
+            logger.error(
+                "SYMBOL NOT VISIBLE: %s",
+                symbol,
+            )
             return False
 
         return True
 
     except Exception as exc:
-
         logger.exception(
             "SYMBOL VALIDATION ERROR %s: %s",
             symbol,
@@ -434,7 +387,6 @@ def validate_volume(
 ) -> Optional[float]:
 
     try:
-
         requested = float(lot)
 
         if requested <= 0:
@@ -467,12 +419,10 @@ def validate_volume(
         return float(normalized)
 
     except Exception as exc:
-
         logger.exception(
             "VOLUME VALIDATION ERROR: %s",
             exc,
         )
-
         return None
 
 
@@ -484,22 +434,18 @@ def calculate_order_volume(
     """
     Conservative dynamic lot selection.
 
-    Rules:
-        confidence < 75  -> 0.01
-        confidence 75-84 -> 0.02
-        confidence >= 85 -> 0.03
+    confidence < 75  -> 0.01
+    confidence 75-84 -> 0.02
+    confidence >= 85 -> 0.03
 
     No Martingale.
-    No balance multiplication.
-    Hard ceiling = 0.03.
+    Hard ceiling = MAX_LOT.
     """
 
     if requested_lot is not None:
 
         try:
-            requested = float(
-                requested_lot
-            )
+            requested = float(requested_lot)
 
             requested = max(
                 MIN_LOT,
@@ -524,7 +470,6 @@ def calculate_order_volume(
             pass
 
     try:
-
         score = (
             float(confidence)
             if confidence is not None
@@ -532,7 +477,6 @@ def calculate_order_volume(
         )
 
     except Exception:
-
         score = 0.0
 
     if score >= 85.0:
@@ -573,7 +517,6 @@ def calculate_order_volume(
 def validate_position_limit() -> bool:
 
     try:
-
         count = get_position_count()
 
         if count >= MAX_OPEN_POSITIONS:
@@ -589,7 +532,6 @@ def validate_position_limit() -> bool:
         return True
 
     except Exception as exc:
-
         logger.exception(
             "POSITION LIMIT ERROR: %s",
             exc,
@@ -611,9 +553,7 @@ def can_open_new_position(
 
     if side is not None:
 
-        normalized_side = _normalize_side(
-            side
-        )
+        normalized_side = _normalize_side(side)
 
         if normalized_side is None:
             return False
@@ -643,7 +583,6 @@ def get_daily_loss():
         return get_daily_loss_snapshot()
 
     except Exception as exc:
-
         logger.exception(
             "DAILY LOSS READ ERROR: %s",
             exc,
@@ -662,10 +601,7 @@ def validate_daily_risk() -> bool:
 
         snapshot = get_daily_loss()
 
-        if not snapshot.get(
-            "valid",
-            False,
-        ):
+        if not snapshot.get("valid", False):
             return False
 
         if not snapshot.get(
@@ -675,13 +611,13 @@ def validate_daily_risk() -> bool:
             logger.warning(
                 "DAILY LOSS LIMIT REACHED"
             )
-
             return False
 
-        return validate_daily_loss_limit()
+        return bool(
+            validate_daily_loss_limit()
+        )
 
     except Exception as exc:
-
         logger.exception(
             "DAILY RISK ERROR: %s",
             exc,
@@ -703,9 +639,7 @@ def validate_prices(
 
     try:
 
-        normalized_side = _normalize_side(
-            side
-        )
+        normalized_side = _normalize_side(side)
 
         if normalized_side is None:
             return False
@@ -719,47 +653,40 @@ def validate_prices(
 
             return False
 
-        tick = get_symbol_tick(
-            symbol
-        )
+        tick = get_symbol_tick(symbol)
 
         if tick is None:
             return False
 
-        sl = float(sl)
-        tp = float(tp)
+        sl_value = float(sl)
+        tp_value = float(tp)
 
-        if sl <= 0 or tp <= 0:
+        if sl_value <= 0 or tp_value <= 0:
             return False
 
         if normalized_side == "BUY":
 
-            current_price = float(
-                tick.ask
-            )
+            current_price = float(tick.ask)
 
-            if sl >= current_price:
+            if sl_value >= current_price:
                 return False
 
-            if tp <= current_price:
+            if tp_value <= current_price:
                 return False
 
         else:
 
-            current_price = float(
-                tick.bid
-            )
+            current_price = float(tick.bid)
 
-            if sl <= current_price:
+            if sl_value <= current_price:
                 return False
 
-            if tp >= current_price:
+            if tp_value >= current_price:
                 return False
 
         return True
 
     except Exception as exc:
-
         logger.exception(
             "PRICE VALIDATION ERROR: %s",
             exc,
@@ -780,10 +707,22 @@ def validate_margin(
 
     try:
 
+        tick = get_symbol_tick(symbol)
+
+        if tick is None:
+            return False
+
+        price = (
+            float(tick.ask)
+            if _normalize_side(side) == "BUY"
+            else float(tick.bid)
+        )
+
         margin = calculate_margin(
             symbol,
-            side,
             volume,
+            side,
+            price,
         )
 
         if margin is None:
@@ -791,10 +730,7 @@ def validate_margin(
 
         free_margin = get_free_margin()
 
-        # Keep a safety buffer.
-        required_limit = (
-            float(margin) * 1.20
-        )
+        required_limit = float(margin) * 1.20
 
         if free_margin < required_limit:
 
@@ -810,7 +746,6 @@ def validate_margin(
         return True
 
     except Exception as exc:
-
         logger.exception(
             "MARGIN VALIDATION ERROR: %s",
             exc,
@@ -841,7 +776,6 @@ def live_gate() -> bool:
         return True
 
     except Exception:
-
         return False
 
 
@@ -864,9 +798,7 @@ def validate_order(
     if not validate_symbol(symbol):
         return False
 
-    normalized_side = _normalize_side(
-        side
-    )
+    normalized_side = _normalize_side(side)
 
     if normalized_side is None:
         return False
@@ -922,15 +854,12 @@ def open_market_position(
 
     try:
 
-        normalized_side = _normalize_side(
-            side
-        )
+        normalized_side = _normalize_side(side)
 
         if normalized_side is None:
             return None
 
         if lot is None:
-
             lot = calculate_order_volume(
                 confidence=confidence
             )
@@ -951,12 +880,12 @@ def open_market_position(
 
             return None
 
-        sl = normalize_price(
+        sl_value = normalize_price(
             symbol,
             float(sl),
         )
 
-        tp = normalize_price(
+        tp_value = normalize_price(
             symbol,
             float(tp),
         )
@@ -965,8 +894,8 @@ def open_market_position(
             symbol,
             normalized_side,
             volume,
-            sl,
-            tp,
+            sl_value,
+            tp_value,
             confidence,
         ):
             logger.warning(
@@ -977,9 +906,7 @@ def open_market_position(
 
             return None
 
-        tick = get_symbol_tick(
-            symbol
-        )
+        tick = get_symbol_tick(symbol)
 
         if tick is None:
             return None
@@ -998,40 +925,33 @@ def open_market_position(
         logger.info(
             "========================================"
         )
-
         logger.info(
             "ORDER MANAGER MARKET ORDER"
         )
-
         logger.info(
             "SYMBOL=%s SIDE=%s LOT=%.2f",
             symbol,
             normalized_side,
             volume,
         )
-
         logger.info(
             "PRICE=%s SL=%s TP=%s",
             expected_price,
-            sl,
-            tp,
+            sl_value,
+            tp_value,
         )
-
         logger.info(
             "CONFIDENCE=%s",
             confidence,
         )
-
         logger.info(
             "PAPER_TRADING=%s",
             PAPER_TRADING,
         )
-
         logger.info(
-            "LIVE_ALLOWED=%s",
+            "ALLOW_LIVE_TRADING=%s",
             ALLOW_LIVE_TRADING,
         )
-
         logger.info(
             "========================================"
         )
@@ -1054,8 +974,8 @@ def open_market_position(
                 "side": normalized_side,
                 "volume": volume,
                 "price": expected_price,
-                "sl": sl,
-                "tp": tp,
+                "sl": sl_value,
+                "tp": tp_value,
                 "ticket": None,
                 "order": None,
                 "deal": None,
@@ -1088,9 +1008,13 @@ def open_market_position(
             symbol=symbol,
             side=normalized_side,
             volume=volume,
-            sl=sl,
-            tp=tp,
-            magic=MAGIC_NUMBER,
+            sl=sl_value,
+            tp=tp_value,
+            confidence=float(
+                confidence
+                if confidence is not None
+                else 100.0
+            ),
             deviation=DEFAULT_DEVIATION_VALUE,
             comment=comment,
         )
@@ -1098,32 +1022,19 @@ def open_market_position(
         if not result:
             return None
 
-        if not result.get(
-            "success",
-            False,
-        ):
+        if not result.get("success", False):
 
             logger.error(
                 "MT5 ORDER FAILED: %s",
-                result.get(
-                    "error"
-                ),
+                result.get("error"),
             )
 
             return result
 
-        ticket = result.get(
-            "ticket"
-        )
+        ticket = result.get("ticket")
 
         if ticket is None:
-            ticket = result.get(
-                "order"
-            )
-
-        deal = result.get(
-            "deal"
-        )
+            ticket = result.get("order")
 
         return {
             "success": True,
@@ -1135,19 +1046,17 @@ def open_market_position(
                 "price",
                 expected_price,
             ),
-            "sl": sl,
-            "tp": tp,
+            "sl": sl_value,
+            "tp": tp_value,
             "ticket": ticket,
             "order": result.get(
                 "order",
                 ticket,
             ),
-            "deal": deal,
+            "deal": result.get("deal"),
             "confidence": confidence,
             "status": "OPEN",
-            "retcode": result.get(
-                "retcode"
-            ),
+            "retcode": result.get("retcode"),
         }
 
     except Exception as exc:
@@ -1175,7 +1084,6 @@ def create_order(
 ):
 
     if lot is None:
-
         lot = calculate_order_volume(
             confidence=confidence
         )
@@ -1232,9 +1140,7 @@ def place_order(
 # CLOSE POSITION
 # ============================================================
 
-def close_position(
-    ticket: int,
-) -> bool:
+def close_position(ticket: int) -> bool:
 
     try:
 
@@ -1258,9 +1164,7 @@ def close_position(
 
             return False
 
-        result = mt5_close_position(
-            ticket
-        )
+        result = mt5_close_position(ticket)
 
         return bool(result)
 
@@ -1291,7 +1195,7 @@ def get_order_manager_status() -> Dict[str, Any]:
             "max_open_positions": MAX_OPEN_POSITIONS,
             "min_lot": MIN_LOT,
             "max_lot": MAX_LOT,
-            "default_lot": DEFAULT_LOT,
+            "default_lot": DEFAULT_LOT_VALUE,
             "paper_trading": PAPER_TRADING,
             "allow_live_trading": ALLOW_LIVE_TRADING,
             "live_gate": live_gate(),
@@ -1308,6 +1212,7 @@ def get_order_manager_status() -> Dict[str, Any]:
             "max_open_positions": MAX_OPEN_POSITIONS,
             "min_lot": MIN_LOT,
             "max_lot": MAX_LOT,
+            "default_lot": DEFAULT_LOT_VALUE,
             "paper_trading": PAPER_TRADING,
             "allow_live_trading": ALLOW_LIVE_TRADING,
             "live_gate": False,
