@@ -1,805 +1,577 @@
-from __future__ import annotations
+```python
+# core/auto_trader.py
 
-from typing import Any, Dict, Optional
-
-from config import (
-    AUTO_TRADE,
-    DEFAULT_LOT,
-    MAX_OPEN_TRADES,
-    MIN_CONFIDENCE,
-)
+from typing import Optional, Dict, Any
 
 from core.logger import logger
 
-from core.mt5_connector import (
-    PILOT_SYMBOL,
-    DEFAULT_MAGIC,
-    get_open_position_count,
-)
-
 from core.order_manager import (
-    calculate_order_volume,
     open_market_position,
+    get_position_count,
+)
+
+from core.trade_manager import (
+    save_trade,
+)
+
+from config import (
+    MIN_CONFIDENCE,
+    MAX_OPEN_TRADES,
+    DEFAULT_LOT,
+    PAPER_TRADING,
+    PILOT_SYMBOL,
+    MT5_ORDER_COMMENT,
 )
 
 
 # ============================================================
-# PROJECT SETTINGS
+# Configuration
 # ============================================================
 
-XAUUSD_SYMBOL = PILOT_SYMBOL
-MAGIC_NUMBER = DEFAULT_MAGIC
+XAUUSD_SYMBOL = str(
+    PILOT_SYMBOL
+).strip()
 
-MAX_PROJECT_POSITIONS = min(
-    max(int(MAX_OPEN_TRADES), 1),
-    5,
-)
-
-MIN_SIGNAL_CONFIDENCE = float(MIN_CONFIDENCE)
+XAUUSD_SYMBOL_NORMALIZED = XAUUSD_SYMBOL.upper()
 
 
 # ============================================================
-# BASIC VALIDATION
+# Symbol Helpers
 # ============================================================
 
-def _validate_symbol(symbol: str) -> bool:
+def _normalize_symbol(
+    symbol: Any
+) -> str:
+
+    if symbol is None:
+
+        return ""
+
+    return str(
+        symbol
+    ).strip().upper()
+
+
+def _is_xauusd_symbol(
+    symbol: Any
+) -> bool:
+
     return (
-        isinstance(symbol, str)
-        and symbol.strip() == XAUUSD_SYMBOL
+        _normalize_symbol(symbol)
+        == XAUUSD_SYMBOL_NORMALIZED
     )
 
 
-def _validate_side(side: str) -> bool:
-    return (
-        isinstance(side, str)
-        and side.upper().strip() in {"BUY", "SELL"}
+# ============================================================
+# Signal Helpers
+# ============================================================
+
+def _normalize_signal(
+    signal: Any
+) -> Optional[str]:
+
+    if signal is None:
+
+        return None
+
+    signal = str(
+        signal
+    ).upper().strip()
+
+    if signal in (
+        "BUY",
+        "STRONG BUY"
+    ):
+
+        return "BUY"
+
+    if signal in (
+        "SELL",
+        "STRONG SELL"
+    ):
+
+        return "SELL"
+
+    return None
+
+
+# ============================================================
+# Opportunity Validation
+# ============================================================
+
+def _validate_opportunity(
+    opportunity: Dict[str, Any]
+) -> bool:
+
+    if not opportunity:
+
+        logger.info(
+            "NO OPPORTUNITY"
+        )
+
+        return False
+
+    raw_symbol = opportunity.get(
+        "symbol",
+        ""
     )
 
+    if not _is_xauusd_symbol(
+        raw_symbol
+    ):
 
-def _validate_confidence(confidence: Any) -> bool:
-    try:
-        value = float(confidence)
-    except Exception:
+        logger.warning(
+            f"TRADE REJECTED - ONLY "
+            f"{XAUUSD_SYMBOL} ALLOWED: "
+            f"{raw_symbol}"
+        )
+
         return False
 
-    return (
-        value >= MIN_SIGNAL_CONFIDENCE
-        and value <= 100.0
+    signal = _normalize_signal(
+        opportunity.get(
+            "signal",
+            ""
+        )
     )
 
+    if signal is None:
 
-def _validate_price(value: Any) -> bool:
-    try:
-        return float(value) > 0
-    except Exception:
+        logger.warning(
+            "INVALID SIGNAL"
+        )
+
         return False
-
-
-# ============================================================
-# POSITION COUNT
-# ============================================================
-
-def get_project_position_count(
-    symbol: str = XAUUSD_SYMBOL,
-) -> int:
-    if not _validate_symbol(symbol):
-        return MAX_PROJECT_POSITIONS
 
     try:
-        return int(
-            get_open_position_count(
-                symbol,
-                MAGIC_NUMBER,
+
+        confidence = float(
+            opportunity.get(
+                "confidence",
+                0
             )
         )
 
-    except Exception as exc:
-        logger.exception(
-            "AUTO TRADER: POSITION COUNT ERROR: %s",
-            exc,
-        )
+    except (
+        TypeError,
+        ValueError
+    ):
 
-        # Fail closed.
-        return MAX_PROJECT_POSITIONS
-
-
-def can_open_new_position(
-    symbol: str = XAUUSD_SYMBOL,
-) -> bool:
-
-    count = get_project_position_count(symbol)
-
-    if count >= MAX_PROJECT_POSITIONS:
         logger.warning(
-            "AUTO TRADER: MAX POSITION LIMIT "
-            "REACHED %s/%s",
-            count,
-            MAX_PROJECT_POSITIONS,
+            "INVALID CONFIDENCE"
         )
+
         return False
 
-    return True
+    if confidence < MIN_CONFIDENCE:
 
+        logger.info(
+            f"TRADE REJECTED - "
+            f"LOW CONFIDENCE={confidence} "
+            f"MIN={MIN_CONFIDENCE}"
+        )
 
-# ============================================================
-# DUPLICATE PROTECTION
-# ============================================================
+        return False
 
-def _same_direction_position_exists(
-    symbol: str,
-    side: str,
-) -> bool:
-    """
-    Prevent immediate stacking of the same directional
-    project position.
+    entry = opportunity.get(
+        "entry"
+    )
 
-    Hedge accounts still allow BUY and SELL positions
-    simultaneously, but this prevents repeated identical
-    signals from opening five copies of the same trade.
-    """
+    tp = opportunity.get(
+        "tp"
+    )
+
+    sl = opportunity.get(
+        "sl"
+    )
+
+    if (
+        entry is None
+        or tp is None
+        or sl is None
+    ):
+
+        logger.error(
+            "ENTRY / TP / SL MISSING"
+        )
+
+        return False
 
     try:
-        from core.mt5_connector import get_project_positions
 
-        positions = get_project_positions(
-            symbol=symbol,
-            magic=MAGIC_NUMBER,
+        entry = float(entry)
+        tp = float(tp)
+        sl = float(sl)
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        logger.error(
+            "INVALID ENTRY / TP / SL"
         )
-
-        if not positions:
-            return False
-
-        requested_side = side.upper().strip()
-
-        for position in positions:
-
-            position_side = None
-
-            # MT5 position object.
-            if hasattr(position, "type"):
-                try:
-                    position_type = int(position.type)
-
-                    # MT5_POSITION_TYPE_BUY = 0
-                    # MT5_POSITION_TYPE_SELL = 1
-                    if position_type == 0:
-                        position_side = "BUY"
-                    elif position_type == 1:
-                        position_side = "SELL"
-
-                except Exception:
-                    pass
-
-            # Dictionary compatibility.
-            if isinstance(position, dict):
-                raw_type = position.get("type")
-
-                if isinstance(raw_type, str):
-                    raw_type = raw_type.upper()
-
-                    if raw_type in {"BUY", "SELL"}:
-                        position_side = raw_type
-
-                elif raw_type is not None:
-                    try:
-                        position_type = int(raw_type)
-
-                        if position_type == 0:
-                            position_side = "BUY"
-                        elif position_type == 1:
-                            position_side = "SELL"
-
-                    except Exception:
-                        pass
-
-            if position_side == requested_side:
-                return True
 
         return False
 
-    except Exception as exc:
-        logger.exception(
-            "AUTO TRADER: DUPLICATE CHECK ERROR: %s",
-            exc,
+    if (
+        entry <= 0
+        or tp <= 0
+        or sl <= 0
+    ):
+
+        logger.error(
+            f"INVALID PRICE VALUES "
+            f"ENTRY={entry} "
+            f"SL={sl} "
+            f"TP={tp}"
         )
 
-        # Fail closed.
-        return True
-
-
-# ============================================================
-# SIGNAL VALIDATION
-# ============================================================
-
-def validate_signal(
-    symbol: str,
-    side: str,
-    confidence: float,
-    entry: float,
-    sl: Optional[float] = None,
-    tp: Optional[float] = None,
-) -> bool:
-
-    if not _validate_symbol(symbol):
-        logger.warning(
-            "AUTO TRADER: INVALID SYMBOL %s",
-            symbol,
-        )
         return False
 
-    if not _validate_side(side):
-        logger.warning(
-            "AUTO TRADER: INVALID SIDE %s",
-            side,
-        )
-        return False
+    # --------------------------------------------------------
+    # Price structure
+    # --------------------------------------------------------
 
-    if not _validate_confidence(confidence):
-        logger.warning(
-            "AUTO TRADER: CONFIDENCE BELOW "
-            "MINIMUM: %s",
-            confidence,
-        )
-        return False
+    if signal == "BUY":
 
-    if not _validate_price(entry):
-        logger.warning(
-            "AUTO TRADER: INVALID ENTRY PRICE"
-        )
-        return False
+        if not (
+            sl < entry < tp
+        ):
 
-    side = side.upper().strip()
-
-    try:
-        entry_value = float(entry)
-    except Exception:
-        return False
-
-    if sl is not None:
-        if not _validate_price(sl):
-            return False
-
-        sl_value = float(sl)
-
-        if side == "BUY" and sl_value >= entry_value:
             logger.warning(
-                "AUTO TRADER: BUY SL MUST BE BELOW ENTRY"
+                "TRADE REJECTED - "
+                "INVALID BUY PRICE STRUCTURE"
             )
+
             return False
 
-        if side == "SELL" and sl_value <= entry_value:
+    elif signal == "SELL":
+
+        if not (
+            tp < entry < sl
+        ):
+
             logger.warning(
-                "AUTO TRADER: SELL SL MUST BE ABOVE ENTRY"
+                "TRADE REJECTED - "
+                "INVALID SELL PRICE STRUCTURE"
             )
-            return False
 
-    if tp is not None:
-        if not _validate_price(tp):
-            return False
-
-        tp_value = float(tp)
-
-        if side == "BUY" and tp_value <= entry_value:
-            logger.warning(
-                "AUTO TRADER: BUY TP MUST BE ABOVE ENTRY"
-            )
-            return False
-
-        if side == "SELL" and tp_value >= entry_value:
-            logger.warning(
-                "AUTO TRADER: SELL TP MUST BE BELOW ENTRY"
-            )
             return False
 
     return True
 
 
 # ============================================================
-# RISK / REWARD
-# ============================================================
-
-def calculate_risk_reward(
-    side: str,
-    entry: float,
-    sl: Optional[float],
-    tp: Optional[float],
-) -> float:
-
-    if sl is None or tp is None:
-        return 0.0
-
-    try:
-        entry_value = float(entry)
-        sl_value = float(sl)
-        tp_value = float(tp)
-    except Exception:
-        return 0.0
-
-    risk = abs(
-        entry_value - sl_value
-    )
-
-    reward = abs(
-        tp_value - entry_value
-    )
-
-    if risk <= 0:
-        return 0.0
-
-    return reward / risk
-
-
-# ============================================================
-# LOT SELECTION
-# ============================================================
-
-def select_order_volume(
-    confidence: Optional[float] = None,
-    requested_lot: Optional[float] = None,
-) -> float:
-    """
-    Select project volume.
-
-    Hard limits are enforced by order_manager:
-        0.01 <= lot <= 0.03
-
-    No Martingale.
-    """
-
-    try:
-        return float(
-            calculate_order_volume(
-                requested_lot=(
-                    DEFAULT_LOT
-                    if requested_lot is None
-                    else requested_lot
-                ),
-                confidence=confidence,
-            )
-        )
-
-    except Exception as exc:
-        logger.exception(
-            "AUTO TRADER: LOT CALCULATION ERROR: %s",
-            exc,
-        )
-
-        return 0.0
-
-
-# ============================================================
-# EXECUTE TRADE
+# Execute Trade
 # ============================================================
 
 def execute_trade(
-    symbol: str = XAUUSD_SYMBOL,
-    side: str = "BUY",
-    confidence: float = 0.0,
-    entry: Optional[float] = None,
-    sl: Optional[float] = None,
-    tp: Optional[float] = None,
-    lot: Optional[float] = None,
-    reason: str = "SIGNAL",
-    **kwargs: Any,
-) -> Dict[str, Any]:
-    """
-    Main automated trading entry point.
-
-    Safety order:
-
-        AUTO_TRADE
-          ↓
-        Symbol
-          ↓
-        Side
-          ↓
-        Confidence
-          ↓
-        Position limit
-          ↓
-        Duplicate protection
-          ↓
-        Price / SL / TP
-          ↓
-        Risk/Reward
-          ↓
-        Volume
-          ↓
-        order_manager
-          ↓
-        mt5_connector final safety gate
-    """
+    opportunity: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
 
     try:
 
         # ----------------------------------------------------
-        # AUTO TRADING MASTER SWITCH
+        # Validate opportunity
         # ----------------------------------------------------
 
-        if not bool(AUTO_TRADE):
-            return {
-                "success": False,
-                "status": "REJECTED",
-                "reason": "AUTO_TRADE_DISABLED",
-            }
-
-        # ----------------------------------------------------
-        # Compatibility aliases
-        # ----------------------------------------------------
-
-        if entry is None:
-            entry = kwargs.get(
-                "entry_price",
-                kwargs.get("price"),
-            )
-
-        if sl is None:
-            sl = kwargs.get(
-                "stop_loss",
-                kwargs.get("stop"),
-            )
-
-        if tp is None:
-            tp = kwargs.get(
-                "take_profit",
-                kwargs.get("target"),
-            )
-
-        if lot is None:
-            lot = kwargs.get(
-                "volume",
-                kwargs.get("quantity"),
-            )
-
-        # ----------------------------------------------------
-        # Normalize
-        # ----------------------------------------------------
-
-        symbol = str(symbol).strip()
-        side = str(side).upper().strip()
-
-        # ----------------------------------------------------
-        # Signal validation
-        # ----------------------------------------------------
-
-        if entry is None:
-            return {
-                "success": False,
-                "status": "REJECTED",
-                "reason": "MISSING_ENTRY",
-                "symbol": symbol,
-            }
-
-        if not validate_signal(
-            symbol=symbol,
-            side=side,
-            confidence=confidence,
-            entry=entry,
-            sl=sl,
-            tp=tp,
+        if not _validate_opportunity(
+            opportunity
         ):
-            return {
-                "success": False,
-                "status": "REJECTED",
-                "reason": "INVALID_SIGNAL",
-                "symbol": symbol,
-                "side": side,
-                "confidence": confidence,
-            }
+
+            return None
 
         # ----------------------------------------------------
-        # Position limit
+        # Normalize symbol
         # ----------------------------------------------------
 
-        if not can_open_new_position(symbol):
-            return {
-                "success": False,
-                "status": "REJECTED",
-                "reason": "MAX_OPEN_POSITIONS",
-                "symbol": symbol,
-                "current_positions":
-                    get_project_position_count(symbol),
-                "max_positions":
-                    MAX_PROJECT_POSITIONS,
-            }
+        symbol = XAUUSD_SYMBOL
 
         # ----------------------------------------------------
-        # Duplicate protection
+        # Normalize signal
         # ----------------------------------------------------
 
-        if _same_direction_position_exists(
-            symbol,
-            side,
-        ):
+        signal = _normalize_signal(
+            opportunity.get(
+                "signal"
+            )
+        )
+
+        if signal is None:
+
             logger.warning(
-                "AUTO TRADER: DUPLICATE DIRECTION "
-                "BLOCKED | %s %s",
-                symbol,
-                side,
+                "TRADE REJECTED - "
+                "INVALID SIGNAL"
             )
 
-            return {
-                "success": False,
-                "status": "REJECTED",
-                "reason": "DUPLICATE_DIRECTION",
-                "symbol": symbol,
-                "side": side,
-            }
+            return None
 
         # ----------------------------------------------------
-        # Risk / Reward
+        # Values
         # ----------------------------------------------------
 
-        rr = calculate_risk_reward(
-            side=side,
-            entry=float(entry),
-            sl=sl,
-            tp=tp,
+        confidence = float(
+            opportunity.get(
+                "confidence",
+                0
+            )
         )
 
-        # If SL/TP are supplied, require positive RR.
-        if sl is not None and tp is not None:
-            if rr <= 0:
-                return {
-                    "success": False,
-                    "status": "REJECTED",
-                    "reason": "INVALID_RISK_REWARD",
-                    "symbol": symbol,
-                    "side": side,
-                    "risk_reward": rr,
-                }
-
-        # ----------------------------------------------------
-        # Volume
-        # ----------------------------------------------------
-
-        selected_lot = select_order_volume(
-            confidence=confidence,
-            requested_lot=lot,
+        entry = float(
+            opportunity.get(
+                "entry"
+            )
         )
 
-        if selected_lot <= 0:
-            return {
-                "success": False,
-                "status": "REJECTED",
-                "reason": "INVALID_VOLUME",
-                "symbol": symbol,
-            }
+        tp = float(
+            opportunity.get(
+                "tp"
+            )
+        )
+
+        sl = float(
+            opportunity.get(
+                "sl"
+            )
+        )
 
         # ----------------------------------------------------
-        # Log signal
+        # Position capacity
+        #
+        # Do NOT block merely because an XAUUSD position
+        # already exists.
+        #
+        # The final position-limit and safety validation
+        # remains inside order_manager / connector.
+        # ----------------------------------------------------
+
+        try:
+
+            current_positions = get_position_count()
+
+            if current_positions >= MAX_OPEN_TRADES:
+
+                logger.info(
+                    f"TRADE REJECTED - "
+                    f"MAX POSITIONS "
+                    f"{current_positions}/"
+                    f"{MAX_OPEN_TRADES}"
+                )
+
+                return None
+
+        except Exception as exc:
+
+            logger.exception(
+                f"POSITION COUNT ERROR {exc}"
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Lot
+        # ----------------------------------------------------
+
+        lot = DEFAULT_LOT
+
+        # ----------------------------------------------------
+        # Decision Log
         # ----------------------------------------------------
 
         logger.info(
-            "AUTO TRADER: VALID SIGNAL | "
-            "symbol=%s side=%s confidence=%.2f "
-            "entry=%s sl=%s tp=%s RR=%.2f lot=%.2f "
-            "reason=%s",
-            symbol,
-            side,
-            float(confidence),
-            entry,
-            sl,
-            tp,
-            rr,
-            selected_lot,
-            reason,
+            "================================"
+        )
+
+        logger.info(
+            "AUTO TRADER DECISION"
+        )
+
+        logger.info(
+            f"SYMBOL={symbol}"
+        )
+
+        logger.info(
+            f"SIGNAL={signal}"
+        )
+
+        logger.info(
+            f"CONFIDENCE={confidence}"
+        )
+
+        logger.info(
+            f"ENTRY={entry}"
+        )
+
+        logger.info(
+            f"SL={sl}"
+        )
+
+        logger.info(
+            f"TP={tp}"
+        )
+
+        logger.info(
+            f"LOT={lot}"
+        )
+
+        logger.info(
+            f"PAPER_TRADING={PAPER_TRADING}"
+        )
+
+        logger.info(
+            f"OPEN_POSITIONS="
+            f"{current_positions}/"
+            f"{MAX_OPEN_TRADES}"
+        )
+
+        logger.info(
+            "================================"
         )
 
         # ----------------------------------------------------
-        # SEND TO ORDER MANAGER
+        # Open position
+        #
+        # order_manager remains the final safety gate.
         # ----------------------------------------------------
 
-        result = open_market_position(
+        order = open_market_position(
             symbol=symbol,
-            side=side,
-            lot=selected_lot,
-            price=float(entry),
+            side=signal,
+            lot=lot,
             sl=sl,
             tp=tp,
-            confidence=float(confidence),
-            comment=(
-                f"Pourya Trader AI | {reason}"
+            confidence=confidence,
+            comment=MT5_ORDER_COMMENT,
+        )
+
+        if not order:
+
+            logger.error(
+                f"ORDER MANAGER REJECTED "
+                f"{symbol} {signal}"
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Trade status
+        #
+        # Paper trades must also use OPEN because
+        # paper_position_manager monitors OPEN trades.
+        # The paper/live distinction is stored separately.
+        # ----------------------------------------------------
+
+        is_paper = bool(
+            order.get(
+                "paper_trading",
+                PAPER_TRADING
+            )
+        )
+
+        status = "OPEN"
+
+        # ----------------------------------------------------
+        # Build trade record
+        # ----------------------------------------------------
+
+        trade = {
+            "ticket": order.get(
+                "ticket"
             ),
-        )
-
-        if not isinstance(result, dict):
-            result = {
-                "success": bool(result),
-                "status": (
-                    "SUCCESS"
-                    if result
-                    else "FAILED"
-                ),
-                "reason": (
-                    "LEGACY_ORDER_RESULT"
-                ),
-                "raw_result": result,
-            }
-
-        # ----------------------------------------------------
-        # Metadata
-        # ----------------------------------------------------
-
-        result.setdefault(
-            "symbol",
-            symbol,
-        )
-
-        result.setdefault(
-            "side",
-            side,
-        )
-
-        result.setdefault(
-            "confidence",
-            float(confidence),
-        )
-
-        result.setdefault(
-            "entry",
-            float(entry),
-        )
-
-        result.setdefault(
-            "sl",
-            sl,
-        )
-
-        result.setdefault(
-            "tp",
-            tp,
-        )
-
-        result.setdefault(
-            "risk_reward",
-            rr,
-        )
-
-        result.setdefault(
-            "volume",
-            selected_lot,
-        )
-
-        result.setdefault(
-            "reason",
-            reason,
-        )
-
-        # ----------------------------------------------------
-        # Final log
-        # ----------------------------------------------------
-
-        if result.get("success"):
-            logger.info(
-                "AUTO TRADER: TRADE ACCEPTED | "
-                "%s %s | lot=%.2f | ticket=%s",
-                symbol,
-                side,
-                selected_lot,
-                result.get("ticket"),
-            )
-        else:
-            logger.warning(
-                "AUTO TRADER: TRADE REJECTED | "
-                "reason=%s",
-                result.get("reason"),
-            )
-
-        return result
-
-    except Exception as exc:
-
-        logger.exception(
-            "AUTO TRADER: EXECUTE TRADE ERROR: %s",
-            exc,
-        )
-
-        return {
-            "success": False,
-            "status": "ERROR",
-            "reason": "AUTO_TRADER_EXCEPTION",
-            "error": str(exc),
+            "deal": order.get(
+                "deal"
+            ),
             "symbol": symbol,
-            "side": side,
+            "side": signal,
+            "entry": order.get(
+                "price",
+                entry
+            ),
+            "tp": tp,
+            "sl": sl,
+            "quantity": order.get(
+                "volume",
+                lot
+            ),
+            "confidence": confidence,
+            "status": status,
+            "paper_trading": is_paper,
         }
 
+        # ----------------------------------------------------
+        # Save trade
+        # ----------------------------------------------------
 
-# ============================================================
-# MAIN COMPATIBILITY ALIASES
-# ============================================================
-
-def auto_trade(
-    *args: Any,
-    **kwargs: Any,
-) -> Dict[str, Any]:
-
-    return execute_trade(
-        *args,
-        **kwargs,
-    )
-
-
-def run_auto_trade(
-    *args: Any,
-    **kwargs: Any,
-) -> Dict[str, Any]:
-
-    return execute_trade(
-        *args,
-        **kwargs,
-    )
-
-
-# ============================================================
-# STATUS
-# ============================================================
-
-def get_auto_trader_status() -> Dict[str, Any]:
-
-    try:
-        current_positions = (
-            get_project_position_count(
-                XAUUSD_SYMBOL
-            )
+        trade_id = save_trade(
+            trade
         )
 
-        return {
-            "enabled": bool(AUTO_TRADE),
-            "symbol": XAUUSD_SYMBOL,
-            "magic": MAGIC_NUMBER,
-            "current_positions": current_positions,
-            "max_positions":
-                MAX_PROJECT_POSITIONS,
-            "min_confidence":
-                MIN_SIGNAL_CONFIDENCE,
-            "default_lot":
-                float(DEFAULT_LOT),
-            "available_for_new_trade":
-                current_positions
-                < MAX_PROJECT_POSITIONS,
-        }
+        if trade_id is None:
+
+            logger.error(
+                "TRADE DATABASE SAVE FAILED"
+            )
+
+            return None
+
+        trade["id"] = trade_id
+
+        # ----------------------------------------------------
+        # Success Log
+        # ----------------------------------------------------
+
+        logger.info(
+            "================================"
+        )
+
+        logger.info(
+            "TRADE EXECUTED SUCCESSFULLY"
+        )
+
+        logger.info(
+            f"ID={trade_id}"
+        )
+
+        logger.info(
+            f"SYMBOL={symbol}"
+        )
+
+        logger.info(
+            f"SIDE={signal}"
+        )
+
+        logger.info(
+            f"ENTRY={trade.get('entry')}"
+        )
+
+        logger.info(
+            f"SL={sl}"
+        )
+
+        logger.info(
+            f"TP={tp}"
+        )
+
+        logger.info(
+            f"STATUS={status}"
+        )
+
+        logger.info(
+            f"PAPER_TRADING={is_paper}"
+        )
+
+        logger.info(
+            "================================"
+        )
+
+        return trade
 
     except Exception as exc:
 
         logger.exception(
-            "AUTO TRADER: STATUS ERROR: %s",
-            exc,
+            f"AUTO TRADER ERROR {exc}"
         )
 
-        return {
-            "enabled": False,
-            "symbol": XAUUSD_SYMBOL,
-            "magic": MAGIC_NUMBER,
-            "current_positions":
-                MAX_PROJECT_POSITIONS,
-            "max_positions":
-                MAX_PROJECT_POSITIONS,
-            "min_confidence":
-                MIN_SIGNAL_CONFIDENCE,
-            "default_lot":
-                float(DEFAULT_LOT),
-            "available_for_new_trade": False,
-            "error": str(exc),
-        }
-
-
-# ============================================================
-# EXPORTS
-# ============================================================
-
-__all__ = [
-    "XAUUSD_SYMBOL",
-    "MAGIC_NUMBER",
-    "MAX_PROJECT_POSITIONS",
-    "validate_signal",
-    "calculate_risk_reward",
-    "calculate_order_volume",
-    "select_order_volume",
-    "get_project_position_count",
-    "can_open_new_position",
-    "execute_trade",
-    "auto_trade",
-    "run_auto_trade",
-    "get_auto_trader_status",
-]
+        return None
+```
