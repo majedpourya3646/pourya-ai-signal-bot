@@ -1,3 +1,4 @@
+```python
 # core/xauusd_engine.py
 
 from core.logger import logger
@@ -8,7 +9,8 @@ from core.market_signal_bridge import (
 
 from config import (
     MIN_CONFIDENCE,
-    MIN_RISK_REWARD
+    MIN_RISK_REWARD,
+    PILOT_SYMBOL
 )
 
 
@@ -16,7 +18,11 @@ from config import (
 # Configuration
 # ============================================================
 
-XAUUSD_SYMBOL = "XAUUSD.st"
+XAUUSD_SYMBOL = str(
+    PILOT_SYMBOL
+).strip()
+
+XAUUSD_SYMBOL_NORMALIZED = XAUUSD_SYMBOL.upper()
 
 REQUIRED_TIMEFRAMES = (
     "M15",
@@ -46,6 +52,15 @@ def _to_float(
         return default
 
 
+def _normalize_symbol(
+    symbol
+):
+
+    return str(
+        symbol or ""
+    ).strip().upper()
+
+
 # ============================================================
 # Validate XAUUSD
 # ============================================================
@@ -60,18 +75,19 @@ def validate_xauusd(
 
             return False
 
-        symbol = str(
+        symbol = _normalize_symbol(
             opportunity.get(
                 "symbol",
                 ""
             )
-        ).upper()
+        )
 
-        if symbol != XAUUSD_SYMBOL:
+        if symbol != XAUUSD_SYMBOL_NORMALIZED:
 
             logger.info(
                 f"XAUUSD ENGINE REJECTED "
-                f"SYMBOL={symbol}"
+                f"SYMBOL={symbol} "
+                f"EXPECTED={XAUUSD_SYMBOL_NORMALIZED}"
             )
 
             return False
@@ -397,6 +413,10 @@ def analyze_xauusd():
         )
 
         logger.info(
+            f"XAUUSD SYMBOL={XAUUSD_SYMBOL}"
+        )
+
+        logger.info(
             "================================"
         )
 
@@ -414,14 +434,14 @@ def analyze_xauusd():
 
         for item in markets:
 
-            symbol = str(
+            symbol = _normalize_symbol(
                 item.get(
                     "symbol",
                     ""
                 )
-            ).upper()
+            )
 
-            if symbol == XAUUSD_SYMBOL:
+            if symbol == XAUUSD_SYMBOL_NORMALIZED:
 
                 xauusd = item
 
@@ -430,7 +450,8 @@ def analyze_xauusd():
         if xauusd is None:
 
             logger.info(
-                "XAUUSD NOT FOUND"
+                f"XAUUSD NOT FOUND "
+                f"EXPECTED={XAUUSD_SYMBOL}"
             )
 
             return None
@@ -530,3 +551,4 @@ def get_xauusd_opportunity():
         )
 
         return None
+```
