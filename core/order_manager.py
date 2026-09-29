@@ -47,7 +47,10 @@ from core.position_manager import (
 
 MAGIC_NUMBER = int(MT5_MAGIC_NUMBER)
 
-PROJECT_SYMBOL = str(PILOT_SYMBOL).strip()
+PROJECT_SYMBOL = str(
+    PILOT_SYMBOL
+).strip()
+
 PROJECT_SYMBOL_NORMALIZED = PROJECT_SYMBOL.upper()
 
 MAX_OPEN_POSITIONS = min(
@@ -61,441 +64,836 @@ MAX_LOT = float(MAX_PROJECT_LOT)
 DEFAULT_LOT_VALUE = float(DEFAULT_LOT)
 DEFAULT_DEVIATION_VALUE = int(DEFAULT_DEVIATION)
 
-DEFAULT_COMMENT = str(MT5_ORDER_COMMENT).strip()
+DEFAULT_COMMENT = str(
+    MT5_ORDER_COMMENT
+).strip()
 
 
 # ============================================================
-# SYMBOL HELPERS
+# INTERNAL HELPERS
 # ============================================================
 
 def _normalize_symbol(symbol: Any) -> str:
-    """
-    Normalize a symbol for safe comparison.
-    """
-    return str(symbol or "").strip().upper()
+    return str(
+        symbol or ""
+    ).strip().upper()
 
 
-def validate_symbol(symbol: str) -> bool:
-    """
-    Validate that the requested symbol is the configured pilot symbol.
-    """
-    requested = _normalize_symbol(symbol)
+def _normalize_side(
+    side: Optional[str],
+) -> Optional[str]:
 
-    if requested != PROJECT_SYMBOL_NORMALIZED:
-        logger.warning(
-            "SYMBOL VALIDATION FAILED: requested=%s expected=%s",
-            symbol,
-            PROJECT_SYMBOL,
-        )
-        return False
-
-    return True
-
-
-# ============================================================
-# CONNECTION / ACCOUNT HELPERS
-# ============================================================
-
-def _ensure_connection() -> bool:
-    """
-    Safe wrapper around MT5 connection.
-    """
-    try:
-        return bool(ensure_connection())
-    except Exception as exc:
-        logger.error(
-            "MT5 CONNECTION CHECK FAILED: %s",
-            exc,
-        )
-        return False
-
-
-def _get_account_info_safe() -> Optional[Dict[str, Any]]:
-    """
-    Safely retrieve account information.
-    """
-    try:
-        info = get_account_info()
-
-        if info is None:
-            return None
-
-        if isinstance(info, dict):
-            return info
-
-        try:
-            return dict(info)
-        except Exception:
-            return None
-
-    except Exception as exc:
-        logger.error(
-            "ACCOUNT INFO FAILED: %s",
-            exc,
-        )
+    if side is None:
         return None
 
+    value = str(
+        side
+    ).upper().strip()
 
-# ============================================================
-# POSITION COUNT
-# ============================================================
-
-def get_position_count(symbol: Optional[str] = None) -> int:
-    """
-    Return the number of project positions.
-
-    The configured pilot symbol is used by default.
-    """
-    target_symbol = (
-        PROJECT_SYMBOL
-        if symbol is None
-        else str(symbol).strip()
-    )
-
-    try:
-        return int(
-            get_project_position_count(
-                target_symbol
-            )
-        )
-    except Exception:
-        pass
-
-    try:
-        positions = get_open_positions(
-            target_symbol
-        )
-
-        if positions is None:
-            return 0
-
-        return len(list(positions))
-
-    except Exception as exc:
-        logger.error(
-            "POSITION COUNT FAILED: %s",
-            exc,
-        )
-        return 0
-
-
-def has_same_direction_position(
-    symbol: str,
-    side: str,
-) -> bool:
-    """
-    Informational helper.
-
-    Same-direction positions are NOT blocked here.
-
-    The project allows multiple positions up to
-    MAX_OPEN_POSITIONS. Final position-count safety
-    is enforced separately.
-    """
-    requested_symbol = _normalize_symbol(symbol)
-    requested_side = str(side or "").strip().upper()
-
-    try:
-        positions = get_open_positions(symbol)
-
-        if positions is None:
-            return False
-
-        for position in positions:
-            try:
-                if isinstance(position, dict):
-                    position_symbol = _normalize_symbol(
-                        position.get("symbol", "")
-                    )
-
-                    position_type = str(
-                        position.get(
-                            "type",
-                            position.get("side", ""),
-                        )
-                    ).strip().upper()
-
-                else:
-                    position_symbol = _normalize_symbol(
-                        getattr(
-                            position,
-                            "symbol",
-                            "",
-                        )
-                    )
-
-                    position_type = str(
-                        getattr(
-                            position,
-                            "type",
-                            getattr(
-                                position,
-                                "side",
-                                "",
-                            ),
-                        )
-                    ).strip().upper()
-
-                if position_symbol != requested_symbol:
-                    continue
-
-                if requested_side in {
-                    "BUY",
-                    "STRONG BUY",
-                    "LONG",
-                    "0",
-                }:
-                    if position_type in {
-                        "BUY",
-                        "STRONG BUY",
-                        "LONG",
-                        "0",
-                    }:
-                        return True
-
-                if requested_side in {
-                    "SELL",
-                    "STRONG SELL",
-                    "SHORT",
-                    "1",
-                }:
-                    if position_type in {
-                        "SELL",
-                        "STRONG SELL",
-                        "SHORT",
-                        "1",
-                    }:
-                        return True
-
-            except Exception:
-                continue
-
-    except Exception as exc:
-        logger.warning(
-            "SAME DIRECTION CHECK FAILED: %s",
-            exc,
-        )
-
-    return False
-
-
-# ============================================================
-# SIDE HELPERS
-# ============================================================
-
-def _normalize_side(side: Any) -> Optional[str]:
-    """
-    Normalize supported trading directions.
-    """
-    value = str(side or "").strip().upper()
-
-    if value in {
+    if value in (
         "BUY",
         "STRONG BUY",
         "LONG",
-    }:
+    ):
         return "BUY"
 
-    if value in {
+    if value in (
         "SELL",
         "STRONG SELL",
         "SHORT",
-    }:
+    ):
         return "SELL"
 
     return None
 
 
 # ============================================================
-# VOLUME VALIDATION
+# CONNECTION
+# ============================================================
+
+def check_connection() -> bool:
+
+    try:
+
+        if not ensure_connection():
+
+            logger.error(
+                "ORDER MANAGER: MT5 NOT CONNECTED"
+            )
+
+            return False
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            "ORDER MANAGER CONNECTION ERROR: %s",
+            exc,
+        )
+
+        return False
+
+
+# ============================================================
+# ACCOUNT
+# ============================================================
+
+def get_account():
+
+    try:
+
+        account = get_account_info()
+
+        if account is None:
+
+            logger.error(
+                "ORDER MANAGER: ACCOUNT INFO UNAVAILABLE"
+            )
+
+            return None
+
+        return account
+
+    except Exception as exc:
+
+        logger.exception(
+            "ORDER MANAGER ACCOUNT ERROR: %s",
+            exc,
+        )
+
+        return None
+
+
+def get_account_equity() -> float:
+
+    account = get_account()
+
+    if account is None:
+        return 0.0
+
+    try:
+        return float(
+            getattr(
+                account,
+                "equity",
+                0.0,
+            ) or 0.0
+        )
+
+    except Exception:
+        return 0.0
+
+
+def get_account_balance() -> float:
+
+    account = get_account()
+
+    if account is None:
+        return 0.0
+
+    try:
+        return float(
+            getattr(
+                account,
+                "balance",
+                0.0,
+            ) or 0.0
+        )
+
+    except Exception:
+        return 0.0
+
+
+def get_account_free_margin() -> float:
+
+    try:
+
+        return float(
+            get_free_margin() or 0.0
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "FREE MARGIN ERROR: %s",
+            exc,
+        )
+
+        return 0.0
+
+
+# ============================================================
+# POSITION COUNT
+# ============================================================
+
+def get_position_count() -> int:
+
+    try:
+
+        return int(
+            get_project_position_count(
+                symbol=PROJECT_SYMBOL,
+                magic=MAGIC_NUMBER,
+            )
+        )
+
+    except TypeError:
+
+        try:
+
+            return int(
+                get_project_position_count(
+                    PROJECT_SYMBOL,
+                    MAGIC_NUMBER,
+                )
+            )
+
+        except Exception as exc:
+
+            logger.exception(
+                "PROJECT POSITION COUNT ERROR: %s",
+                exc,
+            )
+
+            return MAX_OPEN_POSITIONS
+
+    except Exception as exc:
+
+        logger.exception(
+            "PROJECT POSITION COUNT ERROR: %s",
+            exc,
+        )
+
+        # Fail closed.
+        return MAX_OPEN_POSITIONS
+
+
+def get_positions(
+    symbol: Optional[str] = None,
+):
+
+    target_symbol = (
+        str(symbol).strip()
+        if symbol
+        else PROJECT_SYMBOL
+    )
+
+    try:
+
+        return get_open_positions(
+            symbol=target_symbol,
+            magic=MAGIC_NUMBER,
+        )
+
+    except TypeError:
+
+        try:
+
+            positions = get_open_positions(
+                symbol=target_symbol
+            )
+
+            if positions is None:
+                return []
+
+            filtered = []
+
+            for position in positions:
+
+                try:
+
+                    position_magic = int(
+                        getattr(
+                            position,
+                            "magic",
+                            0,
+                        ) or 0
+                    )
+
+                    if position_magic == MAGIC_NUMBER:
+                        filtered.append(
+                            position
+                        )
+
+                except Exception:
+                    continue
+
+            return filtered
+
+        except Exception as exc:
+
+            logger.exception(
+                "GET POSITIONS COMPATIBILITY ERROR: %s",
+                exc,
+            )
+
+            return []
+
+    except Exception as exc:
+
+        logger.exception(
+            "GET POSITIONS ERROR: %s",
+            exc,
+        )
+
+        return []
+
+
+def get_position_count_for_symbol(
+    symbol: str = PROJECT_SYMBOL,
+) -> int:
+
+    target_symbol = (
+        str(symbol).strip()
+        if symbol
+        else PROJECT_SYMBOL
+    )
+
+    try:
+
+        return int(
+            get_project_position_count(
+                symbol=target_symbol,
+                magic=MAGIC_NUMBER,
+            )
+        )
+
+    except TypeError:
+
+        try:
+
+            return int(
+                get_project_position_count(
+                    target_symbol,
+                    MAGIC_NUMBER,
+                )
+            )
+
+        except Exception as exc:
+
+            logger.exception(
+                "SYMBOL POSITION COUNT ERROR: %s",
+                exc,
+            )
+
+            return MAX_OPEN_POSITIONS
+
+    except Exception as exc:
+
+        logger.exception(
+            "SYMBOL POSITION COUNT ERROR: %s",
+            exc,
+        )
+
+        return MAX_OPEN_POSITIONS
+
+
+# ============================================================
+# EXISTING POSITION
+# ============================================================
+
+def has_open_position(
+    symbol: str = PROJECT_SYMBOL,
+) -> bool:
+
+    try:
+
+        return (
+            get_position_count_for_symbol(
+                symbol
+            ) > 0
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "OPEN POSITION CHECK ERROR %s: %s",
+            symbol,
+            exc,
+        )
+
+        # Fail safe.
+        return True
+
+
+def has_same_direction_position(
+    symbol: str,
+    side: str,
+) -> bool:
+
+    """
+    Informational check only.
+
+    IMPORTANT:
+    This function no longer blocks new positions.
+
+    Multiple positions in the same direction are allowed
+    up to MAX_OPEN_POSITIONS.
+    """
+
+    normalized_side = _normalize_side(
+        side
+    )
+
+    if normalized_side is None:
+        return False
+
+    try:
+
+        positions = get_positions(
+            symbol
+        )
+
+        if not positions:
+            return False
+
+        for position in positions:
+
+            position_type = getattr(
+                position,
+                "type",
+                None,
+            )
+
+            if (
+                normalized_side == "BUY"
+                and position_type == 0
+            ):
+                return True
+
+            if (
+                normalized_side == "SELL"
+                and position_type == 1
+            ):
+                return True
+
+        return False
+
+    except Exception as exc:
+
+        logger.exception(
+            "DIRECTION POSITION CHECK ERROR: %s",
+            exc,
+        )
+
+        return False
+
+
+# ============================================================
+# SYMBOL
+# ============================================================
+
+def validate_symbol(
+    symbol: str,
+) -> bool:
+
+    if not symbol:
+        return False
+
+    requested_normalized = _normalize_symbol(
+        symbol
+    )
+
+    if (
+        requested_normalized
+        != PROJECT_SYMBOL_NORMALIZED
+    ):
+
+        logger.warning(
+            "ORDER MANAGER: SYMBOL REJECTED %s "
+            "EXPECTED=%s",
+            symbol,
+            PROJECT_SYMBOL,
+        )
+
+        return False
+
+    try:
+
+        # Always query the configured canonical symbol.
+        info = get_symbol_info(
+            PROJECT_SYMBOL
+        )
+
+        if info is None:
+
+            logger.error(
+                "SYMBOL NOT FOUND: %s",
+                PROJECT_SYMBOL,
+            )
+
+            return False
+
+        if not bool(
+            getattr(
+                info,
+                "visible",
+                True,
+            )
+        ):
+
+            logger.error(
+                "SYMBOL NOT VISIBLE: %s",
+                PROJECT_SYMBOL,
+            )
+
+            return False
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            "SYMBOL VALIDATION ERROR %s: %s",
+            symbol,
+            exc,
+        )
+
+        return False
+
+
+# ============================================================
+# VOLUME
 # ============================================================
 
 def validate_volume(
-    requested: float,
-    symbol: str = PROJECT_SYMBOL,
+    symbol: str,
+    lot: float,
 ) -> Optional[float]:
-    """
-    Normalize and validate order volume.
 
-    IMPORTANT:
-    connector signature is:
+    """
+    Validate and normalize project volume.
+
+    Public signature intentionally remains:
+
+        validate_volume(symbol, lot)
+
+    because existing project modules use this order.
+
+    Connector signature is:
 
         normalize_volume(volume, symbol)
 
-    Therefore volume is ALWAYS the first argument.
+    therefore volume MUST be passed first to connector.
     """
-    try:
-        volume = float(requested)
-    except Exception:
-        logger.warning(
-            "INVALID VOLUME VALUE: %s",
-            requested,
-        )
-        return None
-
-    if volume <= 0:
-        logger.warning(
-            "INVALID VOLUME <= 0: %s",
-            volume,
-        )
-        return None
-
-    if volume < MIN_LOT:
-        volume = MIN_LOT
-
-    if volume > MAX_LOT:
-        volume = MAX_LOT
 
     try:
-        normalized = normalize_volume(
-            volume,
-            symbol,
-        )
-    except TypeError:
-        try:
-            normalized = normalize_volume(
-                volume,
-                symbol=symbol,
-            )
-        except Exception as exc:
-            logger.error(
-                "VOLUME NORMALIZATION FAILED: %s",
-                exc,
-            )
+
+        if not validate_symbol(
+            symbol
+        ):
             return None
+
+        requested = float(lot)
+
+        if requested <= 0:
+            return None
+
+        if requested < MIN_LOT:
+            requested = MIN_LOT
+
+        if requested > MAX_LOT:
+
+            logger.warning(
+                "LOT ABOVE PROJECT LIMIT: %.4f > %.4f",
+                requested,
+                MAX_LOT,
+            )
+
+            return None
+
+        # IMPORTANT:
+        # normalize_volume(volume, symbol)
+        normalized = normalize_volume(
+            requested,
+            PROJECT_SYMBOL,
+        )
+
+        if normalized is None:
+            return None
+
+        normalized = float(
+            normalized
+        )
+
+        if normalized < MIN_LOT:
+            return None
+
+        if normalized > MAX_LOT:
+            return None
+
+        return normalized
+
     except Exception as exc:
-        logger.error(
-            "VOLUME NORMALIZATION FAILED: %s",
+
+        logger.exception(
+            "VOLUME VALIDATION ERROR: %s",
             exc,
         )
+
         return None
 
-    if normalized is None:
-        return None
-
-    try:
-        normalized = float(normalized)
-    except Exception:
-        return None
-
-    if normalized < MIN_LOT:
-        normalized = MIN_LOT
-
-    if normalized > MAX_LOT:
-        normalized = MAX_LOT
-
-    return normalized
-
-
-# ============================================================
-# DYNAMIC LOT CALCULATION
-# ============================================================
 
 def calculate_order_volume(
-    confidence: float,
+    confidence: Optional[float] = None,
     requested_lot: Optional[float] = None,
-    symbol: str = PROJECT_SYMBOL,
-) -> Optional[float]:
+) -> float:
+
     """
-    Calculate project order volume.
+    Conservative dynamic lot selection.
 
-    Rules:
-        confidence < 75  -> 0.01
-        75-84            -> 0.02
-        >= 85            -> 0.03
+    confidence < 75  -> 0.01
+    confidence 75-84 -> 0.02
+    confidence >= 85 -> 0.03
 
-    Hard ceiling:
-        MAX_LOT
-
-    No martingale.
-    No balance multiplication.
+    No Martingale.
+    Hard ceiling = MAX_LOT.
     """
-    try:
-        confidence_value = float(confidence)
-    except Exception:
-        confidence_value = 0.0
+
+    # --------------------------------------------------------
+    # Explicit requested lot
+    # --------------------------------------------------------
 
     if requested_lot is not None:
+
         try:
-            requested = float(requested_lot)
-        except Exception:
-            requested = DEFAULT_LOT_VALUE
-    else:
-        requested = DEFAULT_LOT_VALUE
 
-    if confidence_value >= 85:
-        target = min(
-            MAX_LOT,
-            max(
+            requested = float(
+                requested_lot
+            )
+
+            if requested <= 0:
+                requested = MIN_LOT
+
+            requested = max(
+                MIN_LOT,
+                min(
+                    MAX_LOT,
+                    requested,
+                ),
+            )
+
+            normalized = validate_volume(
+                PROJECT_SYMBOL,
                 requested,
-                0.03,
-            ),
+            )
+
+            if normalized is not None:
+
+                return float(
+                    normalized
+                )
+
+        except Exception as exc:
+
+            logger.warning(
+                "REQUESTED LOT NORMALIZATION "
+                "FAILED: %s",
+                exc,
+            )
+
+    # --------------------------------------------------------
+    # Confidence based lot
+    # --------------------------------------------------------
+
+    try:
+
+        score = (
+            float(confidence)
+            if confidence is not None
+            else 0.0
         )
 
-    elif confidence_value >= 75:
-        target = min(
-            MAX_LOT,
-            max(
-                requested,
-                0.02,
-            ),
-        )
+    except Exception:
+
+        score = 0.0
+
+    if score >= 85.0:
+
+        target = 0.03
+
+    elif score >= 75.0:
+
+        target = 0.02
 
     else:
-        target = MIN_LOT
 
-    if target < MIN_LOT:
-        target = MIN_LOT
+        target = 0.01
 
-    if target > MAX_LOT:
-        target = MAX_LOT
+    target = max(
+        MIN_LOT,
+        min(
+            MAX_LOT,
+            target,
+        ),
+    )
 
-    # IMPORTANT:
-    # normalize_volume(volume, symbol)
     normalized = validate_volume(
+        PROJECT_SYMBOL,
         target,
-        symbol,
     )
 
     if normalized is None:
-        return None
 
-    return normalized
+        # Fail safe to minimum lot.
+        return float(
+            MIN_LOT
+        )
+
+    return float(
+        normalized
+    )
 
 
 # ============================================================
-# DAILY RISK
+# POSITION LIMIT
 # ============================================================
+
+def validate_position_limit() -> bool:
+
+    try:
+
+        count = get_position_count()
+
+        if count >= MAX_OPEN_POSITIONS:
+
+            logger.warning(
+                "MAX PROJECT POSITIONS: %s/%s",
+                count,
+                MAX_OPEN_POSITIONS,
+            )
+
+            return False
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            "POSITION LIMIT ERROR: %s",
+            exc,
+        )
+
+        return False
+
+
+def can_open_new_position(
+    symbol: str = PROJECT_SYMBOL,
+    side: Optional[str] = None,
+) -> bool:
+
+    if not validate_symbol(
+        symbol
+    ):
+        return False
+
+    if not validate_position_limit():
+        return False
+
+    if side is not None:
+
+        normalized_side = _normalize_side(
+            side
+        )
+
+        if normalized_side is None:
+
+            logger.warning(
+                "INVALID ORDER SIDE: %s",
+                side,
+            )
+
+            return False
+
+        # IMPORTANT:
+        # Same-direction positions are intentionally allowed.
+        #
+        # Do NOT call has_same_direction_position()
+        # as a blocking condition here.
+
+    return True
+
+
+# ============================================================
+# DAILY LOSS
+# ============================================================
+
+def get_daily_loss():
+
+    try:
+
+        snapshot = get_daily_loss_snapshot()
+
+        if snapshot is None:
+
+            return {
+                "valid": False,
+                "within_limit": False,
+                "daily_loss_percent": 100.0,
+            }
+
+        if isinstance(
+            snapshot,
+            dict,
+        ):
+            return snapshot
+
+        return {
+            "valid": True,
+            "within_limit": True,
+            "daily_loss_percent": 0.0,
+            "raw": snapshot,
+        }
+
+    except Exception as exc:
+
+        logger.exception(
+            "DAILY LOSS READ ERROR: %s",
+            exc,
+        )
+
+        return {
+            "valid": False,
+            "within_limit": False,
+            "daily_loss_percent": 100.0,
+        }
+
 
 def validate_daily_risk() -> bool:
-    """
-    Validate daily loss protection.
-    """
+
     try:
+
+        snapshot = get_daily_loss()
+
+        if not snapshot.get(
+            "valid",
+            False,
+        ):
+            return False
+
+        if not snapshot.get(
+            "within_limit",
+            False,
+        ):
+
+            logger.warning(
+                "DAILY LOSS LIMIT REACHED"
+            )
+
+            return False
+
         return bool(
             validate_daily_loss_limit()
         )
-    except TypeError:
-        try:
-            snapshot = get_daily_loss_snapshot()
-
-            if snapshot is None:
-                return False
-
-            return True
-
-        except Exception as exc:
-            logger.error(
-                "DAILY RISK CHECK FAILED: %s",
-                exc,
-            )
-            return False
 
     except Exception as exc:
-        logger.error(
-            "DAILY RISK CHECK FAILED: %s",
+
+        logger.exception(
+            "DAILY RISK ERROR: %s",
             exc,
         )
+
         return False
 
 
@@ -504,75 +902,112 @@ def validate_daily_risk() -> bool:
 # ============================================================
 
 def validate_prices(
+    symbol: str,
     side: str,
-    entry: float,
-    stop_loss: float,
-    take_profit: float,
+    sl: Optional[float],
+    tp: Optional[float],
 ) -> bool:
-    """
-    Validate price structure.
-
-    BUY:
-        SL < Entry < TP
-
-    SELL:
-        TP < Entry < SL
-    """
-    normalized_side = _normalize_side(side)
-
-    if normalized_side is None:
-        logger.warning(
-            "PRICE VALIDATION FAILED: INVALID SIDE=%s",
-            side,
-        )
-        return False
 
     try:
-        entry_value = float(entry)
-        sl_value = float(stop_loss)
-        tp_value = float(take_profit)
-    except Exception:
-        logger.warning(
-            "PRICE VALIDATION FAILED: NON-NUMERIC PRICE"
+
+        normalized_side = _normalize_side(
+            side
         )
-        return False
 
-    if entry_value <= 0:
-        return False
-
-    if sl_value <= 0:
-        return False
-
-    if tp_value <= 0:
-        return False
-
-    if normalized_side == "BUY":
-        if not (
-            sl_value < entry_value < tp_value
-        ):
-            logger.warning(
-                "INVALID BUY PRICE STRUCTURE: "
-                "SL=%s ENTRY=%s TP=%s",
-                sl_value,
-                entry_value,
-                tp_value,
-            )
+        if normalized_side is None:
             return False
 
-    elif normalized_side == "SELL":
-        if not (
-            tp_value < entry_value < sl_value
-        ):
-            logger.warning(
-                "INVALID SELL PRICE STRUCTURE: "
-                "TP=%s ENTRY=%s SL=%s",
-                tp_value,
-                entry_value,
-                sl_value,
+        if sl is None or tp is None:
+
+            logger.error(
+                "SL/TP REQUIRED: %s",
+                symbol,
             )
+
             return False
 
-    return True
+        tick = get_symbol_tick(
+            symbol
+        )
+
+        if tick is None:
+            return False
+
+        sl_value = float(sl)
+        tp_value = float(tp)
+
+        if sl_value <= 0:
+            return False
+
+        if tp_value <= 0:
+            return False
+
+        if normalized_side == "BUY":
+
+            current_price = float(
+                tick.ask
+            )
+
+            if sl_value >= current_price:
+
+                logger.warning(
+                    "INVALID BUY SL: "
+                    "SL=%s PRICE=%s",
+                    sl_value,
+                    current_price,
+                )
+
+                return False
+
+            if tp_value <= current_price:
+
+                logger.warning(
+                    "INVALID BUY TP: "
+                    "TP=%s PRICE=%s",
+                    tp_value,
+                    current_price,
+                )
+
+                return False
+
+        else:
+
+            current_price = float(
+                tick.bid
+            )
+
+            if sl_value <= current_price:
+
+                logger.warning(
+                    "INVALID SELL SL: "
+                    "SL=%s PRICE=%s",
+                    sl_value,
+                    current_price,
+                )
+
+                return False
+
+            if tp_value >= current_price:
+
+                logger.warning(
+                    "INVALID SELL TP: "
+                    "TP=%s PRICE=%s",
+                    tp_value,
+                    current_price,
+                )
+
+                return False
+
+        return True
+
+    except Exception as exc:
+
+        logger.exception(
+            "PRICE VALIDATION ERROR: %s",
+            exc,
+        )
+
+        return False
 
 
 # ============================================================
@@ -582,352 +1017,243 @@ def validate_prices(
 def calculate_risk_reward(
     side: str,
     entry: float,
-    stop_loss: float,
-    take_profit: float,
+    sl: float,
+    tp: float,
 ) -> float:
-    """
-    Calculate risk/reward ratio.
-    """
-    normalized_side = _normalize_side(side)
 
     try:
+
+        normalized_side = _normalize_side(
+            side
+        )
+
+        if normalized_side is None:
+            return 0.0
+
         entry_value = float(entry)
-        sl_value = float(stop_loss)
-        tp_value = float(take_profit)
+        sl_value = float(sl)
+        tp_value = float(tp)
+
+        if normalized_side == "BUY":
+
+            risk = (
+                entry_value
+                - sl_value
+            )
+
+            reward = (
+                tp_value
+                - entry_value
+            )
+
+        else:
+
+            risk = (
+                sl_value
+                - entry_value
+            )
+
+            reward = (
+                entry_value
+                - tp_value
+            )
+
+        if risk <= 0:
+            return 0.0
+
+        if reward <= 0:
+            return 0.0
+
+        return float(
+            reward / risk
+        )
+
     except Exception:
+
         return 0.0
-
-    if normalized_side == "BUY":
-        risk = entry_value - sl_value
-        reward = tp_value - entry_value
-
-    elif normalized_side == "SELL":
-        risk = sl_value - entry_value
-        reward = entry_value - tp_value
-
-    else:
-        return 0.0
-
-    if risk <= 0:
-        return 0.0
-
-    return reward / risk
 
 
 # ============================================================
-# MARGIN VALIDATION
+# MARGIN
 # ============================================================
 
 def validate_margin(
     symbol: str,
-    volume: float,
     side: str,
+    volume: float,
 ) -> bool:
-    """
-    Validate available margin with a safety buffer.
-    """
+
     try:
+
+        tick = get_symbol_tick(
+            symbol
+        )
+
+        if tick is None:
+            return False
+
+        normalized_side = _normalize_side(
+            side
+        )
+
+        if normalized_side is None:
+            return False
+
+        price = (
+            float(tick.ask)
+            if normalized_side == "BUY"
+            else float(tick.bid)
+        )
+
+        try:
+
+            margin = calculate_margin(
+                symbol,
+                volume,
+                normalized_side,
+                price,
+            )
+
+        except TypeError:
+
+            margin = calculate_margin(
+                symbol=symbol,
+                volume=volume,
+                side=normalized_side,
+                price=price,
+            )
+
+        if margin is None:
+            return False
+
         free_margin = float(
             get_free_margin()
         )
-    except Exception as exc:
-        logger.error(
-            "FREE MARGIN FAILED: %s",
-            exc,
-        )
-        return False
 
-    if free_margin <= 0:
-        logger.warning(
-            "MARGIN CHECK FAILED: free_margin=%s",
-            free_margin,
+        required_limit = (
+            float(margin) * 1.20
         )
-        return False
 
-    try:
-        margin = float(
-            calculate_margin(
-                symbol,
-                volume,
-                side,
+        if free_margin < required_limit:
+
+            logger.warning(
+                "INSUFFICIENT FREE MARGIN "
+                "required=%.2f free=%.2f",
+                required_limit,
+                free_margin,
             )
-        )
-    except TypeError:
-        try:
-            margin = float(
-                calculate_margin(
-                    symbol=symbol,
-                    volume=volume,
-                    side=side,
-                )
-            )
-        except Exception as exc:
-            logger.error(
-                "MARGIN CALCULATION FAILED: %s",
-                exc,
-            )
+
             return False
 
+        return True
+
     except Exception as exc:
-        logger.error(
-            "MARGIN CALCULATION FAILED: %s",
+
+        logger.exception(
+            "MARGIN VALIDATION ERROR: %s",
             exc,
         )
+
         return False
-
-    if margin < 0:
-        return False
-
-    # 20% safety buffer
-    required_margin = margin * 1.20
-
-    if free_margin < required_margin:
-        logger.warning(
-            "INSUFFICIENT MARGIN: "
-            "free=%s required=%s",
-            free_margin,
-            required_margin,
-        )
-        return False
-
-    return True
 
 
 # ============================================================
-# LIVE TRADING GATE
+# LIVE SAFETY
 # ============================================================
 
 def live_gate() -> bool:
-    """
-    Return True only when live trading is explicitly allowed.
 
-    Safe default:
-        PAPER_TRADING=True
-        ALLOW_LIVE_TRADING=False
+    # Explicit fail-closed conditions.
 
-    Therefore this should currently return False.
-    """
     if bool(PAPER_TRADING):
         return False
 
-    if not bool(ALLOW_LIVE_TRADING):
+    if not bool(
+        ALLOW_LIVE_TRADING
+    ):
         return False
 
     try:
-        return bool(
-            live_trading_allowed()
-        )
-    except Exception as exc:
-        logger.error(
-            "LIVE TRADING GATE FAILED: %s",
-            exc,
-        )
-        return False
 
-
-def _live_execution_allowed() -> bool:
-    """
-    Internal fail-closed live execution gate.
-    """
-    return live_gate()
-
-
-# ============================================================
-# NEW POSITION SAFETY CHECK
-# ============================================================
-
-def can_open_new_position(
-    symbol: str = PROJECT_SYMBOL,
-    side: Optional[str] = None,
-) -> bool:
-    """
-    Determine whether a new project position may be opened.
-
-    IMPORTANT:
-    Same-direction positions are allowed.
-
-    Only the total maximum number of open project
-    positions is enforced here.
-    """
-    if not validate_symbol(symbol):
-        return False
-
-    current_count = get_position_count(
-        PROJECT_SYMBOL
-    )
-
-    if current_count >= MAX_OPEN_POSITIONS:
-        logger.warning(
-            "MAX OPEN POSITIONS REACHED: %s/%s",
-            current_count,
-            MAX_OPEN_POSITIONS,
-        )
-        return False
-
-    # Intentionally DO NOT block same-direction positions.
-    if side is not None:
-        normalized_side = _normalize_side(side)
-
-        if normalized_side is None:
-            logger.warning(
-                "INVALID ORDER SIDE: %s",
-                side,
-            )
+        if not live_trading_allowed():
             return False
 
-    return True
+        return True
+
+    except Exception as exc:
+
+        logger.error(
+            "LIVE GATE ERROR: %s",
+            exc,
+        )
+
+        return False
 
 
 # ============================================================
-# ORDER PREPARATION
+# ORDER VALIDATION
 # ============================================================
 
-def prepare_order(
-    side: str,
+def validate_order(
     symbol: str,
-    volume: float,
-    entry: float,
-    stop_loss: float,
-    take_profit: float,
-    confidence: float = 0.0,
-) -> Optional[Dict[str, Any]]:
-    """
-    Validate and prepare an order before execution.
-    """
-    normalized_side = _normalize_side(side)
+    side: str,
+    lot: float,
+    sl: float,
+    tp: float,
+    confidence: Optional[float] = None,
+) -> bool:
+
+    if not check_connection():
+        return False
+
+    if not validate_symbol(
+        symbol
+    ):
+        return False
+
+    normalized_side = _normalize_side(
+        side
+    )
 
     if normalized_side is None:
-        logger.warning(
-            "PREPARE ORDER FAILED: INVALID SIDE=%s",
-            side,
-        )
-        return None
-
-    if not validate_symbol(symbol):
-        return None
+        return False
 
     if not can_open_new_position(
         symbol,
         normalized_side,
     ):
-        return None
-
-    if not validate_prices(
-        normalized_side,
-        entry,
-        stop_loss,
-        take_profit,
-    ):
-        return None
-
-    try:
-        confidence_value = float(confidence)
-    except Exception:
-        confidence_value = 0.0
-
-    order_volume = calculate_order_volume(
-        confidence=confidence_value,
-        requested_lot=volume,
-        symbol=PROJECT_SYMBOL,
-    )
-
-    if order_volume is None:
-        logger.warning(
-            "PREPARE ORDER FAILED: VOLUME"
-        )
-        return None
+        return False
 
     if not validate_daily_risk():
-        logger.warning(
-            "PREPARE ORDER FAILED: DAILY RISK"
-        )
-        return None
+        return False
 
-    if not validate_margin(
-        PROJECT_SYMBOL,
-        order_volume,
-        normalized_side,
-    ):
-        logger.warning(
-            "PREPARE ORDER FAILED: MARGIN"
-        )
-        return None
-
-    try:
-        normalized_entry = normalize_price(
-            float(entry),
-            symbol,
-        )
-    except TypeError:
-        try:
-            normalized_entry = normalize_price(
-                float(entry),
-                symbol=symbol,
-            )
-        except Exception:
-            normalized_entry = float(entry)
-    except Exception:
-        normalized_entry = float(entry)
-
-    try:
-        normalized_sl = normalize_price(
-            float(stop_loss),
-            symbol,
-        )
-    except TypeError:
-        try:
-            normalized_sl = normalize_price(
-                float(stop_loss),
-                symbol=symbol,
-            )
-        except Exception:
-            normalized_sl = float(stop_loss)
-    except Exception:
-        normalized_sl = float(stop_loss)
-
-    try:
-        normalized_tp = normalize_price(
-            float(take_profit),
-            symbol,
-        )
-    except TypeError:
-        try:
-            normalized_tp = normalize_price(
-                float(take_profit),
-                symbol=symbol,
-            )
-        except Exception:
-            normalized_tp = float(take_profit)
-    except Exception:
-        normalized_tp = float(take_profit)
-
-    risk_reward = calculate_risk_reward(
-        normalized_side,
-        normalized_entry,
-        normalized_sl,
-        normalized_tp,
+    volume = validate_volume(
+        symbol,
+        lot,
     )
 
-    if risk_reward <= 0:
-        logger.warning(
-            "PREPARE ORDER FAILED: INVALID RR=%s",
-            risk_reward,
-        )
-        return None
+    if volume is None:
+        return False
 
-    return {
-        "symbol": PROJECT_SYMBOL,
-        "side": normalized_side,
-        "volume": float(order_volume),
-        "entry": float(normalized_entry),
-        "stop_loss": float(normalized_sl),
-        "take_profit": float(normalized_tp),
-        "confidence": confidence_value,
-        "risk_reward": float(risk_reward),
-        "magic": MAGIC_NUMBER,
-        "comment": DEFAULT_COMMENT,
-        "paper_trading": bool(PAPER_TRADING),
-    }
+    if not validate_prices(
+        symbol,
+        normalized_side,
+        sl,
+        tp,
+    ):
+        return False
+
+    # Paper mode does not require live margin execution.
+    if not PAPER_TRADING:
+
+        if not validate_margin(
+            symbol,
+            normalized_side,
+            volume,
+        ):
+            return False
+
+    return True
 
 
 # ============================================================
@@ -935,307 +1261,427 @@ def prepare_order(
 # ============================================================
 
 def open_market_position(
+    symbol: str,
     side: str,
-    symbol: str = PROJECT_SYMBOL,
-    volume: float = DEFAULT_LOT_VALUE,
-    entry: Optional[float] = None,
-    stop_loss: Optional[float] = None,
-    take_profit: Optional[float] = None,
-    confidence: float = 0.0,
-    deviation: int = DEFAULT_DEVIATION_VALUE,
-    comment: Optional[str] = None,
+    lot: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp: Optional[float] = None,
+    confidence: Optional[float] = None,
+    comment: str = DEFAULT_COMMENT,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Open a market position.
 
-    Paper mode:
-        Returns a local paper-order result.
+    try:
 
-    Live mode:
-        Only allowed when every live-trading gate passes.
-    """
-    normalized_side = _normalize_side(side)
+        # ----------------------------------------------------
+        # Normalize side
+        # ----------------------------------------------------
 
-    if normalized_side is None:
-        return None
-
-    if not _ensure_connection():
-        logger.error(
-            "OPEN POSITION FAILED: MT5 CONNECTION"
+        normalized_side = _normalize_side(
+            side
         )
-        return None
 
-    if not validate_symbol(symbol):
-        return None
+        if normalized_side is None:
 
-    # --------------------------------------------------------
-    # Determine market entry when not supplied
-    # --------------------------------------------------------
-    if entry is None:
-        try:
-            tick = get_symbol_tick(
-                PROJECT_SYMBOL
+            logger.warning(
+                "INVALID ORDER SIDE: %s",
+                side,
             )
 
-            if tick is None:
-                logger.error(
-                    "NO TICK DATA FOR %s",
-                    PROJECT_SYMBOL,
-                )
-                return None
-
-            if isinstance(tick, dict):
-                if normalized_side == "BUY":
-                    entry = tick.get(
-                        "ask",
-                        tick.get("last"),
-                    )
-                else:
-                    entry = tick.get(
-                        "bid",
-                        tick.get("last"),
-                    )
-            else:
-                if normalized_side == "BUY":
-                    entry = getattr(
-                        tick,
-                        "ask",
-                        getattr(
-                            tick,
-                            "last",
-                            None,
-                        ),
-                    )
-                else:
-                    entry = getattr(
-                        tick,
-                        "bid",
-                        getattr(
-                            tick,
-                            "last",
-                            None,
-                        ),
-                    )
-
-        except Exception as exc:
-            logger.error(
-                "TICK / ENTRY FAILED: %s",
-                exc,
-            )
             return None
 
-    if entry is None:
-        logger.error(
-            "ENTRY PRICE IS NONE"
-        )
-        return None
+        # ----------------------------------------------------
+        # Validate symbol
+        # ----------------------------------------------------
 
-    # --------------------------------------------------------
-    # Symbol information
-    # --------------------------------------------------------
-    try:
-        symbol_info = get_symbol_info(
-            PROJECT_SYMBOL
-        )
-    except Exception:
-        symbol_info = None
+        if not validate_symbol(
+            symbol
+        ):
+            return None
 
-    # --------------------------------------------------------
-    # Safety fallback for SL/TP
-    # --------------------------------------------------------
-    try:
-        entry_value = float(entry)
-    except Exception:
-        logger.error(
-            "INVALID ENTRY PRICE: %s",
-            entry,
-        )
-        return None
+        # ----------------------------------------------------
+        # Determine lot
+        # ----------------------------------------------------
 
-    try:
-        sl_value = (
-            float(stop_loss)
-            if stop_loss is not None
-            else None
+        if lot is None:
+
+            lot = calculate_order_volume(
+                confidence=confidence
+            )
+
+        volume = validate_volume(
+            symbol,
+            lot,
         )
 
-        tp_value = (
-            float(take_profit)
-            if take_profit is not None
-            else None
+        if volume is None:
+            return None
+
+        # ----------------------------------------------------
+        # SL / TP required
+        # ----------------------------------------------------
+
+        if sl is None or tp is None:
+
+            logger.error(
+                "ORDER REJECTED: SL/TP REQUIRED"
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Normalize SL / TP
+        # ----------------------------------------------------
+
+        sl_value = normalize_price(
+            float(sl),
+            symbol,
         )
-    except Exception:
-        logger.error(
-            "INVALID SL/TP"
+
+        tp_value = normalize_price(
+            float(tp),
+            symbol,
         )
-        return None
 
-    # If SL/TP are not provided, do not invent an
-    # unsafe order. The caller must provide them.
-    if sl_value is None or tp_value is None:
-        logger.warning(
-            "ORDER REJECTED: SL/TP REQUIRED"
+        # ----------------------------------------------------
+        # Full order validation
+        # ----------------------------------------------------
+
+        if not validate_order(
+            symbol,
+            normalized_side,
+            volume,
+            sl_value,
+            tp_value,
+            confidence,
+        ):
+
+            logger.warning(
+                "ORDER VALIDATION FAILED: "
+                "%s %s",
+                symbol,
+                normalized_side,
+            )
+
+            return None
+
+        # ----------------------------------------------------
+        # Current market tick
+        # ----------------------------------------------------
+
+        tick = get_symbol_tick(
+            symbol
         )
-        return None
 
-    # --------------------------------------------------------
-    # Prepare / validate
-    # --------------------------------------------------------
-    prepared = prepare_order(
-        side=normalized_side,
-        symbol=PROJECT_SYMBOL,
-        volume=volume,
-        entry=entry_value,
-        stop_loss=sl_value,
-        take_profit=tp_value,
-        confidence=confidence,
-    )
+        if tick is None:
+            return None
 
-    if prepared is None:
-        return None
+        expected_price = (
+            float(tick.ask)
+            if normalized_side == "BUY"
+            else float(tick.bid)
+        )
 
-    # --------------------------------------------------------
-    # PAPER TRADING
-    # --------------------------------------------------------
-    if bool(PAPER_TRADING):
-        paper_result: Dict[str, Any] = {
+        expected_price = normalize_price(
+            expected_price,
+            symbol,
+        )
+
+        # ----------------------------------------------------
+        # Risk / reward diagnostic
+        # ----------------------------------------------------
+
+        risk_reward = calculate_risk_reward(
+            normalized_side,
+            expected_price,
+            sl_value,
+            tp_value,
+        )
+
+        logger.info(
+            "========================================"
+        )
+
+        logger.info(
+            "ORDER MANAGER MARKET ORDER"
+        )
+
+        logger.info(
+            "SYMBOL=%s SIDE=%s LOT=%.2f",
+            symbol,
+            normalized_side,
+            volume,
+        )
+
+        logger.info(
+            "PRICE=%s SL=%s TP=%s",
+            expected_price,
+            sl_value,
+            tp_value,
+        )
+
+        logger.info(
+            "CONFIDENCE=%s",
+            confidence,
+        )
+
+        logger.info(
+            "RISK_REWARD=%.4f",
+            risk_reward,
+        )
+
+        logger.info(
+            "CURRENT_POSITIONS=%s/%s",
+            get_position_count(),
+            MAX_OPEN_POSITIONS,
+        )
+
+        logger.info(
+            "PAPER_TRADING=%s",
+            PAPER_TRADING,
+        )
+
+        logger.info(
+            "ALLOW_LIVE_TRADING=%s",
+            ALLOW_LIVE_TRADING,
+        )
+
+        logger.info(
+            "========================================"
+        )
+
+        # ====================================================
+        # PAPER MODE
+        # ====================================================
+
+        if bool(PAPER_TRADING):
+
+            logger.warning(
+                "PAPER TRADING ACTIVE - "
+                "NO REAL ORDER SENT"
+            )
+
+            # IMPORTANT:
+            # Status MUST be OPEN rather than PAPER_OPEN.
+            # trade_manager.get_open_trades() expects OPEN.
+            return {
+                "success": True,
+                "paper_trading": True,
+                "symbol": symbol,
+                "side": normalized_side,
+                "volume": volume,
+                "price": expected_price,
+                "entry": expected_price,
+                "sl": sl_value,
+                "tp": tp_value,
+                "stop_loss": sl_value,
+                "take_profit": tp_value,
+                "ticket": None,
+                "order": None,
+                "deal": None,
+                "confidence": confidence,
+                "risk_reward": risk_reward,
+                "magic": MAGIC_NUMBER,
+                "comment": comment,
+                "status": "OPEN",
+            }
+
+        # ====================================================
+        # FINAL LIVE GATE
+        # ====================================================
+
+        if not live_gate():
+
+            logger.error(
+                "LIVE ORDER BLOCKED BY FINAL "
+                "SAFETY GATE"
+            )
+
+            return {
+                "success": False,
+                "paper_trading": False,
+                "status": "LIVE_BLOCKED",
+                "error": "LIVE_GATE_FAILED",
+            }
+
+        # ====================================================
+        # FINAL POSITION LIMIT
+        # ====================================================
+
+        if not validate_position_limit():
+
+            logger.error(
+                "LIVE ORDER BLOCKED: "
+                "MAX POSITION LIMIT"
+            )
+
+            return {
+                "success": False,
+                "paper_trading": False,
+                "status": "LIVE_BLOCKED",
+                "error": "MAX_POSITION_LIMIT",
+            }
+
+        # ====================================================
+        # LIVE ORDER
+        # ====================================================
+
+        result = send_market_order(
+            symbol=symbol,
+            side=normalized_side,
+            volume=volume,
+            sl=sl_value,
+            tp=tp_value,
+            confidence=float(
+                confidence
+                if confidence is not None
+                else 100.0
+            ),
+            deviation=DEFAULT_DEVIATION_VALUE,
+            comment=comment,
+        )
+
+        if not result:
+
+            logger.error(
+                "MT5 ORDER RESULT EMPTY"
+            )
+
+            return None
+
+        if not result.get(
+            "success",
+            False,
+        ):
+
+            logger.error(
+                "MT5 ORDER FAILED: %s",
+                result.get(
+                    "error"
+                ),
+            )
+
+            return result
+
+        ticket = result.get(
+            "ticket"
+        )
+
+        if ticket is None:
+
+            ticket = result.get(
+                "order"
+            )
+
+        return {
             "success": True,
+            "paper_trading": False,
+            "symbol": symbol,
+            "side": normalized_side,
+            "volume": volume,
+            "price": result.get(
+                "price",
+                expected_price,
+            ),
+            "entry": result.get(
+                "price",
+                expected_price,
+            ),
+            "sl": sl_value,
+            "tp": tp_value,
+            "stop_loss": sl_value,
+            "take_profit": tp_value,
+            "ticket": ticket,
+            "order": result.get(
+                "order",
+                ticket,
+            ),
+            "deal": result.get(
+                "deal"
+            ),
+            "confidence": confidence,
+            "risk_reward": risk_reward,
             "status": "OPEN",
-            "paper_trading": True,
-            "symbol": PROJECT_SYMBOL,
-            "side": prepared["side"],
-            "volume": prepared["volume"],
-            "entry": prepared["entry"],
-            "stop_loss": prepared["stop_loss"],
-            "take_profit": prepared["take_profit"],
-            "confidence": prepared["confidence"],
-            "risk_reward": prepared["risk_reward"],
-            "magic": MAGIC_NUMBER,
-            "comment": (
-                comment
-                if comment is not None
-                else DEFAULT_COMMENT
+            "retcode": result.get(
+                "retcode"
             ),
         }
 
-        logger.info(
-            "PAPER ORDER OPENED: %s",
-            paper_result,
-        )
-
-        return paper_result
-
-    # --------------------------------------------------------
-    # LIVE TRADING SAFETY GATE
-    # --------------------------------------------------------
-    if not _live_execution_allowed():
-        logger.error(
-            "LIVE ORDER BLOCKED BY SAFETY GATE"
-        )
-        return None
-
-    # --------------------------------------------------------
-    # Final position-count check
-    # --------------------------------------------------------
-    final_count = get_position_count(
-        PROJECT_SYMBOL
-    )
-
-    if final_count >= MAX_OPEN_POSITIONS:
-        logger.warning(
-            "LIVE ORDER BLOCKED: "
-            "MAX POSITIONS %s/%s",
-            final_count,
-            MAX_OPEN_POSITIONS,
-        )
-        return None
-
-    # --------------------------------------------------------
-    # Final daily risk check
-    # --------------------------------------------------------
-    if not validate_daily_risk():
-        logger.error(
-            "LIVE ORDER BLOCKED: DAILY RISK"
-        )
-        return None
-
-    # --------------------------------------------------------
-    # Send live order
-    # --------------------------------------------------------
-    order_comment = (
-        comment
-        if comment is not None
-        else DEFAULT_COMMENT
-    )
-
-    try:
-        result = send_market_order(
-            symbol=PROJECT_SYMBOL,
-            side=prepared["side"],
-            volume=prepared["volume"],
-            stop_loss=prepared["stop_loss"],
-            take_profit=prepared["take_profit"],
-            deviation=int(deviation),
-            magic=MAGIC_NUMBER,
-            comment=order_comment,
-        )
-
-    except TypeError:
-        try:
-            result = send_market_order(
-                PROJECT_SYMBOL,
-                prepared["side"],
-                prepared["volume"],
-                prepared["stop_loss"],
-                prepared["take_profit"],
-                int(deviation),
-                MAGIC_NUMBER,
-                order_comment,
-            )
-        except Exception as exc:
-            logger.error(
-                "LIVE ORDER FAILED: %s",
-                exc,
-            )
-            return None
-
     except Exception as exc:
-        logger.error(
-            "LIVE ORDER FAILED: %s",
+
+        logger.exception(
+            "OPEN MARKET POSITION ERROR: %s",
             exc,
         )
+
         return None
 
-    if result is None:
-        logger.error(
-            "LIVE ORDER RESULT IS NONE"
-        )
-        return None
 
-    if isinstance(result, dict):
-        result.setdefault(
-            "paper_trading",
-            False,
-        )
-        result.setdefault(
-            "symbol",
-            PROJECT_SYMBOL,
-        )
-        result.setdefault(
-            "side",
-            prepared["side"],
-        )
-        result.setdefault(
-            "volume",
-            prepared["volume"],
+# ============================================================
+# COMPATIBILITY WRAPPERS
+# ============================================================
+
+def create_order(
+    symbol: str,
+    side: str,
+    entry: float,
+    tp: float,
+    sl: float,
+    lot: Optional[float] = None,
+    confidence: Optional[float] = None,
+):
+
+    if lot is None:
+
+        lot = calculate_order_volume(
+            confidence=confidence
         )
 
-    logger.info(
-        "LIVE ORDER RESULT: %s",
-        result,
+    return open_market_position(
+        symbol=symbol,
+        side=side,
+        lot=lot,
+        sl=sl,
+        tp=tp,
+        confidence=confidence,
     )
 
-    return result
+
+def execute_order(
+    symbol: str,
+    side: str,
+    lot: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp: Optional[float] = None,
+    confidence: Optional[float] = None,
+):
+
+    return open_market_position(
+        symbol=symbol,
+        side=side,
+        lot=lot,
+        sl=sl,
+        tp=tp,
+        confidence=confidence,
+    )
+
+
+def place_order(
+    symbol: str,
+    side: str,
+    lot: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp: Optional[float] = None,
+    confidence: Optional[float] = None,
+):
+
+    return execute_order(
+        symbol=symbol,
+        side=side,
+        lot=lot,
+        sl=sl,
+        tp=tp,
+        confidence=confidence,
+    )
 
 
 # ============================================================
@@ -1243,125 +1689,299 @@ def open_market_position(
 # ============================================================
 
 def close_position(
-    ticket: Any,
-    symbol: str = PROJECT_SYMBOL,
-) -> Optional[Dict[str, Any]]:
-    """
-    Close a position.
-
-    Paper mode intentionally does not send a real MT5 close order.
-    """
-    if bool(PAPER_TRADING):
-        logger.info(
-            "PAPER CLOSE REQUEST: ticket=%s symbol=%s",
-            ticket,
-            symbol,
-        )
-
-        return {
-            "success": True,
-            "status": "CLOSE_REQUESTED",
-            "paper_trading": True,
-            "ticket": ticket,
-            "symbol": symbol,
-        }
-
-    if not _live_execution_allowed():
-        logger.error(
-            "LIVE CLOSE BLOCKED BY SAFETY GATE"
-        )
-        return None
+    ticket: int,
+) -> bool:
 
     try:
-        return mt5_close_position(
+
+        if ticket is None:
+            return False
+
+        if bool(PAPER_TRADING):
+
+            logger.info(
+                "PAPER POSITION CLOSE REQUEST: %s",
+                ticket,
+            )
+
+            return True
+
+        if not live_gate():
+
+            logger.error(
+                "LIVE CLOSE BLOCKED BY SAFETY GATE"
+            )
+
+            return False
+
+        result = mt5_close_position(
             ticket
         )
-    except TypeError:
-        try:
-            return mt5_close_position(
-                ticket=ticket
-            )
-        except Exception as exc:
-            logger.error(
-                "CLOSE POSITION FAILED: %s",
-                exc,
-            )
-            return None
+
+        return bool(
+            result
+        )
+
     except Exception as exc:
-        logger.error(
-            "CLOSE POSITION FAILED: %s",
+
+        logger.exception(
+            "CLOSE POSITION ERROR %s: %s",
+            ticket,
             exc,
         )
-        return None
+
+        return False
 
 
 # ============================================================
-# STATUS / DIAGNOSTICS
+# STATUS
 # ============================================================
 
-def get_order_manager_status() -> Dict[str, Any]:
-    """
-    Return a compact diagnostic snapshot.
-    """
-    current_positions = get_position_count(
-        PROJECT_SYMBOL
-    )
+def get_order_manager_status(
+) -> Dict[str, Any]:
 
-    return {
-        "symbol": PROJECT_SYMBOL,
-        "symbol_normalized": PROJECT_SYMBOL_NORMALIZED,
-        "magic_number": MAGIC_NUMBER,
-        "max_open_positions": MAX_OPEN_POSITIONS,
-        "current_positions": current_positions,
-        "min_lot": MIN_LOT,
-        "max_lot": MAX_LOT,
-        "default_lot": DEFAULT_LOT_VALUE,
-        "paper_trading": bool(PAPER_TRADING),
-        "allow_live_trading": bool(
-            ALLOW_LIVE_TRADING
-        ),
-        "live_gate": live_gate(),
-        "live_execution_allowed": (
-            _live_execution_allowed()
-        ),
-    }
+    try:
+
+        daily_loss = get_daily_loss()
+
+        return {
+            "symbol": PROJECT_SYMBOL,
+            "symbol_normalized": (
+                PROJECT_SYMBOL_NORMALIZED
+            ),
+            "magic": MAGIC_NUMBER,
+            "max_open_positions": (
+                MAX_OPEN_POSITIONS
+            ),
+            "min_lot": MIN_LOT,
+            "max_lot": MAX_LOT,
+            "default_lot": (
+                DEFAULT_LOT_VALUE
+            ),
+            "paper_trading": bool(
+                PAPER_TRADING
+            ),
+            "allow_live_trading": bool(
+                ALLOW_LIVE_TRADING
+            ),
+            "live_gate": live_gate(),
+            "connected": check_connection(),
+            "position_count": (
+                get_position_count()
+            ),
+            "daily_loss": daily_loss,
+        }
+
+    except Exception as exc:
+
+        return {
+            "symbol": PROJECT_SYMBOL,
+            "symbol_normalized": (
+                PROJECT_SYMBOL_NORMALIZED
+            ),
+            "magic": MAGIC_NUMBER,
+            "max_open_positions": (
+                MAX_OPEN_POSITIONS
+            ),
+            "min_lot": MIN_LOT,
+            "max_lot": MAX_LOT,
+            "default_lot": (
+                DEFAULT_LOT_VALUE
+            ),
+            "paper_trading": bool(
+                PAPER_TRADING
+            ),
+            "allow_live_trading": bool(
+                ALLOW_LIVE_TRADING
+            ),
+            "live_gate": False,
+            "connected": False,
+            "position_count": (
+                MAX_OPEN_POSITIONS
+            ),
+            "error": str(exc),
+        }
 
 
 # ============================================================
-# COMPATIBILITY ALIASES
+# ORDER MANAGER CLASS
 # ============================================================
 
-def open_position(
-    *args: Any,
-    **kwargs: Any,
-) -> Optional[Dict[str, Any]]:
-    """
-    Backward-compatible alias.
-    """
-    return open_market_position(
-        *args,
-        **kwargs,
-    )
+class OrderManager:
 
+    def __init__(
+        self,
+        symbol: str = PROJECT_SYMBOL,
+        magic: int = MAGIC_NUMBER,
+    ) -> None:
 
-def place_order(
-    *args: Any,
-    **kwargs: Any,
-) -> Optional[Dict[str, Any]]:
-    """
-    Backward-compatible alias.
-    """
-    return open_market_position(
-        *args,
-        **kwargs,
-    )
+        self.symbol = str(
+            symbol
+        ).strip()
+
+        self.magic = int(
+            magic
+        )
+
+    def check_connection(
+        self,
+    ) -> bool:
+
+        return check_connection()
+
+    def get_account(
+        self,
+    ):
+
+        return get_account()
+
+    def get_position_count(
+        self,
+    ) -> int:
+
+        return get_position_count()
+
+    def get_positions(
+        self,
+        symbol: Optional[str] = None,
+    ):
+
+        return get_positions(
+            symbol or self.symbol
+        )
+
+    def has_open_position(
+        self,
+        symbol: Optional[str] = None,
+    ) -> bool:
+
+        return has_open_position(
+            symbol or self.symbol
+        )
+
+    def can_open_new_position(
+        self,
+        side: Optional[str] = None,
+    ) -> bool:
+
+        return can_open_new_position(
+            self.symbol,
+            side,
+        )
+
+    def calculate_order_volume(
+        self,
+        confidence: Optional[float] = None,
+        requested_lot: Optional[float] = None,
+    ) -> float:
+
+        return calculate_order_volume(
+            confidence=confidence,
+            requested_lot=requested_lot,
+        )
+
+    def validate_order(
+        self,
+        side: str,
+        lot: float,
+        sl: float,
+        tp: float,
+        confidence: Optional[float] = None,
+    ) -> bool:
+
+        return validate_order(
+            self.symbol,
+            side,
+            lot,
+            sl,
+            tp,
+            confidence,
+        )
+
+    def open_market_position(
+        self,
+        side: str,
+        lot: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        confidence: Optional[float] = None,
+        comment: str = DEFAULT_COMMENT,
+    ):
+
+        return open_market_position(
+            symbol=self.symbol,
+            side=side,
+            lot=lot,
+            sl=sl,
+            tp=tp,
+            confidence=confidence,
+            comment=comment,
+        )
+
+    def execute_order(
+        self,
+        side: str,
+        lot: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        confidence: Optional[float] = None,
+    ):
+
+        return self.open_market_position(
+            side=side,
+            lot=lot,
+            sl=sl,
+            tp=tp,
+            confidence=confidence,
+        )
+
+    def place_order(
+        self,
+        side: str,
+        lot: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        confidence: Optional[float] = None,
+    ):
+
+        return self.execute_order(
+            side=side,
+            lot=lot,
+            sl=sl,
+            tp=tp,
+            confidence=confidence,
+        )
+
+    def close_position(
+        self,
+        ticket: int,
+    ) -> bool:
+
+        return close_position(
+            ticket
+        )
+
+    def status(
+        self,
+    ) -> Dict[str, Any]:
+
+        return get_order_manager_status()
 
 
 # ============================================================
-# MODULE EXPORTS
+# SINGLETON
+# ============================================================
+
+ORDER_MANAGER = OrderManager()
+
+
+# ============================================================
+# EXPORTS
 # ============================================================
 
 __all__ = [
+    "OrderManager",
+    "ORDER_MANAGER",
     "MAGIC_NUMBER",
     "PROJECT_SYMBOL",
     "PROJECT_SYMBOL_NORMALIZED",
@@ -1371,20 +1991,31 @@ __all__ = [
     "DEFAULT_LOT_VALUE",
     "DEFAULT_DEVIATION_VALUE",
     "DEFAULT_COMMENT",
-    "validate_symbol",
+    "check_connection",
+    "get_account",
+    "get_account_equity",
+    "get_account_balance",
+    "get_account_free_margin",
     "get_position_count",
+    "get_position_count_for_symbol",
+    "get_positions",
+    "has_open_position",
     "has_same_direction_position",
+    "validate_symbol",
     "validate_volume",
     "calculate_order_volume",
+    "validate_position_limit",
+    "can_open_new_position",
+    "get_daily_loss",
     "validate_daily_risk",
     "validate_prices",
     "calculate_risk_reward",
     "validate_margin",
     "live_gate",
-    "can_open_new_position",
-    "prepare_order",
+    "validate_order",
     "open_market_position",
-    "open_position",
+    "create_order",
+    "execute_order",
     "place_order",
     "close_position",
     "get_order_manager_status",
