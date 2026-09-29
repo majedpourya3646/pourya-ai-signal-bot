@@ -1,4 +1,3 @@
-```python
 # core/auto_trader.py
 
 from typing import Optional, Dict, Any
@@ -574,4 +573,4 @@ def execute_trade(
         )
 
         return None
-```
+
